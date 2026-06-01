@@ -1,5 +1,4 @@
 /**
- * XHRIS MD V2 — Games
  * Multiplayer-friendly games that work both in DM and in groups.
  * Anyone in the chat can play by typing their guess/answer (no prefix needed).
  *
