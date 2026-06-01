@@ -52,7 +52,7 @@ gmd(
     //await reply("🔍 Checking for New Updates...");
 
       // FORCE PRINCE-MDX REPO
-      const repoName = "Princemaye/PRINCE-MDX";
+      const repoName = "HayMosh1116/HAYMOSH_BOT";
 
       const { data: commitData } = await axios.get(
         `https://api.github.com/repos/${repoName}/commits/main`
@@ -79,7 +79,7 @@ gmd(
         `💬 Message: ${commitMessage}`
       );
 
-      const repoShort = "PRINCE-MDX";
+      const repoShort = "HAYMOSH_BOT";
       const branch = "main";
 
       const zipPath = path.join(__dirname, "..", `${repoShort}.zip`);
