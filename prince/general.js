@@ -295,13 +295,3 @@ gmd({
   }
 });
 
-gmd({
-  pattern: "haytest",
-  aliases: ["updatetest"],
-  react: "✅",
-  category: "general",
-  description: "Test if latest update was applied",
-}, async (from, Prince, conText) => {
-  const { reply } = conText;
-  await reply("✅ *Update working!* New commands are loaded. Try: .lovequote .8ball .poll .warn .story .movie");
-});
