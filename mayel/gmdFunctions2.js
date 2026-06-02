@@ -141,7 +141,7 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
         const isGroup = from.endsWith('@g.us');
         const msgType = getContentType(deletedMsg.message);
         
-        let text = `*🛡️ PRINCE MDX ANTIDELETE*\n\n`;
+        let text = `*🛡️ HAYMOSH_MDX ANTIDELETE*\n\n`;
         text += `*From:* @${sender.split('@')[0]}\n`;
         text += `*Chat:* ${isGroup ? 'Group' : 'Private'}\n`;
         if (isGroup) text += `*Group Name:* ${deletedMsg.groupName || 'Unknown'}\n`;
