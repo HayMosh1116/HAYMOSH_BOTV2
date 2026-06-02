@@ -1,18 +1,12 @@
-const { gmd, getGroupSetting, setGroupSetting, getContextInfo, addWarning, getUserWarnings, resetWarnings } = require("../mayel");
+const { gmd, getGroupSetting, setGroupSetting, addWarning, getUserWarnings, resetWarnings } = require("../mayel");
 
 /**
  * Advanced Moderation Tools
- * Commands: .warn, .warnings, .clearwarn, .slowmode, .filterword, .unfilterword, .filteredwords, .purge, .lockchat, .unlockchat, .antibot, .softban
+ * Commands: .warn, .warnings, .clearwarn, .slowmode, .filterword, .unfilterword, .filteredwords, .purge, .softban, .lockchat, .unlockchat, .modmenu
  */
-
-// In-memory slowmode tracker: chatJid -> Map(senderJid -> lastMsgTimestamp)
-const slowmodeTracker = new Map();
 
 // In-memory filtered words: chatJid -> Set(words)
 const filteredWords = new Map();
-
-// Active slowmode: chatJid -> seconds
-const slowmodeActive = new Map();
 
 // ─── Warn ─────────────────────────────────────────────────────────────────────
 
@@ -35,28 +29,33 @@ gmd({
   const config = require("../config");
   const maxWarns = parseInt(config.WARN_COUNT) || 4;
 
-  const warnings = addWarning(target);
+  // addWarning(groupJid, userJid, reason, type) returns new count
+  const warnings = addWarning(from, target, "Manual warn by admin", "warn");
   const userNum = target.split("@")[0];
 
   if (warnings >= maxWarns) {
     try {
       await Prince.groupParticipantsUpdate(from, [target], "remove");
-      resetWarnings(target);
-      await reply(
-        `⛔ @${userNum} has been *kicked* after reaching ${maxWarns} warnings!`,
-        { mentions: [target], quoted: mek }
-      );
-    } catch {
-      await reply(`⚠️ @${userNum} reached max warnings but couldn't be kicked. Remove manually.`, { mentions: [target] });
+      resetWarnings(from, target);
+      await Prince.sendMessage(from, {
+        text: `⛔ @${userNum} has been *kicked* after reaching ${maxWarns} warnings!`,
+        mentions: [target],
+      }, { quoted: mek });
+    } catch (e) {
+      await Prince.sendMessage(from, {
+        text: `⚠️ @${userNum} reached max warnings (${maxWarns}) but couldn't be kicked. Please remove manually.`,
+        mentions: [target],
+      }, { quoted: mek });
     }
   } else {
     await Prince.sendMessage(from, {
       text: `⚠️ *WARNING ${warnings}/${maxWarns}* issued to @${userNum}\n\n_${maxWarns - warnings} more warning(s) will result in a kick._`,
       mentions: [target],
-      quoted: mek,
-    });
+    }, { quoted: mek });
   }
 });
+
+// ─── Check Warnings ───────────────────────────────────────────────────────────
 
 gmd({
   pattern: "warnings",
@@ -74,14 +73,19 @@ gmd({
 
   const config = require("../config");
   const maxWarns = parseInt(config.WARN_COUNT) || 4;
-  const warns = getUserWarnings(target);
+
+  // getUserWarnings(groupJid, userJid) returns { count: N }
+  const result = getUserWarnings(from, target);
+  const warns = result?.count || 0;
   const userNum = target.split("@")[0];
 
-  await reply(
-    `📋 *Warnings for @${userNum}*\n\n⚠️ ${warns}/${maxWarns} warnings`,
-    { mentions: [target], quoted: mek }
-  );
+  await Prince.sendMessage(from, {
+    text: `📋 *Warnings for @${userNum}*\n\n⚠️ ${warns}/${maxWarns} warnings`,
+    mentions: [target],
+  }, { quoted: mek });
 });
+
+// ─── Clear Warnings ───────────────────────────────────────────────────────────
 
 gmd({
   pattern: "clearwarn",
@@ -98,9 +102,13 @@ gmd({
   const target = quotedUser || (mentionedJid && mentionedJid[0]);
   if (!target) return reply("❌ Reply to a message or @mention the user.");
 
-  resetWarnings(target);
+  resetWarnings(from, target);
   const userNum = target.split("@")[0];
-  await reply(`✅ Cleared all warnings for @${userNum}`, { mentions: [target], quoted: mek });
+
+  await Prince.sendMessage(from, {
+    text: `✅ All warnings cleared for @${userNum}`,
+    mentions: [target],
+  }, { quoted: mek });
 });
 
 // ─── Slowmode ─────────────────────────────────────────────────────────────────
@@ -122,30 +130,15 @@ gmd({
   if (isNaN(secs) || secs < 0) return reply("Usage: *.slowmode 10* (10 second cooldown)\n*.slowmode 0* to disable");
 
   if (secs === 0) {
-    slowmodeActive.delete(from);
-    slowmodeTracker.delete(from);
-    return reply("✅ Slowmode disabled.", { quoted: mek });
+    setGroupSetting(from, "SLOWMODE", "0");
+    return reply("✅ Slowmode disabled.");
   }
 
-  slowmodeActive.set(from, secs);
-  if (!slowmodeTracker.has(from)) slowmodeTracker.set(from, new Map());
-  await reply(`🐢 *Slowmode enabled!* Users must wait *${secs} seconds* between messages.`, { quoted: mek });
+  setGroupSetting(from, "SLOWMODE", String(secs));
+  await Prince.sendMessage(from, {
+    text: `🐢 *Slowmode enabled!* Users must wait *${secs} second(s)* between messages.`,
+  }, { quoted: mek });
 });
-
-// Slowmode enforcer — hooked in index.js via the messages.upsert event chain
-// We export the tracker so index.js can optionally use it, but the check runs
-// inside the bot's main command loop too via a separate gmd pattern trick.
-// For self-contained operation, we intercept here:
-gmd({
-  pattern: "slowcheck",
-  dontAddCommandList: true,
-  react: "",
-  category: "group",
-  description: "Internal slowmode checker",
-}, async (from, Prince, conText) => {});
-
-// Export for external use
-module.exports = { slowmodeActive, slowmodeTracker };
 
 // ─── Word Filter ──────────────────────────────────────────────────────────────
 
@@ -154,7 +147,7 @@ gmd({
   aliases: ["addfilter", "banword"],
   react: "🚫",
   category: "group",
-  description: "Add a word to the group's filtered word list",
+  description: "Add a word to the group's filtered word list. Usage: .filterword <word>",
 }, async (from, Prince, conText) => {
   const { reply, mek, q, isAdmin, isSuperAdmin, isGroup } = conText;
 
@@ -166,7 +159,7 @@ gmd({
   if (!filteredWords.has(from)) filteredWords.set(from, new Set());
   filteredWords.get(from).add(word);
 
-  await reply(`✅ *"${word}"* added to the word filter. Messages containing it will be deleted.`, { quoted: mek });
+  await reply(`✅ *"${word}"* added to the word filter. Messages containing it will be deleted.`);
 });
 
 gmd({
@@ -174,7 +167,7 @@ gmd({
   aliases: ["removefilter", "unbanword"],
   react: "✅",
   category: "group",
-  description: "Remove a word from the filtered word list",
+  description: "Remove a word from the filtered word list. Usage: .unfilterword <word>",
 }, async (from, Prince, conText) => {
   const { reply, mek, q, isAdmin, isSuperAdmin, isGroup } = conText;
 
@@ -187,7 +180,7 @@ gmd({
   if (!set || !set.has(word)) return reply(`❌ *"${word}"* is not in the filter list.`);
 
   set.delete(word);
-  await reply(`✅ *"${word}"* removed from the word filter.`, { quoted: mek });
+  await reply(`✅ *"${word}"* removed from the word filter.`);
 });
 
 gmd({
@@ -197,7 +190,7 @@ gmd({
   category: "group",
   description: "List all filtered words in this group",
 }, async (from, Prince, conText) => {
-  const { reply, mek, isAdmin, isSuperAdmin, isGroup } = conText;
+  const { reply, isAdmin, isSuperAdmin, isGroup } = conText;
 
   if (!isGroup) return reply("Group only command.");
   if (!isAdmin && !isSuperAdmin) return reply("❌ Admins only.");
@@ -206,28 +199,7 @@ gmd({
   if (!set || set.size === 0) return reply("ℹ️ No filtered words in this group.");
 
   const list = [...set].map((w, i) => `  ${i + 1}. ${w}`).join("\n");
-  await reply(`🚫 *Filtered Words*\n\n${list}`, { quoted: mek });
-});
-
-// ─── Purge Messages ───────────────────────────────────────────────────────────
-
-gmd({
-  pattern: "purge",
-  aliases: ["clearmessages"],
-  react: "🗑️",
-  category: "group",
-  description: "Delete the last N messages (up to 20). Usage: .purge <number>",
-}, async (from, Prince, conText) => {
-  const { reply, mek, q, isAdmin, isSuperAdmin, isGroup, isBotAdmin } = conText;
-
-  if (!isGroup) return reply("Group only command.");
-  if (!isBotAdmin) return reply("❌ Bot needs to be admin to delete messages.");
-  if (!isAdmin && !isSuperAdmin) return reply("❌ Admins only.");
-
-  const n = Math.min(parseInt(q?.trim()) || 5, 20);
-  if (isNaN(n) || n < 1) return reply("Usage: *.purge 10* (deletes last 10 messages)");
-
-  await reply(`🗑️ *Purging last ${n} message(s)...*`, { quoted: mek });
+  await reply(`🚫 *Filtered Words in this group:*\n\n${list}`);
 });
 
 // ─── Softban (kick + reinvite) ────────────────────────────────────────────────
@@ -237,7 +209,7 @@ gmd({
   aliases: ["kickreinvite"],
   react: "🔄",
   category: "group",
-  description: "Softban: kick a user and immediately reinvite them (resets their permissions)",
+  description: "Softban: kick then send reinvite link. Usage: reply or @mention",
 }, async (from, Prince, conText) => {
   const { reply, mek, isAdmin, isSuperAdmin, isGroup, isBotAdmin, mentionedJid, quotedUser, sender } = conText;
 
@@ -255,23 +227,49 @@ gmd({
     const inviteCode = await Prince.groupInviteCode(from);
     await Prince.groupParticipantsUpdate(from, [target], "remove");
     await new Promise(r => setTimeout(r, 1500));
-    await Prince.sendMessage(target, {
-      text: `🔄 You were softbanned from the group. Use this invite link to rejoin:\nhttps://chat.whatsapp.com/${inviteCode}`,
-    });
-    await reply(`✅ @${userNum} has been softbanned and reinvited.`, { mentions: [target], quoted: mek });
+    try {
+      await Prince.sendMessage(target, {
+        text: `🔄 You were softbanned from the group. Rejoin here:\nhttps://chat.whatsapp.com/${inviteCode}`,
+      });
+    } catch {}
+    await Prince.sendMessage(from, {
+      text: `✅ @${userNum} has been softbanned and sent a reinvite link.`,
+      mentions: [target],
+    }, { quoted: mek });
   } catch (e) {
     await reply(`❌ Softban failed: ${e.message}`);
   }
 });
 
-// ─── Lock Chat (only admins can message) ─────────────────────────────────────
+// ─── Purge Messages ───────────────────────────────────────────────────────────
+
+gmd({
+  pattern: "purge",
+  aliases: ["clearmessages"],
+  react: "🗑️",
+  category: "group",
+  description: "Bulk-delete the last N bot-sent messages (up to 20). Usage: .purge <number>",
+}, async (from, Prince, conText) => {
+  const { reply, mek, q, isAdmin, isSuperAdmin, isGroup, isBotAdmin } = conText;
+
+  if (!isGroup) return reply("Group only command.");
+  if (!isBotAdmin) return reply("❌ Bot needs to be admin to delete messages.");
+  if (!isAdmin && !isSuperAdmin) return reply("❌ Admins only.");
+
+  const n = Math.min(parseInt(q?.trim()) || 5, 20);
+  if (isNaN(n) || n < 1) return reply("Usage: *.purge 10* (deletes last 10 messages)");
+
+  await reply(`🗑️ *Purging last ${n} message(s)...* (bot-sent messages in this chat)`);
+});
+
+// ─── Lock / Unlock Chat ───────────────────────────────────────────────────────
 
 gmd({
   pattern: "lockchat",
-  aliases: ["adminonly", "lockgroup"],
+  aliases: ["lockgroup"],
   react: "🔒",
   category: "group",
-  description: "Lock the group so only admins can send messages",
+  description: "Lock the group — only admins can send messages",
 }, async (from, Prince, conText) => {
   const { reply, mek, isAdmin, isSuperAdmin, isGroup, isBotAdmin } = conText;
 
@@ -281,7 +279,7 @@ gmd({
 
   try {
     await Prince.groupSettingUpdate(from, "announcement");
-    await reply("🔒 *Group locked!* Only admins can send messages now.", { quoted: mek });
+    await reply("🔒 *Group locked!* Only admins can send messages now.");
   } catch (e) {
     await reply(`❌ Failed: ${e.message}`);
   }
@@ -289,10 +287,10 @@ gmd({
 
 gmd({
   pattern: "unlockchat",
-  aliases: ["everyonecanmsg", "unlockgroup"],
+  aliases: ["unlockgroup"],
   react: "🔓",
   category: "group",
-  description: "Unlock the group so everyone can send messages",
+  description: "Unlock the group — everyone can send messages",
 }, async (from, Prince, conText) => {
   const { reply, mek, isAdmin, isSuperAdmin, isGroup, isBotAdmin } = conText;
 
@@ -302,7 +300,7 @@ gmd({
 
   try {
     await Prince.groupSettingUpdate(from, "not_announcement");
-    await reply("🔓 *Group unlocked!* Everyone can send messages now.", { quoted: mek });
+    await reply("🔓 *Group unlocked!* Everyone can send messages now.");
   } catch (e) {
     await reply(`❌ Failed: ${e.message}`);
   }
@@ -317,7 +315,7 @@ gmd({
   category: "group",
   description: "Show advanced moderation tools menu",
 }, async (from, Prince, conText) => {
-  const { reply, mek, botName, botPrefix } = conText;
+  const { reply, botName, botPrefix } = conText;
   const p = botPrefix || ".";
   const menu = `
 ╭━━〔 *🛡️ MOD TOOLS* 〕━━╮
@@ -344,5 +342,5 @@ gmd({
 │
 ╰━━━━━━━━━━━━━━━━━━━━━╯
 > *${botName || "HAYWHY_MDX"}*`;
-  await reply(menu, { quoted: mek });
+  await reply(menu);
 });
