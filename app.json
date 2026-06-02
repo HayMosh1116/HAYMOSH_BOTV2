@@ -28,12 +28,12 @@
     },
     "OWNER_NAME": {
       "description": "Bot owner display name",
-      "value": "𝐏𝐑𝐈𝐍𝐂𝐄 𝐓𝐄𝐂𝐇",
+      "value": "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴//𝒯𝐸𝒞𝐻🤖⁩",
       "required": false
     },
     "OWNER_NUMBER": {
       "description": "Bot owner phone number (without +)",
-      "value": "237682698517",
+      "value": "2349122761580",
       "required": true
     }
   }
