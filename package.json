@@ -5,7 +5,6 @@
   "main": "./index.js",
   "type": "commonjs",
   "engines": {
-    "npm": "11.x",
     "node": "22.x"
   },
   "scripts": {
