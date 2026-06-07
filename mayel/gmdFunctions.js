@@ -22,115 +22,86 @@ const sessionDir = path.join(__dirname, "session");
 const sessionPath = path.join(sessionDir, "creds.json");
 
 
-const sharp = require('sharp');
-const fs = require('fs');
-
 async function stickerToImage(webpData, options = {}) {
     try {
         const {
             upscale = true,
-            targetSize = 512,
+            targetSize = 512, 
             framesToProcess = 200
         } = options;
 
-        // =========================
-        // BUFFER INPUT
-        // =========================
         if (Buffer.isBuffer(webpData)) {
             const sharpInstance = sharp(webpData, {
-                animated: true,
                 sequentialRead: true,
+                animated: true,
                 limitInputPixels: false,
-                pages: framesToProcess
+                pages: framesToProcess 
             });
 
             const metadata = await sharpInstance.metadata();
-
-            // Only pages > 1 means animated
-            const isAnimated = (metadata.pages || 1) > 1;
+            const isAnimated = metadata.pages > 1 || metadata.hasAlpha;
 
             if (isAnimated) {
                 return await sharpInstance
+                    .gif({
+                        compressionLevel: 0,
+                        quality: 100,
+                        effort: 1, 
+                        loop: 0 
+                    })
                     .resize({
                         width: upscale ? targetSize : metadata.width,
                         height: upscale ? targetSize : metadata.height,
                         fit: 'contain',
-                        background: {
-                            r: 0,
-                            g: 0,
-                            b: 0,
-                            alpha: 0
-                        },
-                        kernel: sharp.kernel.lanczos3
+                        background: { r: 0, g: 0, b: 0, alpha: 0 },
+                        kernel: 'lanczos3' 
                     })
-                    .gif({
-                        effort: 1,
+                    .toBuffer();
+            } else {
+                return await sharpInstance
+                    .ensureAlpha()
+                    .resize({
+                        width: upscale ? targetSize : metadata.width,
+                        height: upscale ? targetSize : metadata.height,
+                        fit: 'contain',
+                        background: { r: 0, g: 0, b: 0, alpha: 0 },
+                        kernel: 'lanczos3'
+                    })
+                    .png({
+                        compressionLevel: 0,
                         quality: 100,
-                        loop: 0
+                        progressive: false,
+                        palette: true
                     })
                     .toBuffer();
             }
-
-            return await sharpInstance
-                .ensureAlpha()
-                .resize({
-                    width: upscale ? targetSize : metadata.width,
-                    height: upscale ? targetSize : metadata.height,
-                    fit: 'contain',
-                    background: {
-                        r: 0,
-                        g: 0,
-                        b: 0,
-                        alpha: 0
-                    },
-                    kernel: sharp.kernel.lanczos3
-                })
-                .png({
-                    compressionLevel: 0,
-                    palette: true,
-                    progressive: false
-                })
-                .toBuffer();
         }
-
-        // =========================
-        // FILE PATH INPUT
-        // =========================
-        if (typeof webpData === 'string') {
+        else if (typeof webpData === 'string') {
+            const outputPath = webpData.replace(/\.webp$/, isAnimated ? '.gif' : '.png');
             const sharpInstance = sharp(webpData, {
-                animated: true,
                 sequentialRead: true,
+                animated: true,
                 limitInputPixels: false,
                 pages: framesToProcess
             });
 
             const metadata = await sharpInstance.metadata();
-
-            const isAnimated = (metadata.pages || 1) > 1;
-
-            const outputPath = webpData.replace(
-                /\.webp$/i,
-                isAnimated ? '.gif' : '.png'
-            );
+            const isAnimated = metadata.pages > 1 || metadata.hasAlpha;
 
             if (isAnimated) {
                 await sharpInstance
+                    .gif({
+                        compressionLevel: 0,
+                        quality: 100,
+                        effort: 1,
+                        loop: 0
+                    })
                     .resize({
                         width: upscale ? targetSize : metadata.width,
                         height: upscale ? targetSize : metadata.height,
                         fit: 'contain',
-                        background: {
-                            r: 0,
-                            g: 0,
-                            b: 0,
-                            alpha: 0
-                        },
-                        kernel: sharp.kernel.lanczos3
-                    })
-                    .gif({
-                        effort: 1,
-                        quality: 100,
-                        loop: 0
+                        background: { r: 0, g: 0, b: 0, alpha: 0 },
+                        kernel: 'lanczos3'
                     })
                     .toFile(outputPath);
             } else {
@@ -140,46 +111,32 @@ async function stickerToImage(webpData, options = {}) {
                         width: upscale ? targetSize : metadata.width,
                         height: upscale ? targetSize : metadata.height,
                         fit: 'contain',
-                        background: {
-                            r: 0,
-                            g: 0,
-                            b: 0,
-                            alpha: 0
-                        },
-                        kernel: sharp.kernel.lanczos3
+                        background: { r: 0, g: 0, b: 0, alpha: 0 },
+                        kernel: 'lanczos3'
                     })
                     .png({
                         compressionLevel: 0,
-                        palette: true,
-                        progressive: false
+                        quality: 100,
+                        progressive: false,
+                        palette: true
                     })
                     .toFile(outputPath);
             }
 
             const imageBuffer = await fs.promises.readFile(outputPath);
-
-            // Safe cleanup
-            await Promise.allSettled([
-                fs.promises.unlink(outputPath),
-                fs.promises.unlink(webpData)
-            ]);
-
+            await fs.promises.unlink(outputPath);
+            await fs.promises.unlink(webpData); 
             return imageBuffer;
         }
-
-        throw new TypeError(
-            'stickerToImage expects a Buffer or file path string'
-        );
-
+        else {
+            throw new Error('Invalid input type for stickerToImage');
+        }
     } catch (error) {
-        console.error('stickerToImage Error:', error);
+        console.error('Error in stickerToImage:', error);
         throw error;
     }
 }
 
-module.exports = {
-    stickerToImage
-};
 async function withTempFiles(inputBuffer, extension, processFn) {
   const tempInput = `temp_${Date.now()}.input`;
   const tempOutput = `temp_${Date.now()}.${extension}`;
