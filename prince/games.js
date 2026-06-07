@@ -16,6 +16,7 @@ function endGame(Prince, from) {
   if (!g) return false;
   try { if (g.handler) Prince.ev.off("messages.upsert", g.handler); } catch {}
   try { if (g.timeout) clearTimeout(g.timeout); } catch {}
+  try { if (g.turnTimeout) clearTimeout(g.turnTimeout); } catch {}
   games.delete(from);
   return true;
 }
@@ -567,6 +568,175 @@ gmd(
   }
 );
 
+// ── WORD CHAIN ───────────────────────────────────────────────────────────────
+// Players take turns saying a word that starts with the last letter of
+// the previous word. No repeats allowed. Wrong/slow answers lose a life.
+gmd(
+  {
+    pattern: "wordchain",
+    aliases: ["wchain", "chainword", "wordgame"],
+    react: "🔗",
+    category: "games",
+    description: "Word Chain: each word must start with the last letter of the previous (DM or group).",
+  },
+  async (from, Prince, conText) => {
+    const { reply, sender, botName, newsletterJid } = conText;
+
+    if (games.has(from)) {
+      return reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+    }
+
+    const LIVES = 3;
+    const TIMEOUT_SEC = 30;
+
+    const state = {
+      type: "wordchain",
+      handler: null,
+      timeout: null,
+      lastWord: "",
+      lastLetter: "",
+      usedWords: new Set(),
+      lives: {},
+      turnTimeout: null,
+    };
+
+    const sendCtx = (text) =>
+      Prince.sendMessage(from, {
+        text,
+        contextInfo: getContextInfo(sender, newsletterJid, botName),
+      });
+
+    const lifeBar = (lives) => "❤️".repeat(lives) + "🖤".repeat(LIVES - lives);
+
+    const pickStarter = () => {
+      const starters = [
+        "apple", "brave", "eagle", "ocean", "ninja", "tiger", "ultra", "river",
+        "earth", "storm", "dance", "flame", "ghost", "ivory", "jelly", "light",
+        "magic", "noble", "plant", "queen", "snake", "train", "voice", "witch",
+      ];
+      return starters[Math.floor(Math.random() * starters.length)];
+    };
+
+    const starter = pickStarter();
+    state.lastWord = starter;
+    state.lastLetter = starter[starter.length - 1].toUpperCase();
+    state.usedWords.add(starter.toLowerCase());
+
+    await sendCtx(
+      `🔗 *WORD CHAIN*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `I start with: *${starter.toUpperCase()}*\n\n` +
+      `Reply with a word starting with *"${state.lastLetter}"*!\n\n` +
+      `📜 *Rules:*\n` +
+      `• Each word must start with the last letter of the previous word\n` +
+      `• No repeating words\n` +
+      `• Only real English words\n` +
+      `• You have *${TIMEOUT_SEC}s* per turn — or you lose a life ❤️\n` +
+      `• ${LIVES} lives per player\n\n` +
+      `Type *.endgame* to stop.\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━`
+    );
+
+    const resetTurnTimer = (who) => {
+      if (state.turnTimeout) clearTimeout(state.turnTimeout);
+      state.turnTimeout = setTimeout(async () => {
+        if (!games.has(from)) return;
+        state.lives[who] = (state.lives[who] ?? LIVES) - 1;
+        if (state.lives[who] <= 0) {
+          endGame(Prince, from);
+          return sendCtx(
+            `⏰ *Time's up!* @${who} is out!\n` +
+            `The last word was *${state.lastWord.toUpperCase()}*.\n\n` +
+            `🛑 *Game Over!*`
+          );
+        }
+        await sendCtx(
+          `⏰ Too slow, @${who}! -1 life ${lifeBar(state.lives[who])}\n` +
+          `Still need a word starting with *"${state.lastLetter}"*!`
+        );
+        resetTurnTimer(who);
+      }, TIMEOUT_SEC * 1000);
+    };
+
+    state.handler = async ({ messages }) => {
+      try {
+        const m = messages[0];
+        if (!m?.message || m.key.remoteJid !== from) return;
+        const txt = getText(m).toLowerCase().trim();
+        if (!txt || txt.startsWith(".") || !/^[a-z]+$/.test(txt)) return;
+
+        const who = senderOf(m, from).split("@")[0];
+
+        if (state.lives[who] === 0) return;
+        if (state.lives[who] === undefined) state.lives[who] = LIVES;
+
+        if (txt[0] !== state.lastLetter.toLowerCase()) {
+          state.lives[who]--;
+          if (state.lives[who] <= 0) {
+            endGame(Prince, from);
+            return sendCtx(
+              `❌ *Wrong letter!* @${who} needed a word starting with *"${state.lastLetter}"*, not "${txt[0].toUpperCase()}".\n` +
+              `@${who} is out of lives! 💀\n\n🛑 *Game Over!*`
+            );
+          }
+          await sendCtx(
+            `❌ Wrong! @${who} — must start with *"${state.lastLetter}"*.\n` +
+            `Lives: ${lifeBar(state.lives[who])}\n` +
+            `Still need a word starting with *"${state.lastLetter}"*!`
+          );
+          resetTurnTimer(who);
+          return;
+        }
+
+        if (state.usedWords.has(txt)) {
+          state.lives[who]--;
+          if (state.lives[who] <= 0) {
+            endGame(Prince, from);
+            return sendCtx(
+              `🔁 *Already used!* "${txt.toUpperCase()}" was played before.\n` +
+              `@${who} is out of lives! 💀\n\n🛑 *Game Over!*`
+            );
+          }
+          await sendCtx(
+            `🔁 "*${txt.toUpperCase()}*" was already used! @${who} loses a life.\n` +
+            `Lives: ${lifeBar(state.lives[who])}\n` +
+            `Still need a new word starting with *"${state.lastLetter}"*!`
+          );
+          resetTurnTimer(who);
+          return;
+        }
+
+        state.usedWords.add(txt);
+        state.lastWord = txt;
+        state.lastLetter = txt[txt.length - 1].toUpperCase();
+        if (state.lives[who] === undefined) state.lives[who] = LIVES;
+
+        resetTurnTimer(who);
+
+        await sendCtx(
+          `✅ *${txt.toUpperCase()}* by @${who}!\n` +
+          `Next word must start with *"${state.lastLetter}"* 🔗\n` +
+          `_(${state.usedWords.size} words played so far)_`
+        );
+      } catch (e) {
+        console.error("WordChain error:", e);
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      if (games.has(from)) {
+        endGame(Prince, from);
+        sendCtx(`⌛ *WORD CHAIN* timed out after inactivity. Last word: *${state.lastWord.toUpperCase()}*`);
+      }
+    }, 10 * 60 * 1000);
+
+    state.timeout = timeout;
+    games.set(from, state);
+    Prince.ev.on("messages.upsert", state.handler);
+    resetTurnTimer("bot");
+  }
+);
+
 // ── CONTROL ─────────────────────────────────────────────────────────────────
 gmd(
   {
@@ -606,7 +776,8 @@ gmd(
       `🪢 *${prefix}hangman* — guess the hidden word\n` +
       `✊ *${prefix}rps <rock|paper|scissors>* — vs the bot\n` +
       `🧮 *${prefix}math* — fastest correct answer wins\n` +
-      `❓ *${prefix}trivia* — answer the question first\n\n` +
+      `❓ *${prefix}trivia* — answer the question first\n` +
+      `🔗 *${prefix}wordchain* — word chain (multiplayer)\n\n` +
       `🛑 *${prefix}endgame* — stop the current game\n` +
       `━━━━━━━━━━━━━━━━━━━━━━`;
 

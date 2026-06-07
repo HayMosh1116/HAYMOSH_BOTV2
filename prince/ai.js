@@ -243,24 +243,6 @@ gmd({
   }
 });
 
-gmd({
-  pattern: "letme",
-  react: '💡',
-  desc: "Ask LetMeGPT",
-  category: "ai",
-}, async (from, Prince, conText) => {
-  const { reply, react, mek, q, m, PrinceApiKey, PrinceTechApi, newsletterJid, botName } = conText;
-  if (!q) return reply("⚠️ Provide a query for LetMeGPT.");
-  try {
-    const data = await gmdJson(`${PrinceTechApi}/api/ai/letmegpt?apikey=${encodeURIComponent(PrinceApiKey)}&q=${encodeURIComponent(q)}`);
-    if (!data || !data.result) return reply("❌ No response from LetMeGPT.");
-    await Prince.sendMessage(from, { text: data.result, contextInfo: getContextInfo(m.sender, newsletterJid, botName) }, { quoted: mek });
-    await react("✅");
-  } catch (e) {
-    console.error("LetMe Error:", e);
-    reply("❌ Error while fetching data from LetMeGPT API.");
-  }
-});
 
 gmd({
   pattern: "gpt4",

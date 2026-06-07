@@ -35,7 +35,7 @@ module.exports = {
     AUTO_REACT : process.env.AUTO_REACT || 'false',
     AUTO_REPLY : process.env.AUTO_REPLY || 'false',
     AUTO_READ_MESSAGES : process.env.AUTO_READ_MESSAGES || 'false',
-    ANTI_BIO : process.env.AUTO_BIO || 'false',
+    ANTI_BIO : process.env.ANTI_BIO || 'false',
     AUTO_BLOCK: process.env.AUTO_BLOCK || '212,233',
     MENTION_MODE: process.env.MENTION_MODE || 'warn',
     YT: process.env.YT || 'youtube.com/@DevHaywhy11',
