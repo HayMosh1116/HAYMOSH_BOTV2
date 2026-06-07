@@ -685,7 +685,9 @@ gmd(
     const buildPlayHandler = () => async ({ messages }) => {
       try {
         const m = messages[0];
-        if (!m?.message || m.key.remoteJid !== from || m.key.fromMe) return;
+        // Do NOT filter by m.key.fromMe — some prince-baileys forks incorrectly
+        // mark user messages as fromMe. The alpha-only check below already blocks bot replies.
+        if (!m?.message || m.key.remoteJid !== from) return;
         const txt = getText(m).toLowerCase().trim();
         if (!txt || txt.startsWith(".")) return;
         if (!/^[a-z]+$/.test(txt)) return;

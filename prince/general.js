@@ -23,71 +23,67 @@ function smallCaps(text) {
 }
 
 
+const categoryEmojis = {
+    downloader: "📥", download: "📥",
+    search: "🔎",
+    owner: "👑",
+    group: "👥",
+    converter: "🔁", convert: "🔁",
+    general: "🏠", main: "🏠",
+    ai: "🤖",
+    games: "🎮",
+    fun: "🎉",
+    logo: "🎨",
+    anime: "🎌",
+    sports: "⚽",
+    tools: "🔧",
+    utility: "🛠️",
+    sticker: "🖼️",
+    other: "📦",
+};
+
+function buildCategorized() {
+    return commands.reduce((menu, cmd) => {
+        if (cmd.pattern && !cmd.dontAddCommandList) {
+            if (!menu[cmd.category]) menu[cmd.category] = [];
+            menu[cmd.category].push(cmd.pattern);
+        }
+        return menu;
+    }, {});
+}
+
+function formatUptime(seconds) {
+    const days = Math.floor(seconds / (24 * 60 * 60));
+    seconds %= 24 * 60 * 60;
+    const hours = Math.floor(seconds / (60 * 60));
+    seconds %= 60 * 60;
+    const minutes = Math.floor(seconds / 60);
+    seconds = Math.floor(seconds % 60);
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
 gmd({ 
   pattern: "menu", 
-  aliases: ['help', 'allmenu', 'mainmenu'],
+  aliases: ['help', 'mainmenu'],
   react: "🪀",
   category: "general",
-  description: "Fetch bot main menu",
+  description: "Interactive bot menu — reply with a number to see category commands",
 }, async (from, Prince, conText) => {
-      const { mek, sender, react, pushName, botPic, botMode, botVersion, botName, botFooter, timeZone, botPrefix, newsletterJid } = conText;
-
-      function formatUptime(seconds) {
-          const days = Math.floor(seconds / (24 * 60 * 60));
-          seconds %= 24 * 60 * 60;
-          const hours = Math.floor(seconds / (60 * 60));
-          seconds %= 60 * 60;
-          const minutes = Math.floor(seconds / 60);
-          seconds = Math.floor(seconds % 60);
-          return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-      }
+      const { mek, sender, react, pushName, botPic, botVersion, botName, botFooter, timeZone, botPrefix, newsletterJid } = conText;
 
       const now = new Date();
       const date = new Intl.DateTimeFormat('en-GB', {
           timeZone: timeZone,
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
+          day: '2-digit', month: '2-digit', year: 'numeric',
       }).format(now);
-
       const time = new Intl.DateTimeFormat('en-GB', {
           timeZone: timeZone,
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
       }).format(now);
 
       const uptime = formatUptime(process.uptime());
-      const totalCommands = commands.filter((command) => command.pattern).length;
-
-      const categorized = commands.reduce((menu, gmd) => {
-          if (gmd.pattern && !gmd.dontAddCommandList) {
-              if (!menu[gmd.category]) menu[gmd.category] = [];
-              menu[gmd.category].push(gmd.pattern);
-          }
-          return menu;
-      }, {});
-
-      const categoryEmojis = {
-          downloader: "📥", download: "📥",
-          search: "🔎",
-          owner: "👑",
-          group: "👥",
-          converter: "🔁", convert: "🔁",
-          general: "🏠", main: "🏠",
-          ai: "🤖",
-          games: "🎮",
-          fun: "🎉",
-          logo: "🎨",
-          anime: "🎌",
-          sports: "⚽",
-          tools: "🔧",
-          utility: "🛠️",
-          sticker: "🖼️",
-          other: "📦",
-      };
-
+      const totalCommands = commands.filter(c => c.pattern).length;
+      const categorized = buildCategorized();
       const catNames = Object.keys(categorized);
       const totalCats = catNames.length;
 
@@ -111,15 +107,79 @@ gmd({
           `> host.princetechn.com\n\n` +
           `📂 *𝗖𝗼𝗺𝗺𝗮𝗻𝗱 𝗖𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝗲𝘀*\n\n` +
           `${catList}\n\n` +
+          `💬 *Reply with a number to see commands*\n` +
+          `📋 Type *${botPrefix}allmenu* for all commands\n` +
           `────────────────\n` +
           `> *${botFooter}*`;
 
-      const princeMess = {
+      const menuMsg = await Prince.sendMessage(from, {
           image: { url: botPic },
           caption: header,
-          contextInfo: getContextInfo(sender, newsletterJid, botName)
+          contextInfo: getContextInfo(sender, newsletterJid, botName),
+      }, { quoted: mek });
+
+      const menuId = menuMsg.key.id;
+
+      const handleMenuReply = async (event) => {
+          const msgData = event.messages[0];
+          if (!msgData?.message || msgData.key.remoteJid !== from) return;
+          const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === menuId;
+          if (!isReply) return;
+
+          const choice = (msgData.message.conversation || msgData.message.extendedTextMessage?.text || "").trim();
+          const idx = parseInt(choice, 10) - 1;
+          if (isNaN(idx) || idx < 0 || idx >= catNames.length) return;
+
+          const cat = catNames[idx];
+          const cmds = categorized[cat] || [];
+          const emoji = categoryEmojis[cat.toLowerCase()] || "📂";
+          const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+
+          const cmdList = cmds.map(cmd => `│  ✦ *${botPrefix}${cmd}*`).join("\n");
+          const catHeader = `╭━━━ ${emoji} *${label}* ━━━╮\n`;
+          const catFooter = `╰━━━━━━━━━━━━━━━━━━━━━━╯\n> *${botFooter}*`;
+
+          await Prince.sendMessage(from, {
+              text: `${catHeader}${cmdList}\n${catFooter}`,
+              contextInfo: getContextInfo(sender, newsletterJid, botName),
+          }, { quoted: msgData });
       };
-      await Prince.sendMessage(from, princeMess, { quoted: mek });
+
+      Prince.ev.on("messages.upsert", handleMenuReply);
+      setTimeout(() => Prince.ev.off("messages.upsert", handleMenuReply), 120000);
+
+      await react("✅");
+});
+
+gmd({
+  pattern: "allmenu",
+  aliases: ['allcommands', 'fullmenu'],
+  react: "📋",
+  category: "general",
+  description: "Show all commands grouped by category",
+}, async (from, Prince, conText) => {
+      const { mek, sender, react, botPic, botName, botFooter, botPrefix, newsletterJid } = conText;
+
+      const categorized = buildCategorized();
+      const totalCommands = commands.filter(c => c.pattern).length;
+
+      let fullMenu = `╭───❖ *𝗛𝗔𝗬𝗪𝗛𝗬-𝗠𝗗𝗫 — 𝗔𝗟𝗟 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦* ❖───╮\n│ Total: *${totalCommands} commands*\n╰──────────────────────────────────╯\n\n`;
+
+      for (const [cat, cmds] of Object.entries(categorized)) {
+          const emoji = categoryEmojis[cat.toLowerCase()] || "📂";
+          const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+          const cmdList = cmds.map(cmd => `┃  ✦ *${botPrefix}${cmd}*`).join("\n");
+          fullMenu += `╭━━━✦ ${emoji} *${label}* ✦━━━╮\n${cmdList}\n╰━━━━━━━━━━━━━━━━━━━━━━━╯\n\n`;
+      }
+
+      fullMenu += `> *${botFooter}*`;
+
+      await Prince.sendMessage(from, {
+          image: { url: botPic },
+          caption: fullMenu,
+          contextInfo: getContextInfo(sender, newsletterJid, botName),
+      }, { quoted: mek });
+
       await react("✅");
 });
 
