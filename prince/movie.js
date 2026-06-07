@@ -1,13 +1,30 @@
-const { gmd, getContextInfo, gmdJson } = require("../mayel");
+const { gmd, getContextInfo } = require("../mayel");
 const axios = require("axios");
 
 const MAX_MEDIA_SIZE = 60 * 1024 * 1024;
 
-async function getFileSize(url) {
+async function getFileSizeSafe(url) {
   try {
-    const res = await axios.head(url, { timeout: 10000 });
+    const res = await axios.head(url, { timeout: 8000 });
     return parseInt(res.headers["content-length"] || "0", 10);
   } catch { return 0; }
+}
+
+// Try each API endpoint in order, return first success
+async function tryEndpoints(endpoints, timeout = 25000) {
+  for (const { url, transform } of endpoints) {
+    try {
+      const res = await axios.get(url, { timeout });
+      const data = res.data;
+      if (data && (data.success || data.status === true || data.status === "success")) {
+        const result = transform ? transform(data) : data.result;
+        if (result) return result;
+      }
+    } catch (_) {
+      continue;
+    }
+  }
+  return null;
 }
 
 gmd(
@@ -19,126 +36,244 @@ gmd(
     description: "Search and download a movie. Usage: .movie <title>",
   },
   async (from, Prince, conText) => {
-    const { q, mek, reply, react, sender, botName, botFooter, botPic, newsletterJid, PrinceTechApi, PrinceApiKey } = conText;
+    const {
+      q, mek, reply, react, sender, botName, botFooter, botPic,
+      newsletterJid, gmdBuffer, PrinceTechApi, PrinceApiKey,
+    } = conText;
 
     if (!q) {
       await react("❌");
       return reply(
         "🎬 *MOVIE DOWNLOADER*\n\n" +
-        "Please provide a movie title to search.\n\n" +
+        "Please provide a movie title.\n\n" +
         "*Usage:* .movie <title>\n" +
         "*Example:* .movie Avengers Endgame"
       );
     }
 
     await react("🔍");
-    await reply(`🔍 Searching for *${q}*...`);
+    const searchingMsg = await reply(`🔍 Searching for *${q}*...`);
 
     try {
-      const searchUrl = `${PrinceTechApi}/api/download/movie?apikey=${PrinceApiKey}&title=${encodeURIComponent(q)}`;
-      const response = await axios.get(searchUrl, { timeout: 30000 });
+      const enc = encodeURIComponent(q);
+      const base = `${PrinceTechApi}/api`;
+      const key = `apikey=${PrinceApiKey}`;
 
-      if (!response.data?.success || !response.data?.result) {
+      // ── Step 1: Search for movie info ────────────────────────────────────
+      const searchEndpoints = [
+        {
+          url: `${base}/search/moviesearch?${key}&query=${enc}`,
+          transform: (d) => d.result || d.results || d.data,
+        },
+        {
+          url: `${base}/download/movie?${key}&title=${enc}`,
+          transform: (d) => d.result || d.data,
+        },
+        {
+          url: `${base}/download/moviedl?${key}&query=${enc}`,
+          transform: (d) => d.result || d.data,
+        },
+        {
+          url: `${base}/download/fzmovie?${key}&query=${enc}`,
+          transform: (d) => d.result || d.data,
+        },
+        {
+          url: `${base}/search/movie?${key}&query=${enc}`,
+          transform: (d) => d.result || d.results || d.data,
+        },
+      ];
+
+      let rawResult = null;
+      for (const ep of searchEndpoints) {
+        try {
+          const res = await axios.get(ep.url, { timeout: 25000 });
+          const d = res.data;
+          if (d && (d.success === true || d.status === true || d.status === "success" || d.ok === true)) {
+            const r = ep.transform(d);
+            if (r && (Array.isArray(r) ? r.length > 0 : true)) {
+              rawResult = r;
+              break;
+            }
+          }
+        } catch (_) { continue; }
+      }
+
+      if (!rawResult) {
         await react("❌");
-        return reply("❌ No results found for *" + q + "*.\n\nTry a different title or check the spelling.");
+        return reply(
+          `❌ No movies found for *${q}*.\n\n` +
+          `Try a different title or check the spelling.`
+        );
       }
 
-      const result = response.data.result;
+      const movies = Array.isArray(rawResult) ? rawResult.slice(0, 5) : [rawResult];
 
-      const isArray = Array.isArray(result);
-      const movies = isArray ? result.slice(0, 5) : [result];
+      const selectAndDownload = async (movie, quotedMsg) => {
+        await handleMovieChoice(
+          Prince, from, quotedMsg, movie, react, reply,
+          sender, botName, botFooter, botPic, newsletterJid,
+          gmdBuffer, PrinceTechApi, PrinceApiKey
+        );
+      };
 
-      if (movies.length === 0) {
-        await react("❌");
-        return reply("❌ No movies found for *" + q + "*.");
+      if (movies.length === 1) {
+        return selectAndDownload(movies[0], mek);
       }
 
-      if (movies.length === 1 || !isArray) {
-        const movie = movies[0];
-        await handleMovieDownload(Prince, from, mek, movie, react, reply, sender, botName, botFooter, botPic, newsletterJid);
-        return;
-      }
+      // ── Step 2: Show search results list ─────────────────────────────────
+      const listLines = movies.map((m, i) => {
+        const title = m.title || m.name || m.movie_name || "Unknown";
+        const year = m.year || m.release_date?.slice(0, 4) || "";
+        const rating = m.rating || m.imdb || m.vote_average || "";
+        return (
+          `│${i + 1}️⃣ *${title}*${year ? ` (${year})` : ""}` +
+          (rating ? ` ⭐ ${rating}` : "")
+        );
+      }).join("\n");
 
-      const listText =
-        `🎬 *${botName} MOVIE SEARCH*\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `Results for: *${q}*\n\n` +
-        movies.map((m, i) =>
-          `${i + 1}️⃣ *${m.title || m.name || "Unknown"}* (${m.year || m.release_date?.slice(0, 4) || "N/A"})\n` +
-          `   🎭 ${m.genre || m.genres?.join(", ") || "N/A"} | ⭐ ${m.rating || m.vote_average || "N/A"}`
-        ).join("\n\n") +
-        `\n\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `⏱ *Reply with a number (1-${movies.length}) to download*`;
+      const thumbnail = movies[0]?.thumbnail || movies[0]?.poster || movies[0]?.cover || botPic;
 
-      const menuMsg = await Prince.sendMessage(from, {
-        image: { url: movies[0]?.thumbnail || movies[0]?.poster || botPic },
-        caption: listText,
+      const listMsg = await Prince.sendMessage(from, {
+        image: { url: thumbnail },
+        caption:
+          `> *${botName} MOVIE SEARCH*\n` +
+          `╭───────────────◆\n` +
+          `│🔍 *Results for:* ${q}\n` +
+          `╰────────────────◆\n` +
+          `${listLines}\n\n` +
+          `⏱ *Reply with a number (1-${movies.length}) to select*`,
         contextInfo: getContextInfo(sender, newsletterJid, botName),
       }, { quoted: mek });
 
-      const menuId = menuMsg.key.id;
+      const listId = listMsg.key.id;
 
       const handleChoice = async (event) => {
         const msgData = event.messages[0];
-        if (!msgData?.message) return;
-        const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === menuId;
+        if (!msgData?.message || msgData.key.remoteJid !== from) return;
+        const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === listId;
         if (!isReply) return;
 
         const choice = (msgData.message.conversation || msgData.message.extendedTextMessage?.text || "").trim();
         const idx = parseInt(choice, 10) - 1;
 
         if (isNaN(idx) || idx < 0 || idx >= movies.length) {
-          await reply("⚠️ Invalid choice. Reply with a number between 1 and " + movies.length + ".");
+          await reply(`⚠️ Please reply with a number between 1 and ${movies.length}.`);
           return;
         }
 
         Prince.ev.off("messages.upsert", handleChoice);
-        await handleMovieDownload(Prince, from, msgData, movies[idx], react, reply, sender, botName, botFooter, botPic, newsletterJid);
+        await selectAndDownload(movies[idx], msgData);
       };
 
       Prince.ev.on("messages.upsert", handleChoice);
       setTimeout(() => Prince.ev.off("messages.upsert", handleChoice), 120000);
 
-    } catch (error) {
-      console.error("Movie search error:", error);
+    } catch (err) {
+      console.error("Movie search error:", err.message);
       await react("❌");
       return reply("❌ Failed to search for movies. Please try again later.");
     }
   }
 );
 
-async function handleMovieDownload(Prince, from, quotedMsg, movie, react, reply, sender, botName, botFooter, botPic, newsletterJid) {
-  const title = movie.title || movie.name || "Movie";
-  const year = movie.year || movie.release_date?.slice(0, 4) || "N/A";
-  const rating = movie.rating || movie.vote_average || "N/A";
+async function handleMovieChoice(
+  Prince, from, quotedMsg, movie, react, reply,
+  sender, botName, botFooter, botPic, newsletterJid,
+  gmdBuffer, PrinceTechApi, PrinceApiKey
+) {
+  const title = movie.title || movie.name || movie.movie_name || "Movie";
+  const year = movie.year || movie.release_date?.slice(0, 4) || "";
+  const rating = movie.rating || movie.imdb || movie.vote_average || "N/A";
   const genre = movie.genre || (Array.isArray(movie.genres) ? movie.genres.join(", ") : movie.genres) || "N/A";
-  const overview = movie.overview || movie.description || movie.synopsis || "";
-  const thumbnail = movie.thumbnail || movie.poster || movie.cover || botPic;
+  const overview = movie.overview || movie.description || movie.synopsis || movie.plot || "";
+  const thumbnail = movie.thumbnail || movie.poster || movie.cover || movie.image || botPic;
 
+  // Collect all available download links from the movie object
   const downloads = [];
-  if (movie.download_url) downloads.push({ label: "Download 🎬", url: movie.download_url });
-  if (movie.hd_url || movie.hd) downloads.push({ label: "HD Quality 🎥", url: movie.hd_url || movie.hd });
-  if (movie.sd_url || movie.sd) downloads.push({ label: "SD Quality 📹", url: movie.sd_url || movie.sd });
+  const addLink = (label, url) => { if (url && typeof url === "string") downloads.push({ label, url }); };
+
+  addLink("🎬 Download", movie.download_url || movie.downloadUrl);
+  addLink("🎥 HD Quality", movie.hd_url || movie.hd || movie.hd_download);
+  addLink("📹 SD Quality", movie.sd_url || movie.sd || movie.sd_download);
+  addLink("🎞 480p", movie["480p"] || movie.p480);
+  addLink("📺 720p", movie["720p"] || movie.p720);
+  addLink("💿 1080p", movie["1080p"] || movie.p1080);
+
   if (Array.isArray(movie.downloads)) {
-    movie.downloads.forEach((d, i) => {
-      if (d.url) downloads.push({ label: d.quality || d.label || `Option ${i + 1}`, url: d.url });
-    });
+    for (const d of movie.downloads) {
+      if (d?.url) addLink(d.quality || d.label || d.size || "📥 Download", d.url);
+    }
+  }
+  if (Array.isArray(movie.links)) {
+    for (const d of movie.links) {
+      if (d?.url || d?.link) addLink(d.quality || d.label || "📥 Download", d.url || d.link);
+    }
   }
 
+  // If still no links, try fetching download links from a detail endpoint
+  if (downloads.length === 0 && (movie.id || movie.slug || movie.link || movie.url)) {
+    const detailUrl = movie.link || movie.url || movie.detail_url;
+    if (detailUrl) {
+      try {
+        const enc = encodeURIComponent(detailUrl);
+        const dlEndpoints = [
+          `${PrinceTechApi}/api/download/moviedl?apikey=${PrinceApiKey}&url=${enc}`,
+          `${PrinceTechApi}/api/download/movie?apikey=${PrinceApiKey}&url=${enc}`,
+          `${PrinceTechApi}/api/download/fzmovie?apikey=${PrinceApiKey}&url=${enc}`,
+        ];
+        for (const ep of dlEndpoints) {
+          try {
+            const res = await axios.get(ep, { timeout: 20000 });
+            const d = res.data;
+            if (d?.success || d?.status === true) {
+              const r = d.result || d.data || {};
+              addLink("🎬 Download", r.download_url || r.link);
+              addLink("🎥 HD", r.hd_url || r.hd);
+              addLink("📹 SD", r.sd_url || r.sd);
+              if (Array.isArray(r.downloads)) {
+                for (const x of r.downloads) {
+                  if (x?.url) addLink(x.quality || "📥 Option", x.url);
+                }
+              }
+              if (downloads.length > 0) break;
+            }
+          } catch (_) { continue; }
+        }
+      } catch (_) {}
+    }
+  }
+
+  // ── Info card ─────────────────────────────────────────────────────────────
+  const infoCaption =
+    `> *${botName} MOVIE DOWNLOADER*\n` +
+    `╭───────────────◆\n` +
+    `│🎬 *${title}*${year ? ` (${year})` : ""}\n` +
+    `│⭐ *Rating:* ${rating}\n` +
+    `│🎭 *Genre:* ${genre}\n` +
+    (overview ? `│📝 ${overview.slice(0, 200)}${overview.length > 200 ? "..." : ""}\n` : "") +
+    `╰────────────────◆`;
+
   if (downloads.length === 0) {
+    await Prince.sendMessage(from, {
+      image: { url: thumbnail },
+      caption: infoCaption + `\n\n❌ *No download links found.*\nTry searching with a different title.`,
+      contextInfo: getContextInfo(sender, newsletterJid, botName),
+    }, { quoted: quotedMsg });
     await react("❌");
-    return reply(
-      `🎬 *${title}* (${year})\n\n` +
-      `❌ No direct download links found for this movie.\n\n` +
-      (movie.stream_url ? `🔗 *Stream:* ${movie.stream_url}` : "Try searching with a different title.")
-    );
+    return;
   }
 
   if (downloads.length === 1) {
     await react("⬇️");
-    return sendMovieFile(Prince, from, quotedMsg, downloads[0].url, title, react, reply, botFooter);
+    await Prince.sendMessage(from, {
+      image: { url: thumbnail },
+      caption: infoCaption,
+      contextInfo: getContextInfo(sender, newsletterJid, botName),
+    }, { quoted: quotedMsg });
+    return sendMovieFile(Prince, from, quotedMsg, downloads[0].url, title, react, reply, botFooter, gmdBuffer);
   }
 
+  // Multiple quality options — show selection menu
   const optionLines = downloads.map((d, i) => `│${i + 1}️⃣ ${d.label}`).join("\n");
   const actionMap = {};
   downloads.forEach((d, i) => { actionMap[String(i + 1)] = d.url; });
@@ -146,16 +281,10 @@ async function handleMovieDownload(Prince, from, quotedMsg, movie, react, reply,
   const infoMsg = await Prince.sendMessage(from, {
     image: { url: thumbnail },
     caption:
-      `> *${botName} MOVIE DOWNLOADER*\n` +
-      `╭───────────────◆\n` +
-      `│🎬 *${title}* (${year})\n` +
-      `│⭐ *Rating:* ${rating}\n` +
-      `│🎭 *Genre:* ${genre}\n` +
-      (overview ? `│📝 *Plot:* ${overview.slice(0, 150)}${overview.length > 150 ? "..." : ""}\n` : "") +
-      `╰────────────────◆\n` +
+      infoCaption + "\n" +
       `⏱ *Session expires in 2 minutes*\n` +
       `╭───────────────◆\n` +
-      `│Reply with:\n` +
+      `│Reply with quality:\n` +
       `${optionLines}\n` +
       `╰────────────────◆`,
     contextInfo: getContextInfo(sender, newsletterJid, botName),
@@ -165,7 +294,7 @@ async function handleMovieDownload(Prince, from, quotedMsg, movie, react, reply,
 
   const handleDownload = async (event) => {
     const msgData = event.messages[0];
-    if (!msgData?.message) return;
+    if (!msgData?.message || msgData.key.remoteJid !== from) return;
     const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === infoId;
     if (!isReply) return;
 
@@ -173,42 +302,52 @@ async function handleMovieDownload(Prince, from, quotedMsg, movie, react, reply,
     const url = actionMap[choice];
 
     if (!url) {
-      await reply("⚠️ Invalid option. Reply with a number from the list.");
+      await reply(`⚠️ Invalid option. Reply with a number from 1 to ${downloads.length}.`);
       return;
     }
 
     Prince.ev.off("messages.upsert", handleDownload);
     await react("⬇️");
-    await sendMovieFile(Prince, from, msgData, url, title, react, reply, botFooter);
+    await sendMovieFile(Prince, from, msgData, url, title, react, reply, botFooter, gmdBuffer);
   };
 
   Prince.ev.on("messages.upsert", handleDownload);
   setTimeout(() => Prince.ev.off("messages.upsert", handleDownload), 120000);
 }
 
-async function sendMovieFile(Prince, from, quotedMsg, url, title, react, reply, botFooter) {
+async function sendMovieFile(Prince, from, quotedMsg, url, title, react, reply, botFooter, gmdBuffer) {
   try {
-    const fileSize = await getFileSize(url);
-    const safeTitle = title.replace(/[^\w\s.-]/gi, "").trim();
+    const safeTitle = title.replace(/[^\w\s.-]/gi, "").trim() || "movie";
+    const fileSize = await getFileSizeSafe(url);
 
     if (fileSize > MAX_MEDIA_SIZE || fileSize === 0) {
       await Prince.sendMessage(from, {
         document: { url },
         fileName: `${safeTitle}.mp4`,
         mimetype: "video/mp4",
-        caption: `🎬 *${title}*\n\n> ${botFooter}`,
+        caption: `🎬 *${title}*\n\n> *${botFooter}*`,
       }, { quoted: quotedMsg });
     } else {
-      await Prince.sendMessage(from, {
-        video: { url },
-        mimetype: "video/mp4",
-        caption: `🎬 *${title}*\n\n> ${botFooter}`,
-      }, { quoted: quotedMsg });
+      try {
+        const buf = await gmdBuffer(url);
+        await Prince.sendMessage(from, {
+          video: buf,
+          mimetype: "video/mp4",
+          caption: `🎬 *${title}*\n\n> *${botFooter}*`,
+        }, { quoted: quotedMsg });
+      } catch (_) {
+        await Prince.sendMessage(from, {
+          document: { url },
+          fileName: `${safeTitle}.mp4`,
+          mimetype: "video/mp4",
+          caption: `🎬 *${title}*\n\n> *${botFooter}*`,
+        }, { quoted: quotedMsg });
+      }
     }
 
     await react("✅");
   } catch (err) {
-    console.error("Movie file send error:", err);
+    console.error("Movie send error:", err.message);
     await react("❌");
     await reply("❌ Failed to send the movie file. Please try again.");
   }

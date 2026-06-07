@@ -151,29 +151,56 @@ gmd({
             await react("❌");
             return reply("That quoted message is not a sticker");
         }
-        
-        let tempFilePath;
+
+        await react("⏳");
+
+        let stickerBuffer = null;
+        let tempFilePath = null;
+
+        // Attempt 1: download using the inner stickerMessage object
         try {
-            tempFilePath = await Prince.downloadAndSaveMediaMessage(quotedSticker, 'temp_media');
-            const stickerBuffer = await fs.readFile(tempFilePath);
-            const imageBuffer = await stickerToImage(stickerBuffer);  
-        await Prince.sendMessage(
-        from,
-        {
-          image: imageBuffer,
-          caption: `*Here is your image*\n\n> *${botFooter}*`,
-          contextInfo: getContextInfo(sender, newsletterJid, botName),
-        },
-        { quoted: mek }
-      );
-            await react("✅");
+            tempFilePath = await Prince.downloadAndSaveMediaMessage(quotedSticker, `temp_sticker_${Date.now()}`);
+            stickerBuffer = await fs.readFile(tempFilePath);
+        } catch (_) {
+            stickerBuffer = null;
         } finally {
-            if (tempFilePath) await fs.unlink(tempFilePath).catch(console.error);
+            if (tempFilePath) await fs.unlink(tempFilePath).catch(() => {});
+            tempFilePath = null;
         }
+
+        // Attempt 2: download using the full quoted message wrapper
+        if (!stickerBuffer) {
+            try {
+                const wrapper = quotedMsg?.message?.stickerMessage
+                    ? quotedMsg
+                    : { message: { stickerMessage: quotedSticker }, key: quotedMsg?.key || {} };
+                tempFilePath = await Prince.downloadAndSaveMediaMessage(wrapper, `temp_sticker2_${Date.now()}`);
+                stickerBuffer = await fs.readFile(tempFilePath);
+            } catch (_) {
+                stickerBuffer = null;
+            } finally {
+                if (tempFilePath) await fs.unlink(tempFilePath).catch(() => {});
+            }
+        }
+
+        if (!stickerBuffer || !stickerBuffer.length) {
+            await react("❌");
+            return reply("❌ Failed to download the sticker. Please try again.");
+        }
+
+        const imageBuffer = await stickerToImage(stickerBuffer);
+
+        await Prince.sendMessage(from, {
+            image: imageBuffer,
+            caption: `✅ *Sticker converted to image!*\n\n> *${botFooter}*`,
+            contextInfo: getContextInfo(sender, newsletterJid, botName),
+        }, { quoted: mek });
+
+        await react("✅");
     } catch (e) {
-        console.error("Error in toimg command:", e);
+        console.error("Error in toimg command:", e.message, e.stack);
         await react("❌");
-        await reply("Failed to convert sticker to image");
+        await reply(`❌ Failed to convert sticker to image.\n_${e.message}_`);
     }
 });
 

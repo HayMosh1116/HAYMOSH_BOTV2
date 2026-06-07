@@ -69,40 +69,54 @@ gmd({
           return menu;
       }, {});
 
-      // 🔥 Gifted-style header
-      let header = `
-╭━━〔 *${monospace(botName)}* 〕━━╮
-│ ✦ *Mᴏᴅᴇ* : ${monospace(botMode)}
-│ ✦ *Pʀᴇғɪx* : [ ${monospace(botPrefix)} ]
-│ ✦ *Usᴇʀ* : ${monospace(pushName)}
-│ ✦ *Pʟᴜɢɪɴs* : ${monospace(totalCommands.toString())}
-│ ✦ *Vᴇʀsɪᴏɴ* : ${monospace(botVersion)}
-│ ✦ *Uᴘᴛɪᴍᴇ* : ${monospace(uptime)}
-│ ✦ *Tɪᴍᴇ Nᴏᴡ* : ${monospace(time)}
-│ ✦ *Dᴀᴛᴇ Tᴏᴅᴀʏ* : ${monospace(date)}
-│ ✦ *Tɪᴍᴇ Zᴏɴᴇ* : ${monospace(timeZone)}
-│ ✦ *Sᴇʀᴠᴇʀ Rᴀᴍ* : ${monospace(ram)}
-╰──────────────╯\n
-*Deploy here 👇👇*
-host.princetechn.com 
-${readmore}\n`;
-
-      // 🔥 Gifted-style category formatter
-      const formatCategory = (category, gmds) => {
-          const title = `╭━━━✦❮ *${monospace(category.toUpperCase())}* ❯✦━⊷ \n`;
-          const body = gmds.map(gmd => `┃✪  ${smallCaps(gmd)}`).join('\n');
-          const footer = `╰━━━━━━━━━━━━━━━━━⊷\n`;
-          return `${title}${body}\n${footer}`;
+      const categoryEmojis = {
+          downloader: "📥", download: "📥",
+          search: "🔎",
+          owner: "👑",
+          group: "👥",
+          converter: "🔁", convert: "🔁",
+          general: "🏠", main: "🏠",
+          ai: "🤖",
+          games: "🎮",
+          fun: "🎉",
+          logo: "🎨",
+          anime: "🎌",
+          sports: "⚽",
+          tools: "🔧",
+          utility: "🛠️",
+          sticker: "🖼️",
+          other: "📦",
       };
 
-      let menu = header;
-      for (const [category, gmds] of Object.entries(categorized)) {
-          menu += formatCategory(category, gmds) + '\n';
-      }
-        
+      const catNames = Object.keys(categorized);
+      const totalCats = catNames.length;
+
+      const catList = catNames.map((cat, i) => {
+          const emoji = categoryEmojis[cat.toLowerCase()] || "📂";
+          const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+          return `• ${i + 1}  ${emoji} *${label}*`;
+      }).join("\n");
+
+      const header =
+          `╭───❖ *𝗛𝗔𝗬𝗪𝗛𝗬-𝗠𝗗𝗫* ❖───╮\n` +
+          `│ ᴏᴡɴᴇʀ    : 👑 ${conText.config?.OWNER_NAME || botName}\n` +
+          `│ ᴜᴘᴛɪᴍᴇ   : ${uptime}\n` +
+          `│ ᴘʀᴇғɪx   : ${botPrefix}\n` +
+          `│ ᴛɪᴍᴇ     : ${time}\n` +
+          `│ ᴅᴀᴛᴇ     : ${date}\n` +
+          `│ ᴘʟᴜɢɪɴs  : ${totalCommands}\n` +
+          `│ ᴄᴀᴛᴇɢᴏʀɪᴇs : ${totalCats}\n` +
+          `╰──────────────────╯\n` +
+          `🟢 *𝗗𝗲𝗽𝗹𝗼𝘆 𝗵𝗲𝗿𝗲👇*\n` +
+          `> host.princetechn.com\n\n` +
+          `📂 *𝗖𝗼𝗺𝗺𝗮𝗻𝗱 𝗖𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝗲𝘀*\n\n` +
+          `${catList}\n\n` +
+          `────────────────\n` +
+          `> *${botFooter}*`;
+
       const princeMess = {
           image: { url: botPic },
-          caption: `${menu.trim()}\n\n> *${botFooter}*`,
+          caption: header,
           contextInfo: getContextInfo(sender, newsletterJid, botName)
       };
       await Prince.sendMessage(from, princeMess, { quoted: mek });

@@ -39,7 +39,9 @@ async function stickerToImage(webpData, options = {}) {
             });
 
             const metadata = await sharpInstance.metadata();
-            const isAnimated = metadata.pages > 1 || metadata.hasAlpha;
+            // Only treat as animated if there are multiple pages (frames).
+            // hasAlpha alone does NOT mean animated — static stickers have transparent backgrounds.
+            const isAnimated = (metadata.pages || 1) > 1;
 
             if (isAnimated) {
                 return await sharpInstance
