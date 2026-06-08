@@ -170,7 +170,114 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
     }
 };
 
+// ============================================================
+// VIEW ONCE AUTO-FORWARD
+// Trigger: user replies "lol" or "wow" to a view-once image/video
+// Action: downloads the media and sends it to the replier's DM
+// ============================================================
+const PrinceViewOnce = (Prince) => {
+    Prince.ev.on("messages.upsert", async ({ messages }) => {
+        try {
+            const ms = messages[0];
+            if (!ms?.message || ms.key.fromMe) return;
+
+            // Extract the text body
+            const rawBody = (
+                ms.message.conversation ||
+                ms.message.extendedTextMessage?.text ||
+                ""
+            ).trim().toLowerCase();
+
+            // Only fire on exact trigger words
+            if (!["lol", "wow"].includes(rawBody)) return;
+
+            // Must be a reply (extended text with contextInfo)
+            const ctxInfo = ms.message.extendedTextMessage?.contextInfo;
+            if (!ctxInfo?.quotedMessage) return;
+
+            const quotedMsg = ctxInfo.quotedMessage;
+
+            // Check if the quoted message is a view-once media
+            const voMsg =
+                quotedMsg.viewOnceMessage?.message ||
+                quotedMsg.viewOnceMessageV2?.message ||
+                quotedMsg.viewOnceMessageV2Extension?.message;
+
+            if (!voMsg) return;
+
+            const isImage = !!voMsg.imageMessage;
+            const isVideo = !!voMsg.videoMessage;
+            if (!isImage && !isVideo) return;
+
+            const from = ms.key.remoteJid;
+            const rawSender = ms.key.participant || ms.key.remoteJid;
+            // Normalise to @s.whatsapp.net DM JID
+            const senderDM = rawSender.includes("@s.whatsapp.net")
+                ? rawSender
+                : rawSender.split("@")[0] + "@s.whatsapp.net";
+
+            // Acknowledge with eye emoji
+            try { await Prince.sendMessage(from, { react: { key: ms.key, text: "👀" } }); } catch (_) {}
+
+            // Build a minimal fake message so downloadMediaMessage can fetch the media
+            const fakeMsg = {
+                key: {
+                    remoteJid: from,
+                    fromMe: false,
+                    id: ctxInfo.stanzaId,
+                    participant: ctxInfo.participant,
+                },
+                message: voMsg,
+            };
+
+            let buffer;
+            try {
+                buffer = await downloadMediaMessage(
+                    fakeMsg,
+                    "buffer",
+                    {},
+                    { logger, reuploadRequest: Prince.updateMediaMessage }
+                );
+            } catch (dlErr) {
+                console.error("ViewOnce download error:", dlErr.message);
+                await Prince.sendMessage(from, {
+                    text: "❌ Could not extract the view once media. It may have expired.",
+                }, { quoted: ms });
+                return;
+            }
+
+            if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+                await Prince.sendMessage(from, {
+                    text: "❌ View once media extraction failed.",
+                }, { quoted: ms });
+                return;
+            }
+
+            const mediaLabel = isImage ? "Image" : "Video";
+            const caption =
+                `🔓 *View Once ${mediaLabel}*\n` +
+                `_Auto-forwarded by ${config.BOT_NAME}_`;
+
+            // Send to user's private DM
+            if (isImage) {
+                await Prince.sendMessage(senderDM, { image: buffer, caption });
+            } else {
+                await Prince.sendMessage(senderDM, { video: buffer, caption });
+            }
+
+            // Confirm in the group/chat
+            await Prince.sendMessage(from, {
+                text: `✅ View once ${mediaLabel.toLowerCase()} sent to your DM!`,
+            }, { quoted: ms });
+
+        } catch (err) {
+            console.error("PrinceViewOnce error:", err.message);
+        }
+    });
+};
+
 module.exports = {
     logger, emojis, PrinceAutoReact, PrinceTechApi, PrinceApiKey, PrinceAntiLink,
-    PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrincePresence, PrinceAntiDelete, PrinceAnticall,
+    PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrincePresence, PrinceAntiDelete,
+    PrinceAnticall, PrinceViewOnce,
 };

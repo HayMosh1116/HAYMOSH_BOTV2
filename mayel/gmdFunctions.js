@@ -79,7 +79,6 @@ async function stickerToImage(webpData, options = {}) {
             }
         }
         else if (typeof webpData === 'string') {
-            const outputPath = webpData.replace(/\.webp$/, isAnimated ? '.gif' : '.png');
             const sharpInstance = sharp(webpData, {
                 sequentialRead: true,
                 animated: true,
@@ -88,7 +87,10 @@ async function stickerToImage(webpData, options = {}) {
             });
 
             const metadata = await sharpInstance.metadata();
-            const isAnimated = metadata.pages > 1 || metadata.hasAlpha;
+            // Same fix as Buffer branch: hasAlpha is true for ALL stickers (transparent bg),
+            // so only use page count to determine animation.
+            const isAnimated = (metadata.pages || 1) > 1;
+            const outputPath = webpData.replace(/\.webp$/, isAnimated ? '.gif' : '.png');
 
             if (isAnimated) {
                 await sharpInstance

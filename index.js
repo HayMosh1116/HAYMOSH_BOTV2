@@ -54,6 +54,7 @@ const {
     verifyJidState,
     PrincePresence,
     PrinceAntiDelete,
+    PrinceViewOnce,
     addWarning,
     getUserWarnings,
     resetWarnings
@@ -361,6 +362,9 @@ async function startPrince() {
                 createContext2,
                 googleTTS,
             );
+
+            // View Once Auto-Forward: reply "lol" or "wow" to a view-once image/video
+            PrinceViewOnce(Prince);
 
             Prince.ev.on("messages.upsert", async ({ messages }) => {
                 const message = messages[0];
