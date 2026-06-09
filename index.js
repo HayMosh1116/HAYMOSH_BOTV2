@@ -1171,7 +1171,7 @@ async function startPrince() {
                 } else if (reason === DisconnectReason.connectionLost) {
                     console.log("Connection lost from server, reconnecting...");
                     setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
-                } else if (reason === DisconnectReason.connectionReplaced) {
+                } else if (reason === DisconnectReason.connectionReplaced || reason === 405) {
                     console.log(
                         "Connection replaced, another new session opened",
                     );
