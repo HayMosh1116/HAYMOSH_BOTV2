@@ -1173,9 +1173,9 @@ async function startPrince() {
                     setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionReplaced || reason === 405) {
                     console.log(
-                        "Connection replaced, another new session opened",
+                        "Connection replaced, another new session opened. Shutting down cleanly.",
                     );
-                    process.exit(1);
+                    process.exit(0);
                 } else if (reason === DisconnectReason.loggedOut) {
                     console.log(
                         "Device logged out, delete session and scan again",
