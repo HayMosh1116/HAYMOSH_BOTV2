@@ -9,6 +9,7 @@ const {
     DisconnectReason,
     getContentType,
     fetchLatestBaileysVersion,
+    fetchLatestWaWebVersion,
     useMultiFileAuthState,
     makeCacheableSignalKeyStore,
     jidDecode,
@@ -125,10 +126,20 @@ let store;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 50;
 const RECONNECT_DELAY = 5000;
+let isShuttingDown = false;
 
 async function startPrince() {
     try {
-        const { version, isLatest } = await fetchLatestBaileysVersion();
+        let version;
+        try {
+            const waVersion = await fetchLatestWaWebVersion();
+            version = waVersion.version;
+            console.log(`📡 WA Version  : ${version.join('.')}`);
+        } catch (e) {
+            const fallback = await fetchLatestBaileysVersion();
+            version = fallback.version;
+            console.log(`📡 WA Version  : ${version.join('.')} (fallback)`);
+        }
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
         if (store) {
@@ -1172,10 +1183,12 @@ async function startPrince() {
                     console.log("Connection lost from server, reconnecting...");
                     setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionReplaced || reason === 405) {
-                    console.log(
-                        "Connection replaced, another new session opened. Shutting down cleanly.",
-                    );
-                        setTimeout(() => reconnectWithRetry(), 30000);
+                    if (isShuttingDown) {
+                        console.log("Connection replaced during shutdown — not reconnecting.");
+                        return;
+                    }
+                    console.log("Connection replaced (405) — waiting 60s for old session to expire...");
+                    setTimeout(() => reconnectWithRetry(), 60000);
                 } else if (reason === DisconnectReason.loggedOut) {
                     console.log(
                         "Device logged out, delete session and scan again",
@@ -1361,10 +1374,13 @@ _We'll miss you!_`;
             }
         });
 
-        const cleanup = () => {
-            if (store) {
-                store.destroy();
-            }
+        const cleanup = async () => {
+            if (isShuttingDown) return;
+            isShuttingDown = true;
+            console.log("🛑 Shutdown signal — closing WhatsApp socket cleanly...");
+            try { await Prince.end(); } catch (_) {}
+            if (store) store.destroy();
+            setTimeout(() => process.exit(0), 2000);
         };
 
         process.on("SIGINT", cleanup);
