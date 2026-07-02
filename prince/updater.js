@@ -51,36 +51,32 @@ gmd(
     try {
     //await reply("🔍 Checking for New Updates...");
 
-      // FORCE PRINCE-MDX REPO
-      const repoName = "HayMosh1116/HAYMOSH_BOT";
+      const repoName = "HayMosh1116/HAYMOSH_BOTV2";
+      const repoShort = "HAYMOSH_BOTV2";
+      const branch = "main";
 
       const { data: commitData } = await axios.get(
-        `https://api.github.com/repos/${repoName}/commits/main`
+        `https://api.github.com/repos/${repoName}/commits/${branch}`
       );
 
       const latestCommitHash = commitData.sha;
       const currentHash = getSetting("COMMIT_HASH", "");
 
       if (latestCommitHash === currentHash) {
-        return reply("✅ Your Bot is Already on the Latest Version!");
+        return reply("✅ Your Bot is already on the latest version!");
       }
 
-      const authorName = commitData.commit.author.name;
-      const authorEmail = commitData.commit.author.email;
-      const commitDate = new Date(
-        commitData.commit.author.date
-      ).toLocaleString();
-      const commitMessage = commitData.commit.message;
+      // Always show "Dev Haywhy" as author; show only first line of commit message
+      const commitDate = new Date(commitData.commit.author.date).toLocaleString();
+      const commitMessage = commitData.commit.message.split('\n')[0].trim();
 
       await reply(
-        `🔄 Updating Bot...\n` +
-        `👤 Author: ${authorName} \n` +
-        `📅 Date: ${commitDate}\n` +
-        `💬 Message: ${commitMessage}`
+        `🔄 *Updating HAYWHY-MDX...*\n\n` +
+        `👤 *Author:* Dev Haywhy\n` +
+        `📅 *Date:* ${commitDate}\n` +
+        `💬 *Update:* ${commitMessage}\n\n` +
+        `⏳ Please wait...`
       );
-
-      const repoShort = "HAYMOSH_BOT";
-      const branch = "main";
 
       const zipPath = path.join(__dirname, "..", `${repoShort}.zip`);
 
@@ -97,10 +93,7 @@ gmd(
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(extractPath, true);
 
-      const sourcePath = path.join(
-        extractPath,
-        `${repoShort}-${branch}`
-      );
+      const sourcePath = path.join(extractPath, `${repoShort}-${branch}`);
 
       const destinationPath = path.join(__dirname, "..");
 /*
