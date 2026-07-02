@@ -10,58 +10,94 @@ const { gmd, commands, monospace, formatBytes, getContextInfo } = require("../ma
       ram = `${formatBytes(freeMemoryBytes)}/${formatBytes(totalMemoryBytes)}`;
 
 
-// 🔠 Small caps formatter (like Gifted)
+// ─── small caps map ────────────────────────────────────────────────────────────
 function smallCaps(text) {
-  const smallCapsMap = {
-    a: 'ᴀ', b: 'ʙ', c: 'ᴄ', d: 'ᴅ', e: 'ᴇ', f: 'ғ',
-    g: 'ɢ', h: 'ʜ', i: 'ɪ', j: 'ᴊ', k: 'ᴋ', l: 'ʟ',
-    m: 'ᴍ', n: 'ɴ', o: 'ᴏ', p: 'ᴘ', q: 'ǫ', r: 'ʀ',
-    s: 's', t: 'ᴛ', u: 'ᴜ', v: 'ᴠ', w: 'ᴡ', x: 'x',
-    y: 'ʏ', z: 'ᴢ'
+  const map = {
+    a:'ᴀ',b:'ʙ',c:'ᴄ',d:'ᴅ',e:'ᴇ',f:'ғ',g:'ɢ',h:'ʜ',i:'ɪ',j:'ᴊ',k:'ᴋ',
+    l:'ʟ',m:'ᴍ',n:'ɴ',o:'ᴏ',p:'ᴘ',q:'ǫ',r:'ʀ',s:'s',t:'ᴛ',u:'ᴜ',v:'ᴠ',
+    w:'ᴡ',x:'x',y:'ʏ',z:'ᴢ'
   };
-  return text.toLowerCase().split('').map(c => smallCapsMap[c] || c).join('');
+  return text.toLowerCase().split('').map(c => map[c] || c).join('');
 }
 
-
-const categoryEmojis = {
-    downloader: "📥", download: "📥",
-    search: "🔎",
-    owner: "👑",
-    group: "👥",
-    converter: "🔁", convert: "🔁",
-    general: "🏠", main: "🏠",
-    ai: "🤖",
-    games: "🎮",
-    fun: "🎉",
-    logo: "🎨",
-    anime: "🎌",
-    sports: "⚽",
-    tools: "🔧",
-    utility: "🛠️",
-    sticker: "🖼️",
-    other: "📦",
+// ─── bold Unicode category display labels ────────────────────────────────────
+const categoryDisplayMap = {
+    ai:         '𝗔𝗜',
+    anime:      '𝗔𝗡𝗜𝗠𝗘',
+    converter:  '𝗖𝗢𝗡𝗩𝗘𝗥𝗧',
+    convert:    '𝗖𝗢𝗡𝗩𝗘𝗥𝗧',
+    sticker:    '𝗦𝗧𝗜𝗖𝗞𝗘𝗥',
+    tools:      '𝗧𝗢𝗢𝗟𝗦',
+    dev:        '𝗗𝗘𝗩',
+    downloader: '𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗',
+    download:   '𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗',
+    fun:        '𝗙𝗨𝗡',
+    search:     '𝗦𝗘𝗔𝗥𝗖𝗛',
+    games:      '𝗚𝗔𝗠𝗘𝗦',
+    game:       '𝗚𝗔𝗠𝗘𝗦',
+    group:      '𝗚𝗥𝗢𝗨𝗣',
+    owner:      '𝗢𝗪𝗡𝗘𝗥',
+    logo:       '𝗟𝗢𝗚𝗢',
+    general:    '𝗠𝗔𝗜𝗡',
+    main:       '𝗠𝗔𝗜𝗡',
+    menu:       '𝗠𝗘𝗡𝗨',
+    misc:       '𝗠𝗜𝗦𝗖',
+    other:      '𝗢𝗧𝗛𝗘𝗥',
+    hidden:     '𝗛𝗜𝗗𝗗𝗘𝗡',
+    sports:     '𝗦𝗣𝗢𝗥𝗧𝗦',
+    utility:    '𝗨𝗧𝗜𝗟𝗜𝗧𝗬',
 };
 
+// ─── category emojis ──────────────────────────────────────────────────────────
+const categoryEmojis = {
+    ai:'🤖', anime:'🎌', converter:'🔁', convert:'🔁', sticker:'🖼️',
+    tools:'🔧', dev:'💻', downloader:'📥', download:'📥', fun:'🎉',
+    search:'🔎', games:'🎮', game:'🎮', group:'👥', owner:'👑',
+    logo:'🎨', general:'🏠', main:'🏠', menu:'📋', misc:'📌',
+    other:'📦', hidden:'🔒', sports:'⚽', utility:'🛠️',
+};
+
+// ─── preferred category order ─────────────────────────────────────────────────
+const CATEGORY_ORDER = [
+    'ai','anime','converter','sticker','tools','dev',
+    'downloader','fun','search','games','group','owner',
+    'logo','general','menu','misc','other','hidden','sports',
+];
+
+// ─── build categorised command map ────────────────────────────────────────────
 function buildCategorized() {
-    return commands.reduce((menu, cmd) => {
-        if (cmd.pattern && !cmd.dontAddCommandList) {
-            if (!menu[cmd.category]) menu[cmd.category] = [];
-            menu[cmd.category].push(cmd.pattern);
-        }
-        return menu;
-    }, {});
+    const menu = {};
+    for (const cmd of commands) {
+        if (!cmd.pattern || cmd.dontAddCommandList) continue;
+        const cat = (cmd.category || 'other').toLowerCase();
+        if (!menu[cat]) menu[cat] = [];
+        menu[cat].push(cmd.pattern);
+    }
+    return menu;
 }
 
-function formatUptime(seconds) {
-    const days = Math.floor(seconds / (24 * 60 * 60));
-    seconds %= 24 * 60 * 60;
-    const hours = Math.floor(seconds / (60 * 60));
-    seconds %= 60 * 60;
-    const minutes = Math.floor(seconds / 60);
-    seconds = Math.floor(seconds % 60);
-    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+// ─── sort categories in preferred order ──────────────────────────────────────
+function sortedCategories(categorized) {
+    const known = CATEGORY_ORDER.filter(c => categorized[c]);
+    const extra = Object.keys(categorized).filter(c => !CATEGORY_ORDER.includes(c)).sort();
+    return [...known, ...extra];
 }
 
+// ─── uptime formatter ─────────────────────────────────────────────────────────
+function formatUptime(secs) {
+    const d = Math.floor(secs / 86400);
+    const h = Math.floor((secs % 86400) / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    const parts = [];
+    if (d) parts.push(`${d} day${d > 1 ? 's' : ''}`);
+    if (h) parts.push(`${h} hour${h > 1 ? 's' : ''}`);
+    if (m) parts.push(`${m} minute${m > 1 ? 's' : ''}`);
+    if (s || !parts.length) parts.push(`${s} second${s !== 1 ? 's' : ''}`);
+    return parts.join(', ');
+}
+
+// ─── .menu ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "menu", 
   aliases: ['help', 'mainmenu'],
@@ -69,88 +105,115 @@ gmd({
   category: "general",
   description: "Interactive bot menu — reply with a number to see category commands",
 }, async (from, Prince, conText) => {
-      const { mek, sender, react, pushName, botPic, botVersion, botName, botFooter, timeZone, botPrefix, newsletterJid } = conText;
+    const { mek, sender, react, pushName, botPic, botName, botFooter,
+            timeZone, botPrefix, newsletterJid, config } = conText;
 
-      const now = new Date();
-      const date = new Intl.DateTimeFormat('en-GB', {
-          timeZone: timeZone,
-          day: '2-digit', month: '2-digit', year: 'numeric',
-      }).format(now);
-      const time = new Intl.DateTimeFormat('en-GB', {
-          timeZone: timeZone,
-          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
-      }).format(now);
+    const tz     = timeZone || 'Africa/Lagos';
+    const now    = new Date();
+    const date   = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day:'2-digit', month:'2-digit', year:'numeric' }).format(now);
+    const time   = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true }).format(now);
+    const uptime = formatUptime(Math.floor(process.uptime()));
+    const ownerName = (config?.OWNER_NAME || botName || 'DEV-HAYWHY').trim();
 
-      const uptime = formatUptime(process.uptime());
-      const totalCommands = commands.filter(c => c.pattern).length;
-      const categorized = buildCategorized();
-      const catNames = Object.keys(categorized);
-      const totalCats = catNames.length;
+    const categorized = buildCategorized();
+    const catNames    = sortedCategories(categorized);
+    const totalCmds   = commands.filter(c => c.pattern).length;
 
-      const catList = catNames.map((cat, i) => {
-          const emoji = categoryEmojis[cat.toLowerCase()] || "📂";
-          const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-          return `• ${i + 1}  ${emoji} *${label}*`;
-      }).join("\n");
+    // ── numbered category list ──
+    const catList = catNames.map((cat, i) => {
+        const emoji   = categoryEmojis[cat] || '📂';
+        const label   = categoryDisplayMap[cat] || cat.toUpperCase();
+        const num     = String(i + 1).padStart(2, '0');
+        return `┃➠ ${num}  ${emoji}  *${label}*`;
+    }).join('\n');
 
-      const header =
-          `╭───❖ *𝗛𝗔𝗬𝗪𝗛𝗬-𝗠𝗗𝗫* ❖───╮\n` +
-          `│ ᴏᴡɴᴇʀ    : 👑 ${conText.config?.OWNER_NAME || botName}\n` +
-          `│ ᴜᴘᴛɪᴍᴇ   : ${uptime}\n` +
-          `│ ᴘʀᴇғɪx   : ${botPrefix}\n` +
-          `│ ᴛɪᴍᴇ     : ${time}\n` +
-          `│ ᴅᴀᴛᴇ     : ${date}\n` +
-          `│ ᴘʟᴜɢɪɴs  : ${totalCommands}\n` +
-          `│ ᴄᴀᴛᴇɢᴏʀɪᴇs : ${totalCats}\n` +
-          `╰──────────────────╯\n` +
-          `🟢 *𝗗𝗲𝗽𝗹𝗼𝘆 𝗵𝗲𝗿𝗲👇*\n` +
-          `> host.princetechn.com\n\n` +
-          `📂 *𝗖𝗼𝗺𝗺𝗮𝗻𝗱 𝗖𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝗲𝘀*\n\n` +
-          `${catList}\n\n` +
-          `💬 *Reply with a number to see commands*\n` +
-          `📋 Type *${botPrefix}allmenu* for all commands\n` +
-          `────────────────\n` +
-          `> *${botFooter}*`;
+    const header =
+        `╔═❖🔹 *𝗛𝗔𝗬𝗪𝗛𝗬-𝗠𝗗𝗫* 🔹❖═╗\n` +
+        `┃➠ ᴏᴡɴᴇʀ      : 👑 ${ownerName}\n` +
+        `┃➠ ᴘʟᴀᴛғᴏʀᴍ  : Heroku\n` +
+        `┃➠ ᴜᴘᴛɪᴍᴇ    : ${uptime}\n` +
+        `┃➠ ᴘʀᴇғɪx    : ${botPrefix}\n` +
+        `┃➠ ᴛɪᴍᴇ      : ${time}\n` +
+        `┃➠ ᴅᴀᴛᴇ      : ${date}\n` +
+        `┃➠ ᴛᴏᴛᴀʟ ᴄᴍᴅs : ${totalCmds}\n` +
+        `╚══════════════════╝\n\n` +
+        `${catList}\n\n` +
+        `💬 *Reply with a number to open a category*\n` +
+        `📋 *${botPrefix}allmenu* → see all commands at once\n` +
+        `🌐 https://wa.me/2349122761580\n` +
+        `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖*`;
 
-      const menuMsg = await Prince.sendMessage(from, {
-          image: { url: botPic },
-          caption: header,
-          contextInfo: getContextInfo(sender, newsletterJid, botName),
-      }, { quoted: mek });
+    const menuMsg = await Prince.sendMessage(from, {
+        image: { url: botPic },
+        caption: header,
+        contextInfo: getContextInfo(sender, newsletterJid, botName),
+    }, { quoted: mek });
 
-      const menuId = menuMsg.key.id;
+    const menuId = menuMsg?.key?.id;
+    if (!menuId) { await react("✅"); return; }
 
-      const handleMenuReply = async (event) => {
-          const msgData = event.messages[0];
-          if (!msgData?.message || msgData.key.remoteJid !== from) return;
-          const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === menuId;
-          if (!isReply) return;
+    // ── listener: number reply opens submenu ──
+    const handleReply = async (event) => {
+        const msgData = event?.messages?.[0];
+        if (!msgData?.message || msgData.key.remoteJid !== from) return;
 
-          const choice = (msgData.message.conversation || msgData.message.extendedTextMessage?.text || "").trim();
-          const idx = parseInt(choice, 10) - 1;
-          if (isNaN(idx) || idx < 0 || idx >= catNames.length) return;
+        const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === menuId;
+        if (!isReply) return;
 
-          const cat = catNames[idx];
-          const cmds = categorized[cat] || [];
-          const emoji = categoryEmojis[cat.toLowerCase()] || "📂";
-          const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+        const choice = (
+            msgData.message.conversation ||
+            msgData.message.extendedTextMessage?.text || ''
+        ).trim().toLowerCase();
 
-          const cmdList = cmds.map(cmd => `│  ✦ *${botPrefix}${cmd}*`).join("\n");
-          const catHeader = `╭━━━ ${emoji} *${label}* ━━━╮\n`;
-          const catFooter = `╰━━━━━━━━━━━━━━━━━━━━━━╯\n> *${botFooter}*`;
+        // home / back → resend main menu (just notify user to type .menu again)
+        if (choice === 'home' || choice === 'back' || choice === '0') {
+            await Prince.sendMessage(from, {
+                text: `🏠 Type *${botPrefix}menu* to return to the main menu.`,
+                contextInfo: getContextInfo(null, newsletterJid, botName),
+            }, { quoted: msgData });
+            return;
+        }
 
-          await Prince.sendMessage(from, {
-              text: `${catHeader}${cmdList}\n${catFooter}`,
-              contextInfo: getContextInfo(sender, newsletterJid, botName),
-          }, { quoted: msgData });
-      };
+        const idx = parseInt(choice, 10) - 1;
+        if (isNaN(idx) || idx < 0 || idx >= catNames.length) {
+            await Prince.sendMessage(from, {
+                text: `❌ Invalid choice. Reply with a number between *1* and *${catNames.length}*, or type *home* / *0* to go back.`,
+                contextInfo: getContextInfo(null, newsletterJid, botName),
+            }, { quoted: msgData });
+            return;
+        }
 
-      Prince.ev.on("messages.upsert", handleMenuReply);
-      setTimeout(() => Prince.ev.off("messages.upsert", handleMenuReply), 120000);
+        const cat   = catNames[idx];
+        const cmds  = categorized[cat] || [];
+        const emoji = categoryEmojis[cat] || '📂';
+        const label = categoryDisplayMap[cat] || cat.toUpperCase();
 
-      await react("✅");
+        const cmdList = cmds.map(cmd => `┃➠ ${smallCaps(cmd)}`).join('\n');
+
+        const subMenu =
+            `╭━━━━❮ ${emoji} *${label}* ❯━⊷\n` +
+            `${cmdList}\n` +
+            `╰━━━━━━━━━━━━━━━━━⊷\n\n` +
+            `💬 Reply *0* or *home* for main menu\n` +
+            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖*`;
+
+        await Prince.sendMessage(from, {
+            text: subMenu,
+            contextInfo: getContextInfo(null, newsletterJid, botName),
+        }, { quoted: msgData });
+    };
+
+    Prince.ev.on('messages.upsert', handleReply);
+    // auto-remove listener after 5 minutes
+    setTimeout(() => {
+        try { Prince.ev.off('messages.upsert', handleReply); } catch (_) {}
+    }, 300000);
+
+    await react('✅');
 });
 
+
+// ─── .allmenu ─────────────────────────────────────────────────────────────────
 gmd({
   pattern: "allmenu",
   aliases: ['allcommands', 'fullmenu'],
@@ -158,31 +221,35 @@ gmd({
   category: "general",
   description: "Show all commands grouped by category",
 }, async (from, Prince, conText) => {
-      const { mek, sender, react, botPic, botName, botFooter, botPrefix, newsletterJid } = conText;
+    const { mek, sender, react, botPic, botName, botFooter, botPrefix, newsletterJid } = conText;
 
-      const categorized = buildCategorized();
-      const totalCommands = commands.filter(c => c.pattern).length;
+    const categorized  = buildCategorized();
+    const catNames     = sortedCategories(categorized);
+    const totalCmds    = commands.filter(c => c.pattern).length;
 
-      let fullMenu = `╭───❖ *𝗛𝗔𝗬𝗪𝗛𝗬-𝗠𝗗𝗫 — 𝗔𝗟𝗟 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦* ❖───╮\n│ Total: *${totalCommands} commands*\n╰──────────────────────────────────╯\n\n`;
+    let fullMenu = `╔═❖🔹 *𝗛𝗔𝗬𝗪𝗛𝗬-𝗠𝗗𝗫 — 𝗔𝗟𝗟 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦* 🔹❖═╗\n┃➠ ᴛᴏᴛᴀʟ ᴄᴍᴅs : ${totalCmds}\n╚══════════════════════════════╝\n\n`;
 
-      for (const [cat, cmds] of Object.entries(categorized)) {
-          const emoji = categoryEmojis[cat.toLowerCase()] || "📂";
-          const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-          const cmdList = cmds.map(cmd => `┃  ✦ *${botPrefix}${cmd}*`).join("\n");
-          fullMenu += `╭━━━✦ ${emoji} *${label}* ✦━━━╮\n${cmdList}\n╰━━━━━━━━━━━━━━━━━━━━━━━╯\n\n`;
-      }
+    for (const cat of catNames) {
+        const cmds  = categorized[cat] || [];
+        const emoji = categoryEmojis[cat] || '📂';
+        const label = categoryDisplayMap[cat] || cat.toUpperCase();
+        const list  = cmds.map(cmd => `┃➠ ${smallCaps(cmd)}`).join('\n');
+        fullMenu += `╭━━━━❮ ${emoji} *${label}* ❯━⊷\n${list}\n╰━━━━━━━━━━━━━━━━━⊷\n\n`;
+    }
 
-      fullMenu += `> *${botFooter}*`;
+    fullMenu += `🌐 https://wa.me/2349122761580\n> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖*`;
 
-      await Prince.sendMessage(from, {
-          image: { url: botPic },
-          caption: fullMenu,
-          contextInfo: getContextInfo(sender, newsletterJid, botName),
-      }, { quoted: mek });
+    await Prince.sendMessage(from, {
+        image: { url: botPic },
+        caption: fullMenu,
+        contextInfo: getContextInfo(sender, newsletterJid, botName),
+    }, { quoted: mek });
 
-      await react("✅");
+    await react('✅');
 });
 
+
+// ─── .return (dev raw message dump) ──────────────────────────────────────────
 gmd({
   pattern: "return",
   aliases: ['details', 'det', 'ret'],
@@ -192,31 +259,19 @@ gmd({
 }, async (from, Prince, conText) => {
   const { mek, reply, react, quotedMsg, isDevs, botName, newsletterJid } = conText;
   
-  if (!isDevs) {
-    return reply(`Developer Only Command!`);
-  }
-  
-  if (!quotedMsg) {
-    return reply(`Please reply to/quote a message`);
-  }
+  if (!isDevs) return reply(`Developer Only Command!`);
+  if (!quotedMsg) return reply(`Please reply to/quote a message`);
 
   try {
     const jsonString = JSON.stringify(quotedMsg, null, 2);
     const chunks = jsonString.match(/[\s\S]{1,100000}/g) || [];
-
     for (const chunk of chunks) {
-      const formattedMessage = `\`\`\`\n${chunk}\n\`\`\``;
-
-      await Prince.sendMessage(
-        from,
-        {
-          text: formattedMessage,
-          contextInfo: getContextInfo(null, newsletterJid, botName),
-        },
-        { quoted: mek }
-      );
-      await react("✅");
+      await Prince.sendMessage(from, {
+        text: `\`\`\`\n${chunk}\n\`\`\``,
+        contextInfo: getContextInfo(null, newsletterJid, botName),
+      }, { quoted: mek });
     }
+    await react("✅");
   } catch (error) {
     console.error("Error processing quoted message:", error);
     await reply(`❌ An error occurred while processing the message.`);
@@ -224,148 +279,104 @@ gmd({
 });
 
 
+// ─── .ping ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "ping",
   react: "⚡",
   category: "general",
   description: "Check bot response speed",
 }, async (from, Prince, conText) => {
-      const { mek, react, newsletterJid, botName } = conText;
+    const { mek, react, newsletterJid, botName } = conText;
     const startTime = process.hrtime();
-
     await new Promise(resolve => setTimeout(resolve, Math.floor(80 + Math.random() * 420)));
-    
     const elapsed = process.hrtime(startTime);
     const responseTime = Math.floor((elapsed[0] * 1000) + (elapsed[1] / 1000000));
-
     await Prince.sendMessage(from, {
       text: `⚡ Pong: ${responseTime}ms`,
       contextInfo: getContextInfo(null, newsletterJid, botName)
     }, { quoted: mek });
-      await react("✅");
-  }
-);
+    await react("✅");
+});
 
 
-
-
-
-
-
+// ─── .uptime ──────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "uptime", 
   react: "⏳",
   category: "general",
-  description: "check bot uptime status.",
+  description: "Check bot uptime.",
 }, async (from, Prince, conText) => {
-      const { mek, react, newsletterJid, botName } = conText;
-      
-    const uptimeMs = Date.now() - BOT_START_TIME;
-    
-    const seconds = Math.floor((uptimeMs / 1000) % 60);
-    const minutes = Math.floor((uptimeMs / (1000 * 60)) % 60);
-    const hours = Math.floor((uptimeMs / (1000 * 60 * 60)) % 24);
-    const days = Math.floor(uptimeMs / (1000 * 60 * 60 * 24));
-
+    const { mek, react, newsletterJid, botName } = conText;
     await Prince.sendMessage(from, {
-      text: `⏱️ Uptime: ${days}d ${hours}h ${minutes}m ${seconds}s`,
+      text: `⏱️ Uptime: ${formatUptime(Math.floor(process.uptime()))}`,
       contextInfo: getContextInfo(null, newsletterJid, botName)
     }, { quoted: mek });
-      await react("✅");
-  }
-);
+    await react("✅");
+});
 
+
+// ─── .repo ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "repo", 
   aliases: ['sc', 'script'],
   react: "💜",
   category: "general",
-  description: "Fetch bot script.",
+  description: "Fetch bot GitHub repo info.",
 }, async (from, Prince, conText) => {
-      const { mek, sender, react, pushName, botPic, botName, ownerName, newsletterJid, princeRepo } = conText;
-
+    const { mek, sender, react, pushName, botPic, botName, ownerName, newsletterJid, princeRepo } = conText;
     const response = await axios.get(`https://api.github.com/repos/${princeRepo}`);
-    const repoData = response.data;
-    const { full_name, name, forks_count, stargazers_count, created_at, updated_at, owner } = repoData;
-    const messageText = `Hello *_${pushName}_,*\nThis is *${botName},* A Whatsapp Bot Built by *${ownerName},* Enhanced with Amazing Features to Make Your Whatsapp Communication and Interaction Experience Amazing\n\n*ʀᴇᴘᴏ ʟɪɴᴋ:* https://github.com/${princeRepo}\n\n*❲❒❳ ɴᴀᴍᴇ:* ${name}\n*❲❒❳ sᴛᴀʀs:* ${stargazers_count}\n*❲❒❳ ғᴏʀᴋs:* ${forks_count}\n*❲❒❳ ᴄʀᴇᴀᴛᴇᴅ ᴏɴ:* ${new Date(created_at).toLocaleDateString()}\n*❲❒❳ ʟᴀsᴛ ᴜᴘᴅᴀᴛᴇᴅ:* ${new Date(updated_at).toLocaleDateString()}`;
-
-    const princeMess = {
+    const { full_name, name, forks_count, stargazers_count, created_at, updated_at } = response.data;
+    const messageText =
+        `Hello *_${pushName}_,*\n` +
+        `This is *${botName}*, a WhatsApp bot by *${ownerName}*\n\n` +
+        `*ʀᴇᴘᴏ:* https://github.com/${princeRepo}\n` +
+        `*❲❒❳ ɴᴀᴍᴇ:* ${name}\n` +
+        `*❲❒❳ sᴛᴀʀs:* ${stargazers_count}\n` +
+        `*❲❒❳ ғᴏʀᴋs:* ${forks_count}\n` +
+        `*❲❒❳ ᴄʀᴇᴀᴛᴇᴅ:* ${new Date(created_at).toLocaleDateString()}\n` +
+        `*❲❒❳ ᴜᴘᴅᴀᴛᴇᴅ:* ${new Date(updated_at).toLocaleDateString()}`;
+    await Prince.sendMessage(from, {
         image: { url: botPic },
         caption: messageText,
         contextInfo: getContextInfo(sender, newsletterJid, botName)
-      };
-      await Prince.sendMessage(from, princeMess, { quoted: mek });
-      await react("✅");
-  }
-);
+    }, { quoted: mek });
+    await react("✅");
+});
 
 
+// ─── .save ────────────────────────────────────────────────────────────────────
 gmd({
   pattern: "save",
-  aliases: ['sv', 's', 'sav', '.'],
+  aliases: ['sv', 's', 'sav'],
   react: "⚡",
   category: "tools",
-  description: "Save messages (supports images, videos, audio, stickers, and text).",
+  description: "Save messages (images, videos, audio, stickers, text).",
 }, async (from, Prince, conText) => {
   const { mek, reply, react, sender, isSuperUser, getMediaBuffer } = conText;
-  
-  if (!isSuperUser) {
-    return reply(`❌ Owner Only Command!`);
-  }
+  if (!isSuperUser) return reply(`❌ Owner Only Command!`);
 
   const quotedMsg = mek.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  
-  if (!quotedMsg) {
-    return reply(`⚠️ Please reply to/quote a message.`);
-  }
+  if (!quotedMsg) return reply(`⚠️ Please reply to a message.`);
 
   try {
     let mediaData;
-    
     if (quotedMsg.imageMessage) {
-      const buffer = await getMediaBuffer(quotedMsg.imageMessage, "image");
-      mediaData = {
-        image: buffer,
-        caption: quotedMsg.imageMessage.caption || ""
-      };
-    } 
-    else if (quotedMsg.videoMessage) {
-      const buffer = await getMediaBuffer(quotedMsg.videoMessage, "video");
-      mediaData = {
-        video: buffer,
-        caption: quotedMsg.videoMessage.caption || ""
-      };
-    } 
-    else if (quotedMsg.audioMessage) {
-      const buffer = await getMediaBuffer(quotedMsg.audioMessage, "audio");
-      mediaData = {
-        audio: buffer,
-        mimetype: "audio/mp4"
-      };
-    } 
-    else if (quotedMsg.stickerMessage) {
-      const buffer = await getMediaBuffer(quotedMsg.stickerMessage, "sticker");
-      mediaData = {
-        sticker: buffer
-      };
-    } 
-    else if (quotedMsg.conversation || quotedMsg.extendedTextMessage?.text) {
-      const text = quotedMsg.conversation || quotedMsg.extendedTextMessage.text;
-      mediaData = {
-        text: text
-      };
-    } 
-    else {
+      mediaData = { image: await getMediaBuffer(quotedMsg.imageMessage, "image"), caption: quotedMsg.imageMessage.caption || "" };
+    } else if (quotedMsg.videoMessage) {
+      mediaData = { video: await getMediaBuffer(quotedMsg.videoMessage, "video"), caption: quotedMsg.videoMessage.caption || "" };
+    } else if (quotedMsg.audioMessage) {
+      mediaData = { audio: await getMediaBuffer(quotedMsg.audioMessage, "audio"), mimetype: "audio/mp4" };
+    } else if (quotedMsg.stickerMessage) {
+      mediaData = { sticker: await getMediaBuffer(quotedMsg.stickerMessage, "sticker") };
+    } else if (quotedMsg.conversation || quotedMsg.extendedTextMessage?.text) {
+      mediaData = { text: quotedMsg.conversation || quotedMsg.extendedTextMessage.text };
+    } else {
       return reply(`❌ Unsupported message type.`);
     }
-
     await Prince.sendMessage(sender, mediaData, { quoted: mek });
-    // await reply(`✅ Saved Successfully!`);
     await react("✅");
-
   } catch (error) {
     console.error("Save Error:", error);
-    await reply(`❌ Failed to save the message. Error: ${error.message}`);
+    await reply(`❌ Failed to save: ${error.message}`);
   }
 });
-
