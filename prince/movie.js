@@ -1,4 +1,4 @@
-const { gmd, getContextInfo } = require("../mayel");
+const { gmd, getChannelContext: getContextInfo } = require("../mayel");
 const axios = require("axios");
 
 const MAX_MEDIA_SIZE = 60 * 1024 * 1024;

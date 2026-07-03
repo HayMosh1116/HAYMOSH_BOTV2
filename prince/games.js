@@ -611,7 +611,7 @@ gmd(
     description: "Word Chain — group multiplayer with join phase, or 1v1 vs bot in DM.",
   },
   async (from, Prince, conText) => {
-    const { reply, mek, sender, botName, newsletterJid } = conText;
+    const { reply, mek, sender } = conText;
     const isGroup = from.endsWith("@g.us");
 
     if (games.has(from)) {
@@ -620,7 +620,8 @@ gmd(
 
     const JOIN_SEC = 30;
     const TURN_SEC = 30;
-    const MIN_LEN = 3;
+    const MIN_LEN  = 3;
+    const MAX_SKIPS = 3; // skips before a player is eliminated
 
     const STARTERS = [
       "apple","brave","eagle","ocean","tiger","river","earth","storm",
@@ -630,33 +631,41 @@ gmd(
     const starterWord = STARTERS[Math.floor(Math.random() * STARTERS.length)];
 
     const state = {
-      type: "wordchain",
-      phase: isGroup ? "joining" : "playing",
-      joinHandler: null,
-      handler: null,
-      joinTimeout: null,
-      timeout: null,
-      turnTimeout: null,
-      players: new Set(),
-      scores: {},
-      lastWord: starterWord,
-      lastLetter: starterWord[starterWord.length - 1].toUpperCase(),
-      usedWords: new Set([starterWord]),
+      type:          "wordchain",
+      phase:         isGroup ? "joining" : "playing",
+      joinHandler:   null,
+      handler:       null,
+      joinTimeout:   null,
+      timeout:       null,
+      turnTimeout:   null,
+      players:       new Set(),
+      playerOrder:   [],          // fixed turn order
+      currentTurnIdx: 0,          // who is up right now
+      skipCounts:    {},          // consecutive skips per player
+      scores:        {},
+      lastWord:      starterWord,
+      lastLetter:    starterWord[starterWord.length - 1].toUpperCase(),
+      usedWords:     new Set([starterWord]),
+      wordCount:     1,
     };
 
     games.set(from, state);
 
     const mention = (jid) => `@${jid.split("@")[0]}`;
-
     const sendMsg = (text, mentions = []) =>
       Prince.sendMessage(from, { text, mentions });
 
+    const medals = ["🥇","🥈","🥉"];
+
     const buildBoard = () => {
-      const entries = Object.entries(state.scores).sort((a, b) => b[1] - a[1]);
-      if (!entries.length) return "_No scores yet_";
-      return entries.map(([jid, pts], i) =>
-        `${i + 1}. ${mention(jid)} — *${pts} pts*`
-      ).join("\n");
+      const entries = Object.entries(state.scores)
+        .sort((a, b) => b[1] - a[1]);
+      if (!entries.length) return "│ _No scores yet_";
+      return entries.map(([jid, pts], i) => {
+        const m = medals[i] || `${i + 1}.`;
+        const name = jid === "bot" ? "🤖 Bot" : mention(jid);
+        return `│ ${m} ${name} → *${pts} pts*`;
+      }).join("\n");
     };
 
     const botPickWord = (letter) => {
@@ -665,38 +674,108 @@ gmd(
       return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
     };
 
-    const startTurnTimer = (lastPlayerJid) => {
+    // ── Announce whose turn it is ──────────────────────────────────────────
+    const announceTurn = async () => {
+      if (!games.has(from)) return;
+      const playerJid = state.playerOrder[state.currentTurnIdx];
+      await sendMsg(
+        `🎮 ${mention(playerJid)}, it's your turn!\n` +
+        `Last word: *${state.lastWord.toUpperCase()}*\n` +
+        `Your word must start with: *${state.lastLetter}*\n` +
+        `⏱️ ${TURN_SEC} seconds`,
+        [playerJid]
+      );
+      startTurnTimer(playerJid);
+    };
+
+    // ── Turn timer — skip player, don't end game ────────────────────────────
+    const startTurnTimer = (currentPlayerJid) => {
       if (state.turnTimeout) clearTimeout(state.turnTimeout);
       state.turnTimeout = setTimeout(async () => {
         if (!games.has(from)) return;
-        const mentions = lastPlayerJid ? [lastPlayerJid] : [];
-        const who = lastPlayerJid ? mention(lastPlayerJid) : "Someone";
-        endGame(Prince, from);
-        await sendMsg(
-          `⏰ *𝗧𝗶𝗺𝗲 𝗼𝘂𝘁!*\n\n` +
-          `${who} took too long! ⌛\n\n` +
-          `🏆 *𝗙𝗶𝗻𝗮𝗹 𝗦𝗰𝗼𝗿𝗲𝘀:*\n${buildBoard()}\n\n` +
-          `🛑 Game over!`,
-          mentions
-        );
+
+        // Track skip
+        state.skipCounts[currentPlayerJid] =
+          (state.skipCounts[currentPlayerJid] || 0) + 1;
+        const skips = state.skipCounts[currentPlayerJid];
+
+        if (skips >= MAX_SKIPS) {
+          // Eliminate this player
+          state.playerOrder = state.playerOrder.filter(j => j !== currentPlayerJid);
+          if (state.currentTurnIdx >= state.playerOrder.length) {
+            state.currentTurnIdx = 0;
+          }
+          await sendMsg(
+            `╭━━━━━━━━━━━━━━━╮\n` +
+            `│ 🚫 *ELIMINATED!*\n` +
+            `├━━━━━━━━━━━━━━━┤\n` +
+            `│ ${mention(currentPlayerJid)} missed ${MAX_SKIPS} turns!\n` +
+            `│ They've been removed from the game.\n` +
+            `├━━━━━━━━━━━━━━━┤\n` +
+            `${buildBoard()}\n` +
+            `╰━━━━━━━━━━━━━━━╯`,
+            [currentPlayerJid]
+          );
+        } else {
+          // Just skip — advance to next
+          state.currentTurnIdx =
+            (state.currentTurnIdx + 1) % state.playerOrder.length;
+          await sendMsg(
+            `╭━━━━━━━━━━━━━━━╮\n` +
+            `│ ⏰ *TIME UP!*\n` +
+            `├━━━━━━━━━━━━━━━┤\n` +
+            `│ ${mention(currentPlayerJid)} ran out of time!\n` +
+            `│ *(Skip ${skips}/${MAX_SKIPS} — eliminated at ${MAX_SKIPS})*\n` +
+            `├━━━━━━━━━━━━━━━┤\n` +
+            `${buildBoard()}\n` +
+            `╰━━━━━━━━━━━━━━━╯`,
+            [currentPlayerJid]
+          );
+        }
+
+        // If 1 player left, declare winner
+        if (state.playerOrder.length <= 1) {
+          const winner = state.playerOrder[0];
+          endGame(Prince, from);
+          return sendMsg(
+            `╭━━━━━━━━━━━━━━━╮\n` +
+            `│ 🏆 *GAME OVER — WINNER!*\n` +
+            `├━━━━━━━━━━━━━━━┤\n` +
+            `│ 🎉 ${winner ? mention(winner) : "Nobody"} wins!\n` +
+            `├━━━━━━━━━━━━━━━┤\n` +
+            `│ 📊 *FINAL SCORES:*\n` +
+            `${buildBoard()}\n` +
+            `│\n` +
+            `│ 📝 Total chain: ${state.wordCount} words\n` +
+            `╰━━━━━━━━━━━━━━━╯`,
+            winner ? [winner] : []
+          );
+        }
+
+        await announceTurn();
       }, TURN_SEC * 1000);
     };
 
+    // ── Play handler ────────────────────────────────────────────────────────
     const buildPlayHandler = () => async ({ messages }) => {
       try {
         const m = messages[0];
-        // Do NOT filter by m.key.fromMe — some prince-baileys forks incorrectly
-        // mark user messages as fromMe. The alpha-only check below already blocks bot replies.
         if (!m?.message || m.key.remoteJid !== from) return;
         const txt = getText(m).toLowerCase().trim();
         if (!txt || txt.startsWith(".")) return;
         if (!/^[a-z]+$/.test(txt)) return;
 
         const playerJid = senderOf(m, from);
-
         if (state.phase !== "playing") return;
         if (isGroup && !state.players.has(playerJid)) return;
 
+        // ── STRICT TURN CHECK (group only) ──────────────────────────────
+        if (isGroup) {
+          const currentPlayer = state.playerOrder[state.currentTurnIdx];
+          if (playerJid !== currentPlayer) return; // silent ignore — not your turn
+        }
+
+        // ── Validation ───────────────────────────────────────────────────
         if (txt.length < MIN_LEN) {
           return sendMsg(
             `⚠️ ${mention(playerJid)} — words must be at least *${MIN_LEN} letters*! Try again.`,
@@ -711,26 +790,33 @@ gmd(
         }
         if (state.usedWords.has(txt)) {
           return sendMsg(
-            `🔁 ${mention(playerJid)} — *"${txt.toUpperCase()}"* was already used! Pick another word.`,
+            `🔁 ${mention(playerJid)} — *"${txt.toUpperCase()}"* was already used! Try another.`,
             [playerJid]
           );
         }
 
+        // ── Valid word ───────────────────────────────────────────────────
         const pts = txt.length;
         state.usedWords.add(txt);
-        state.lastWord = txt;
-        state.lastLetter = txt[txt.length - 1].toUpperCase();
-        state.scores[playerJid] = (state.scores[playerJid] || 0) + pts;
-        startTurnTimer(playerJid);
+        state.lastWord     = txt;
+        state.lastLetter   = txt[txt.length - 1].toUpperCase();
+        state.scores[playerJid]    = (state.scores[playerJid] || 0) + pts;
+        state.skipCounts[playerJid] = 0; // reset consecutive skips
+        state.wordCount++;
 
         await sendMsg(
           `✅ *${txt.toUpperCase()}* by ${mention(playerJid)}! (+${pts} pts)\n` +
-          `📊 Score: *${state.scores[playerJid]} pts*\n\n` +
-          `🔗 Next word starts with: *"${state.lastLetter}"*`,
+          `📊 Score: *${state.scores[playerJid]} pts*`,
           [playerJid]
         );
 
-        if (!isGroup) {
+        if (isGroup) {
+          // Advance to next player in fixed order
+          state.currentTurnIdx =
+            (state.currentTurnIdx + 1) % state.playerOrder.length;
+          await announceTurn();
+        } else {
+          // DM: bot plays next
           await new Promise(r => setTimeout(r, 1200));
           if (!games.has(from)) return;
           const botWord = botPickWord(state.lastLetter);
@@ -738,85 +824,99 @@ gmd(
             endGame(Prince, from);
             return sendMsg(
               `🤖 *Bot can't find a word starting with "${state.lastLetter}"!*\n\n` +
-              `🎉 *You win!*\n🏆 Your score: *${state.scores[playerJid] || 0} pts*`
+              `🎉 *You win!* 🏆 Your score: *${state.scores[playerJid] || 0} pts*\n` +
+              `📝 Chain length: *${state.wordCount} words*`
             );
           }
           const botPts = botWord.length;
           state.usedWords.add(botWord);
-          state.lastWord = botWord;
+          state.lastWord   = botWord;
           state.lastLetter = botWord[botWord.length - 1].toUpperCase();
           state.scores["bot"] = (state.scores["bot"] || 0) + botPts;
-          startTurnTimer(playerJid);
+          state.wordCount++;
           await sendMsg(
             `🤖 *Bot:* *${botWord.toUpperCase()}* (+${botPts} pts)\n\n` +
-            `🔗 Your turn! Word must start with: *"${state.lastLetter}"*`
+            `🎮 Your turn! Word must start with: *"${state.lastLetter}"* ⏱️ ${TURN_SEC}s`
           );
+          startTurnTimer(playerJid);
         }
       } catch (e) {
         console.error("WordChain play error:", e);
       }
     };
 
+    // ── Global inactivity timeout (10 min) ─────────────────────────────────
     state.timeout = setTimeout(() => {
-      if (games.has(from)) {
-        endGame(Prince, from);
-        sendMsg(
-          `⌛ *𝗪𝗼𝗿𝗱 𝗖𝗵𝗮𝗶𝗻* timed out — no activity for 10 minutes.\n\n` +
-          `🏆 *𝗙𝗶𝗻𝗮𝗹 𝗦𝗰𝗼𝗿𝗲𝘀:*\n${buildBoard()}`
-        );
-      }
+      if (!games.has(from)) return;
+      endGame(Prince, from);
+      sendMsg(
+        `╭━━━━━━━━━━━━━━━╮\n` +
+        `│ ⌛ *GAME TIMED OUT*\n` +
+        `├━━━━━━━━━━━━━━━┤\n` +
+        `│ No activity for 10 minutes.\n` +
+        `├━━━━━━━━━━━━━━━┤\n` +
+        `│ 📊 *FINAL SCORES:*\n` +
+        `${buildBoard()}\n` +
+        `│ 📝 Chain: ${state.wordCount} words\n` +
+        `╰━━━━━━━━━━━━━━━╯`
+      );
     }, 10 * 60 * 1000);
 
+    // ════════════════════════════════════════════════════════════════════════
+    // DM MODE — 1v1 vs Bot
+    // ════════════════════════════════════════════════════════════════════════
     if (!isGroup) {
       state.handler = buildPlayHandler();
       Prince.ev.on("messages.upsert", state.handler);
       startTurnTimer(sender);
-      await sendMsg(
+      return sendMsg(
         `╭━━━━━━━━━━━━━━━╮\n` +
-        `│ 🔗 *𝗪𝗢𝗥𝗗 𝗖𝗛𝗔𝗜𝗡* — 𝘃𝘀 𝗕𝗼𝘁\n` +
+        `│ 🔗 *WORD CHAIN* — vs Bot\n` +
         `├━━━━━━━━━━━━━━━┤\n` +
         `│ 🤖 Bot starts: *${starterWord.toUpperCase()}*\n` +
         `│\n` +
-        `│ 📜 *𝗥𝗨𝗟𝗘𝗦:*\n` +
-        `│ • Reply with a word starting\n` +
-        `│   with the last letter of the\n` +
+        `│ 📜 *RULES:*\n` +
+        `│ • Say a word starting with\n` +
+        `│   the last letter of the\n` +
         `│   previous word\n` +
-        `│ • Min *${MIN_LEN}* letters per word\n` +
         `│ • No repeated words\n` +
-        `│ • ${TURN_SEC}s per turn or bot wins\n` +
+        `│ • Must be real English words\n` +
+        `│ • ${TURN_SEC} seconds per turn\n` +
         `│ • Score = word length\n` +
         `│\n` +
-        `│ ➤ Next letter: *"${state.lastLetter}"*\n` +
+        `│ ➤ Your word must start with: *"${state.lastLetter}"*\n` +
         `│ *.endgame* to quit\n` +
         `╰━━━━━━━━━━━━━━━╯`
       );
-      return;
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // GROUP MODE — Lobby + Turn-based
+    // ════════════════════════════════════════════════════════════════════════
     state.players.add(sender);
 
     await sendMsg(
       `╭━━━━━━━━━━━━━━━╮\n` +
-      `│ 🔗 *𝗪𝗢𝗥𝗗 𝗖𝗛𝗔𝗜𝗡*\n` +
+      `│ 🔗 *WORD CHAIN*\n` +
       `├━━━━━━━━━━━━━━━┤\n` +
       `│ ${mention(sender)} started a game!\n` +
       `│\n` +
-      `│ 📜 *𝗥𝗨𝗟𝗘𝗦:*\n` +
+      `│ 📜 *RULES:*\n` +
       `│ • Say a word starting with\n` +
       `│   the last letter of the\n` +
       `│   previous word\n` +
-      `│ • Min *${MIN_LEN}* letters per word\n` +
       `│ • No repeated words\n` +
       `│ • Must be real English words\n` +
-      `│ • ${TURN_SEC} seconds per turn\n` +
+      `│ • 30 seconds per turn\n` +
       `│ • Score = word length\n` +
       `│\n` +
-      `│ ⏱️ *${JOIN_SEC} seconds to join*\n` +
+      `│ ⏱️ ${JOIN_SEC} seconds to join\n` +
       `│ 👥 Type *join* to play!\n` +
       `╰━━━━━━━━━━━━━━━╯`,
       [sender]
     );
 
+    // ── Join phase ─────────────────────────────────────────────────────────
     state.joinHandler = async ({ messages }) => {
       const m = messages[0];
       if (!m?.message || m.key.remoteJid !== from || m.key.fromMe) return;
@@ -837,35 +937,47 @@ gmd(
       Prince.ev.off("messages.upsert", state.joinHandler);
       state.joinHandler = null;
 
-      if (state.players.size === 0) {
+      if (state.players.size < 1) {
         endGame(Prince, from);
         return sendMsg("❌ No one joined. Game cancelled.");
       }
 
       state.phase = "playing";
-      const playerMentions = [...state.players];
-      const playerList = playerMentions.map(j => `│ • ${mention(j)}`).join("\n");
+
+      // Shuffle player order
+      state.playerOrder = [...state.players].sort(() => Math.random() - 0.5);
+      state.currentTurnIdx = 0;
+
+      const playerMentions = state.playerOrder;
+      const playerList = playerMentions.map((j, i) => `│ ${i + 1}. ${mention(j)}`).join("\n");
 
       await sendMsg(
         `╭━━━━━━━━━━━━━━━╮\n` +
-        `│ 🔗 *𝗪𝗢𝗥𝗗 𝗖𝗛𝗔𝗜𝗡 — 𝗦𝗧𝗔𝗥𝗧𝗘𝗗!*\n` +
+        `│ 🔗 *WORD CHAIN STARTS!*\n` +
         `├━━━━━━━━━━━━━━━┤\n` +
         `│ 👥 *Players:*\n` +
         `${playerList}\n` +
-        `│\n` +
-        `│ 🤖 Bot starts with:\n` +
-        `│ ➤ *${starterWord.toUpperCase()}*\n` +
-        `│\n` +
-        `│ Next word starts with: *"${state.lastLetter}"*\n` +
-        `│ Min *${MIN_LEN}* letters • Score = word length\n` +
-        `│ *.endgame* to stop\n` +
+        `├━━━━━━━━━━━━━━━┤\n` +
+        `│ 🎮 ${mention(playerMentions[0])} goes first!\n` +
+        `│ 🔤 Start with ANY word\n` +
+        `│    (then chain from its last letter)\n` +
+        `│ ⏱️ ${TURN_SEC} seconds\n` +
         `╰━━━━━━━━━━━━━━━╯`,
         playerMentions
       );
 
       state.handler = buildPlayHandler();
       Prince.ev.on("messages.upsert", state.handler);
-      startTurnTimer(null);
+
+      // First turn: bot throws a starter word so first player has a letter
+      await new Promise(r => setTimeout(r, 800));
+      await sendMsg(
+        `🤖 *Bot starts with:* *${starterWord.toUpperCase()}*\n` +
+        `🔗 ${mention(playerMentions[0])}, your word must start with: *"${state.lastLetter}"* ⏱️ ${TURN_SEC}s`,
+        [playerMentions[0]]
+      );
+      startTurnTimer(playerMentions[0]);
+
     }, JOIN_SEC * 1000);
   }
 );

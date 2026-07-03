@@ -46,7 +46,11 @@ const createContext2 = (userJid, options = {}) => ({
 });
 
 
-const getContextInfo = () => ({
+// Minimal context — no channel link (used everywhere except downloaders)
+const getContextInfo = () => ({});
+
+// Channel context — shows newsletter/channel link (downloaders only)
+const getChannelContext = () => ({
     forwardingScore: 1,
     isForwarded: true,
     forwardedNewsletterMessageInfo: {
@@ -59,5 +63,6 @@ const getContextInfo = () => ({
 module.exports = {
     createContext,
     createContext2,
-    getContextInfo
+    getContextInfo,
+    getChannelContext,
 };

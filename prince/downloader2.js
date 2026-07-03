@@ -1,4 +1,4 @@
-const { gmd, getContextInfo } = require("../mayel");
+const { gmd, getChannelContext: getContextInfo } = require("../mayel");
 const axios = require("axios");
 const GIFTED_DLS = require("gifted-dls");
 const giftedDls = new GIFTED_DLS();
