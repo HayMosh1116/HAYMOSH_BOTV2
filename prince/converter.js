@@ -1,4 +1,5 @@
 const { gmd, toAudio, toVideo, toPtt, stickerToImage, gmdFancy, gmdRandom, getContextInfo } = require("../mayel");
+const { downloadMediaMessage } = require("prince-baileys");
 const acrcloud = require("acrcloud");
 const { exec } = require("child_process");
 const fs = require("fs").promises;
@@ -154,33 +155,26 @@ gmd({
 
         await react("⏳");
 
+        // Build a proper message wrapper for downloadMediaMessage
+        const stickerWrapper = quotedMsg?.message?.stickerMessage
+            ? quotedMsg
+            : {
+                key: quotedMsg?.key || mek.key,
+                message: { stickerMessage: quotedSticker },
+            };
+
         let stickerBuffer = null;
-        let tempFilePath = null;
 
-        // Attempt 1: download using the inner stickerMessage object
+        // Primary: downloadMediaMessage from prince-baileys (same method used for view-once)
         try {
-            tempFilePath = await Prince.downloadAndSaveMediaMessage(quotedSticker, `temp_sticker_${Date.now()}`);
-            stickerBuffer = await fs.readFile(tempFilePath);
-        } catch (_) {
+            stickerBuffer = await downloadMediaMessage(
+                stickerWrapper,
+                "buffer",
+                {},
+                { logger: { warn: console.warn, error: console.error, debug: () => {}, info: () => {}, trace: () => {} }, reuploadRequest: Prince.updateMediaMessage }
+            );
+        } catch (dlErr) {
             stickerBuffer = null;
-        } finally {
-            if (tempFilePath) await fs.unlink(tempFilePath).catch(() => {});
-            tempFilePath = null;
-        }
-
-        // Attempt 2: download using the full quoted message wrapper
-        if (!stickerBuffer) {
-            try {
-                const wrapper = quotedMsg?.message?.stickerMessage
-                    ? quotedMsg
-                    : { message: { stickerMessage: quotedSticker }, key: quotedMsg?.key || {} };
-                tempFilePath = await Prince.downloadAndSaveMediaMessage(wrapper, `temp_sticker2_${Date.now()}`);
-                stickerBuffer = await fs.readFile(tempFilePath);
-            } catch (_) {
-                stickerBuffer = null;
-            } finally {
-                if (tempFilePath) await fs.unlink(tempFilePath).catch(() => {});
-            }
         }
 
         if (!stickerBuffer || !stickerBuffer.length) {

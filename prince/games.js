@@ -7,6 +7,21 @@
  */
 
 const { gmd, getContextInfo } = require("../mayel");
+const axios = require("axios");
+
+// Dictionary API validation — rejects gibberish words
+async function isRealWord(word) {
+  try {
+    const res = await axios.get(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      { timeout: 5000 }
+    );
+    return res.status === 200 && Array.isArray(res.data) && res.data.length > 0;
+  } catch (_) {
+    // If the API fails, accept the word (don't penalise for connectivity)
+    return true;
+  }
+}
 
 // One active game per chat: chatJid -> { type, handler, timeout, ... }
 const games = new Map();
@@ -791,6 +806,14 @@ gmd(
         if (state.usedWords.has(txt)) {
           return sendMsg(
             `🔁 ${mention(playerJid)} — *"${txt.toUpperCase()}"* was already used! Try another.`,
+            [playerJid]
+          );
+        }
+        // ── Real English word check ──────────────────────────────────────
+        const valid = await isRealWord(txt);
+        if (!valid) {
+          return sendMsg(
+            `❌ ${mention(playerJid)} — *"${txt.toUpperCase()}"* is not a valid English word! Try again.`,
             [playerJid]
           );
         }

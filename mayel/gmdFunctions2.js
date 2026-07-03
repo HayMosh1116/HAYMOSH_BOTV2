@@ -56,19 +56,34 @@ const PrinceAntiLink = async (Prince, message, antiLink) => {
 
         await Prince.sendMessage(from, { delete: message.key });
 
+        const pushName = message.pushName || message.key.pushName || sender.split('@')[0];
+        const tag = `@${sender.split('@')[0]}`;
+
         if (antiLink === 'kick') {
             await Prince.groupParticipantsUpdate(from, [sender], 'remove');
-            await Prince.sendMessage(from, { text: `⚠️ Anti-link active!\nUser @${sender.split('@')[0]} has been kicked.`, mentions: [sender] });
+            await Prince.sendMessage(from, {
+                text: `⚠️ *${tag}*\nYour message contained a prohibited link.\n*Reason:* Anti-Link Protection\n*Action:* Kicked from group`,
+                mentions: [sender]
+            });
         } else if (antiLink === 'delete') {
-            await Prince.sendMessage(from, { text: `⚠️ Links are not allowed here @${sender.split('@')[0]}!`, mentions: [sender] });
+            await Prince.sendMessage(from, {
+                text: `⚠️ *${tag}*\nYour message contained a prohibited link.\n*Reason:* Anti-Link Protection\n*Action:* Message deleted`,
+                mentions: [sender]
+            });
         } else if (antiLink === 'warn') {
             const warnings = await addWarning(from, sender, "Anti-Link");
             if (warnings >= 3) {
                 await Prince.groupParticipantsUpdate(from, [sender], 'remove');
-                await Prince.sendMessage(from, { text: `🚫 @${sender.split('@')[0]} kicked (3 warnings).`, mentions: [sender] });
+                await Prince.sendMessage(from, {
+                    text: `🚫 *${tag}*\nYour message contained a prohibited link.\n*Reason:* Anti-Link Protection\n*Action:* Kicked (3 warnings reached)`,
+                    mentions: [sender]
+                });
                 await resetWarnings(from, sender);
             } else {
-                await Prince.sendMessage(from, { text: `⚠️ Warning @${sender.split('@')[0]}! (${warnings}/3)`, mentions: [sender] });
+                await Prince.sendMessage(from, {
+                    text: `⚠️ *${tag}*\nYour message contained a prohibited link.\n*Reason:* Anti-Link Protection\n*+${warnings} Warning* (${warnings}/3)`,
+                    mentions: [sender]
+                });
             }
         }
     } catch (err) { console.error('Anti-link error:', err); }
@@ -87,19 +102,33 @@ const PrinceStatusMention = async (Prince, message, mode) => {
         
         await Prince.sendMessage(from, { delete: message.key });
 
+        const tag = `@${sender.split('@')[0]}`;
+
         if (mode === 'kick') {
             await Prince.groupParticipantsUpdate(from, [sender], 'remove');
-            await Prince.sendMessage(from, { text: `🚫 @${sender.split('@')[0]} kicked for tagging everyone.`, mentions: [sender] });
+            await Prince.sendMessage(from, {
+                text: `🚫 *${tag}*\nTagging everyone is not allowed here.\n*Reason:* Status Mention Protection\n*Action:* Kicked from group`,
+                mentions: [sender]
+            });
         } else if (mode === 'delete') {
-            await Prince.sendMessage(from, { text: `⚠️ Tagging everyone is not allowed @${sender.split('@')[0]}!`, mentions: [sender] });
+            await Prince.sendMessage(from, {
+                text: `⚠️ *${tag}*\nTagging everyone is not allowed here.\n*Reason:* Status Mention Protection\n*Action:* Message deleted`,
+                mentions: [sender]
+            });
         } else if (mode === 'warn') {
             const warnings = await addWarning(from, sender, "Status Mention");
             if (warnings >= 3) {
                 await Prince.groupParticipantsUpdate(from, [sender], 'remove');
-                await Prince.sendMessage(from, { text: `🚫 @${sender.split('@')[0]} kicked (3 warnings).`, mentions: [sender] });
+                await Prince.sendMessage(from, {
+                    text: `🚫 *${tag}*\nTagging everyone is not allowed here.\n*Reason:* Status Mention Protection\n*Action:* Kicked (3 warnings reached)`,
+                    mentions: [sender]
+                });
                 await resetWarnings(from, sender);
             } else {
-                await Prince.sendMessage(from, { text: `⚠️ Warning @${sender.split('@')[0]}! (${warnings}/3)`, mentions: [sender] });
+                await Prince.sendMessage(from, {
+                    text: `⚠️ *${tag}*\nTagging everyone is not allowed here.\n*Reason:* Status Mention Protection\n*+${warnings} Warning* (${warnings}/3)`,
+                    mentions: [sender]
+                });
             }
         }
     } catch (err) { console.error('Status mention error:', err); }
@@ -207,6 +236,7 @@ const PrinceViewOnce = (Prince) => {
     });
 
     // ── Step 2: Listen for reactions ────────────────────────────────────────
+    // When the BOT OWNER reacts to any cached view-once, fromMe === true.
     Prince.ev.on("messages.upsert", async ({ messages }) => {
         try {
             const ms = messages[0];
@@ -218,11 +248,13 @@ const PrinceViewOnce = (Prince) => {
             const emoji = reaction.text;
             if (!REACT_EMOJIS.has(emoji)) return;
 
-            // Owner-only check
+            // OWNER CHECK: when you react, Baileys sets fromMe = true.
+            // We also accept reactions where the sender phone matches owner.
+            const isFromMe = ms.key.fromMe === true;
             const rawSender = ms.key.participant || ms.key.remoteJid || "";
             const senderNum = rawSender.split("@")[0].replace(/[^0-9]/g, "");
             const ownerNum  = (config.OWNER_NUMBER || "").replace(/[^0-9]/g, "");
-            if (senderNum !== ownerNum) return;
+            if (!isFromMe && senderNum !== ownerNum) return;
 
             // Look up the reacted message in our cache
             const reactedKeyId = reaction.key?.id;
@@ -235,9 +267,10 @@ const PrinceViewOnce = (Prince) => {
             const isVideo = !!voMsg.videoMessage;
             if (!isImage && !isVideo) return;
 
-            const senderDM = senderNum + "@s.whatsapp.net";
+            // Always send to the bot owner's DM
+            const ownerDM = ownerNum + "@s.whatsapp.net";
 
-            // Acknowledge with eye emoji in the chat
+            // Acknowledge with eye emoji in the source chat
             try {
                 await Prince.sendMessage(from, { react: { key: ms.key, text: "👀" } });
             } catch (_) {}
@@ -264,13 +297,12 @@ const PrinceViewOnce = (Prince) => {
             const mediaLabel = isImage ? "Image" : "Video";
             const caption =
                 `🔓 *View Once ${mediaLabel} Revealed*\n` +
-                `_Auto-forwarded by ${config.BOT_NAME}_`;
+                `_Forwarded by ${config.BOT_NAME}_`;
 
-            // Send to owner's DM
             if (isImage) {
-                await Prince.sendMessage(senderDM, { image: buffer, caption });
+                await Prince.sendMessage(ownerDM, { image: buffer, caption });
             } else {
-                await Prince.sendMessage(senderDM, { video: buffer, caption });
+                await Prince.sendMessage(ownerDM, { video: buffer, caption });
             }
 
         } catch (err) {

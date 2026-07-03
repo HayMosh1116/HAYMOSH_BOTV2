@@ -253,10 +253,9 @@ gmd(
 
     const ownerJid = (conText.ownerNumber || "").replace(/\D/g, '');
     const botJidNum = (Prince.user?.id || "").split(":")[0];
-    const sudoNums = superUser.map(u => u.split("@")[0]);
-    if (sudoNums.includes(targetNum) || targetNum === ownerJid || targetNum === botJidNum) {
+    if (targetNum === ownerJid || targetNum === botJidNum) {
       await react("❌");
-      return reply("❌ I cannot demote a superuser!");
+      return reply("❌ I cannot demote the bot owner!");
     }
 
     if (participant.admin === "superadmin") {

@@ -428,11 +428,11 @@ async function startPrince() {
                 ) {
                     const princetech = jidNormalizedUser(Prince.user.id);
 
-                    if (autoReadStatus === "true") {
+                    if (getSetting("AUTO_READ_STATUS", autoReadStatus) === "true") {
                         await Prince.readMessages([mek.key, princetech]);
                     }
 
-                    if (autoLikeStatus === "true" && mek.key.participant) {
+                    if (getSetting("AUTO_LIKE_STATUS", autoLikeStatus) === "true" && mek.key.participant) {
                         const emojis =
                             statusLikeEmojis?.split(",") || "💛,❤️,💜,🤍,💙";
                         const randomEmoji =

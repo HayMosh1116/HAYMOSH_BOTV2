@@ -16,11 +16,22 @@ function makeMagnet(hash, title) {
   return `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(title)}${TRACKERS}`;
 }
 
+const YTS_MIRRORS = [
+  "https://yts.mx/api/v2/list_movies.json",
+  "https://yts.lt/api/v2/list_movies.json",
+  "https://yts.do/api/v2/list_movies.json",
+  "https://yts-proxy.fun/api/v2/list_movies.json",
+];
+
 async function searchYTS(query) {
-  const url = `https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=5&with_rt_ratings=true&sort_by=download_count`;
-  const res = await axios.get(url, { timeout: 15000 });
-  if (res.data?.status === "ok" && res.data?.data?.movie_count > 0) {
-    return res.data.data.movies || [];
+  const params = `query_term=${encodeURIComponent(query)}&limit=5&with_rt_ratings=true&sort_by=download_count`;
+  for (const mirror of YTS_MIRRORS) {
+    try {
+      const res = await axios.get(`${mirror}?${params}`, { timeout: 10000 });
+      if (res.data?.status === "ok" && res.data?.data?.movie_count > 0) {
+        return res.data.data.movies || [];
+      }
+    } catch (_) { continue; }
   }
   return [];
 }
