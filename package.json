@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/haymosh-bot",
+  "name": "prince-md",
   "version": "5.0.0",
   "description": "Prince-Md, a Multi Device Whatsapp Bot to Enhance Whatsapp Communication Experience",
   "main": "./index.js",
@@ -61,7 +61,8 @@
     "yt-search": "^2.13.1"
   },
   "overrides": {
-    "sharp": "^0.34.1"
+    "sharp": "^0.34.1",
+    "request>form-data": "^4.0.6"
   },
   "resolutions": {
     "sharp": "^0.34.1"
