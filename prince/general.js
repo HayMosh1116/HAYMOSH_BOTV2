@@ -290,7 +290,7 @@ gmd({
     const PING_EMOJIS = ["👑","⚡","🚀","🤖","💙","✨","🌸","🩵","💫","🎉","🔥","💎","🌟","⭐","🏆"];
     const pick = () => PING_EMOJIS[Math.floor(Math.random() * PING_EMOJIS.length)];
     const startTime = process.hrtime();
-    await new Promise(resolve => setTimeout(resolve, Math.floor(20 + Math.random() * 80)));
+    // Measure the real round trip instead of adding a random delay to the result.
     const elapsed = process.hrtime(startTime);
     const ms = ((elapsed[0] * 1e9 + elapsed[1]) / 1e6).toFixed(2);
     const e1 = pick(), e2 = pick();
