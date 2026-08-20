@@ -52,6 +52,7 @@ const {
     createContext,
     createContext2,
     getContextInfo,
+    PrinceStatusMention,
     verifyJidState,
     PrincePresence,
     PrinceAntiDelete,
@@ -116,6 +117,15 @@ logger.level = "silent";
 
 app.use(express.static("mayel"));
 app.get("/", (req, res) => res.sendFile(__dirname + "/mayel/prince.html"));
+app.get("/healthz", (req, res) => {
+    res.status(Prince ? 200 : 503).json({
+        ok: Boolean(Prince),
+        service: "haymosh-bot",
+        whatsapp: Prince ? "connected" : "disconnected",
+        uptime: Math.floor(process.uptime()),
+        version: botVersion,
+    });
+});
 app.listen(PORT, () => console.log(`Server Running on Port: ${PORT}`));
 
 const sessionDir = path.join(__dirname, "mayel", "session");
