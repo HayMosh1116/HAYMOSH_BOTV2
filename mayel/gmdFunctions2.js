@@ -157,9 +157,21 @@ const PrincePresence = async (Prince, jid) => {
 };
 
 const PrinceAnticall = async (json, Prince) => {
+    const mode = String(
+        getSetting("ANTICALL", config.ANTICALL || "false"),
+    ).toLowerCase();
+    if (mode === "false" || mode === "off" || mode === "0") return;
+
     for (const id of json) {
         if (id.status === 'offer') {
             await Prince.rejectCall(id.id, id.from);
+            if (mode === "block") {
+                try {
+                    await Prince.updateBlockStatus(id.from, "block");
+                } catch (error) {
+                    console.error("Anti-call block error:", error.message);
+                }
+            }
         }
     }
 };
