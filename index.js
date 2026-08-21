@@ -133,6 +133,7 @@ const sessionDir = path.join(__dirname, "mayel", "session");
 loadSession();
 
 let store;
+let autoBioInterval;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 50;
 const RECONNECT_DELAY = 5000;
@@ -211,21 +212,45 @@ async function startPrince() {
             }
         });
 
-        if (autoReact === "true") {
-            Prince.ev.on("messages.upsert", async (mek) => {
-                ms = mek.messages[0];
-                try {
-                    if (ms.key.fromMe) return;
-                    if (!ms.key.fromMe && ms.message) {
-                        const randomEmoji =
-                            emojis[Math.floor(Math.random() * emojis.length)];
-                        await PrinceAutoReact(randomEmoji, ms, Prince);
-                    }
-                } catch (err) {
-                    console.error("Error during auto reaction:", err);
-                }
-            });
-        }
+        // Keep the listener registered, but read the persisted mode for every
+        // message so .setautoreact off takes effect immediately and survives
+        // reconnects/restarts.
+        Prince.ev.on("messages.upsert", async (mek) => {
+            const ms = mek.messages[0];
+            try {
+                if (!ms?.key || ms.key.fromMe || !ms.message) return;
+                const mode = String(
+                    getSetting("AUTO_REACT", config.AUTO_REACT || "false"),
+                ).toLowerCase();
+                const isGroupMessage = ms.key.remoteJid?.endsWith("@g.us");
+                const messageType = getContentType(ms.message);
+                const messageText =
+                    messageType === "conversation"
+                        ? ms.message.conversation
+                        : ms.message[messageType]?.text ||
+                          ms.message[messageType]?.caption ||
+                          "";
+                const isCommandMessage =
+                    typeof messageText === "string" &&
+                    messageText.startsWith(
+                        getSetting("PREFIX", config.PREFIX || "."),
+                    );
+                const shouldReact =
+                    mode === "true" ||
+                    mode === "on" ||
+                    mode === "all" ||
+                    (mode === "dm" && !isGroupMessage) ||
+                    (mode === "groups" && isGroupMessage) ||
+                    (mode === "commands" && isCommandMessage);
+                if (!shouldReact || mode === "false" || mode === "off")
+                    return;
+                const randomEmoji =
+                    emojis[Math.floor(Math.random() * emojis.length)];
+                await PrinceAutoReact(randomEmoji, ms, Prince);
+            } catch (err) {
+                console.error("Error during auto reaction:", err);
+            }
+        });
 
         Prince.ev.on("messages.upsert", async (m) => {
             try {
@@ -353,10 +378,17 @@ async function startPrince() {
             }
         });
 
-        if (autoBio === "true") {
-            setTimeout(() => PrinceAutoBio(Prince), 1000);
-            setInterval(() => PrinceAutoBio(Prince), 1000 * 60); // Update every minute
-        }
+        const updateBioIfEnabled = () => {
+            const enabled = String(
+                getSetting("AUTO_BIO", config.AUTO_BIO || "false"),
+            ).toLowerCase();
+            if (enabled === "true" || enabled === "on") {
+                return PrinceAutoBio(Prince);
+            }
+        };
+        if (autoBioInterval) clearInterval(autoBioInterval);
+        setTimeout(updateBioIfEnabled, 1000);
+        autoBioInterval = setInterval(updateBioIfEnabled, 1000 * 60); // Check persisted setting every minute
 
         Prince.ev.on("call", async (json) => {
             await PrinceAnticall(json, Prince);
@@ -459,7 +491,14 @@ async function startPrince() {
                         );
                     }
 
-                    if (autoReplyStatus === "true") {
+                    if (
+                        String(
+                            getSetting(
+                                "AUTO_REPLY_STATUS",
+                                config.AUTO_REPLY_STATUS || "false",
+                            ),
+                        ).toLowerCase() === "true"
+                    ) {
                         if (mek.key.fromMe) return;
                         const customMessage =
                             statusReplyText || "✅ Status Viewed By Prince-Md";
@@ -683,8 +722,11 @@ async function startPrince() {
             ];
             const isDevs = botDevs.includes(sender);
 
-            if (autoBlock && sender && !isSuperUser && !isGroup) {
-                const countryCodes = autoBlock
+            const activeAutoBlock = String(
+                getSetting("AUTO_BLOCK", config.AUTO_BLOCK || ""),
+            ).trim();
+            if (activeAutoBlock && sender && !isSuperUser && !isGroup) {
+                const countryCodes = activeAutoBlock
                     .split(",")
                     .map((code) => code.trim());
                 if (countryCodes.some((code) => sender.startsWith(code))) {
@@ -700,8 +742,19 @@ async function startPrince() {
                     }
                 }
             }
-            if (autoRead === "true") await Prince.readMessages([ms.key]);
-            if (autoRead === "commands" && isCommand) await Prince.readMessages([ms.key]);
+            const activeAutoRead = String(
+                getSetting("AUTO_READ_MESSAGES", config.AUTO_READ_MESSAGES || "false"),
+            ).toLowerCase();
+            const isGroupMessage = from.endsWith("@g.us");
+            const shouldRead =
+                activeAutoRead === "true" ||
+                activeAutoRead === "on" ||
+                activeAutoRead === "all" ||
+                (activeAutoRead === "dm" && !isGroupMessage) ||
+                (activeAutoRead === "groups" && isGroupMessage) ||
+                (activeAutoRead === "commands" && isCommand);
+            if (shouldRead && activeAutoRead !== "false" && activeAutoRead !== "off")
+                await Prince.readMessages([ms.key]);
 
             // ============ ANTI-GROUP MENTION SYSTEM ============
             const antiMentionSetting = getGroupSetting(from, 'STATUS_MENTION', 'false').toLowerCase();
@@ -773,9 +826,6 @@ async function startPrince() {
                     console.error('Anti-group mention error:', error);
                 }
             }
-            if (autoRead === "commands" && isCommand)
-                await Prince.readMessages([ms.key]);
-
             const text =
                 ms.message?.conversation ||
                 ms.message?.extendedTextMessage?.text ||
