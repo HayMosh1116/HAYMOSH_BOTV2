@@ -1,4 +1,4 @@
-const { gmd, commands, config, getContextInfo, uploadToImgBB } = require("../mayel");
+const { gmd, commands, config, getContextInfo, uploadToImgBB, getSetting, setSetting } = require("../mayel");
 const fs = require("fs");
 const fsA = require('node:fs');
 const { S_WHATSAPP_NET } = require("prince-baileys");
@@ -288,18 +288,15 @@ Reply With:
       await react("📵");
       switch (messageContent) {
         case "1":
-          config.ANTICALL = "decline";
-          saveConfig();
+          setSetting("ANTICALL", "decline");
           return reply("✅ Anticall enabled. Calls will be declined.");
 
         case "2":
-          config.ANTICALL = "block";
-          saveConfig();
+          setSetting("ANTICALL", "block");
           return reply("✅ Anticall set to decline & block callers.");
 
         case "3":
-          config.ANTICALL = "false";
-          saveConfig();
+          setSetting("ANTICALL", "false");
           return reply("❎ Anticall disabled.");
 
         default:
@@ -324,7 +321,9 @@ gmd({
   const { q, reply, react, isSuperUser, getSetting, setSetting, sender, newsletterJid, botName, mek, botPic } = conText;
   if (!isSuperUser) return reply("❌ Owner Only Command!");
   
-  const currentMode = getSetting('ANTIDELETE', config.ANTIDELETE || 'off').toLowerCase();
+  const currentMode = String(
+    getSetting("ANTIDELETE", config.ANTIDELETE || "off"),
+  ).toLowerCase();
   const input = (q || '').trim().toLowerCase();
   const validModes = ['chat', 'group', 'all', 'off'];
 
@@ -368,7 +367,7 @@ _Or use directly:_
 
         if (mode) {
           Prince.ev.off("messages.upsert", handler);
-          setSetting('ANTIDELETE', mode);
+           setSetting("ANTIDELETE", mode);
           await react("✅");
           return reply(`✅ *Antidelete set to:* ${mode.toUpperCase()}`);
         }
@@ -384,7 +383,7 @@ _Or use directly:_
     return reply(`⚠️ Antidelete is already set to *${input}*`);
   }
 
-  setSetting('ANTIDELETE', input);
+   setSetting("ANTIDELETE", input);
   await react("✅");
   await reply(`✅ *Antidelete set to:* ${input.toUpperCase()}`);
 });
