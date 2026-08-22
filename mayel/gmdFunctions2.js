@@ -160,7 +160,10 @@ const PrinceAnticall = async (json, Prince) => {
     const mode = String(
         getSetting("ANTICALL", config.ANTICALL || "false"),
     ).toLowerCase();
-    if (mode === "false" || mode === "off" || mode === "0") return;
+    // Calls are allowed by default. Only an explicit reject/block setting may
+    // intercept them; this prevents an accidental truthy value from rejecting
+    // every incoming call.
+    if (!["reject", "block", "true", "on"].includes(mode)) return;
 
     for (const id of json) {
         if (id.status === 'offer') {
