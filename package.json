@@ -38,7 +38,6 @@
     "form-data": "^4.0.1",
     "fs-extra": "^11.1.0",
     "gifted-dls": "^1.0.8",
-    "google-it": "^1.6.4",
     "google-tts-api": "^2.0.2",
     "javascript-obfuscator": "^5.3.0",
     "jimp": "0.16.1",
