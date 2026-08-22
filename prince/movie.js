@@ -17,15 +17,16 @@ function makeMagnet(hash, title) {
 }
 
 const YTS_MIRRORS = [
-  "https://yts.mx/api/v2/list_movies.json",
+  "https://movies-api.accel.li/api/v2/list_movies.json",
   "https://yts.lt/api/v2/list_movies.json",
+  "https://yts.mx/api/v2/list_movies.json",
   "https://yts.do/api/v2/list_movies.json",
   "https://yts-proxy.fun/api/v2/list_movies.json",
 ];
 
 async function searchYTS(query) {
   const params = `query_term=${encodeURIComponent(query)}&limit=5&with_rt_ratings=true&sort_by=download_count`;
-  for (const mirror of YTS_MIRRORS) {
+  for (const mirror of [...new Set(YTS_MIRRORS)]) {
     try {
       const res = await axios.get(`${mirror}?${params}`, { timeout: 10000 });
       if (res.data?.status === "ok" && res.data?.data?.movie_count > 0) {
@@ -276,7 +277,7 @@ gmd(
       setTimeout(() => Prince.ev.off("messages.upsert", handleChoice), 120000);
 
     } catch (err) {
-      console.error("Movie error:", err.message);
+      console.error("Movie error:", err?.message || err);
       await react("❌");
       return reply("❌ Failed to search. Please try again later.");
     }
