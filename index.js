@@ -176,7 +176,10 @@ async function startPrince() {
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 10000,
-            markOnlineOnConnect: true,
+            // Do not mark the linked WhatsApp account permanently online.
+            // This keeps normal phone notifications enabled while the bot is
+            // connected as a companion device.
+            markOnlineOnConnect: false,
             syncFullHistory: false,
             generateHighQualityLinkPreview: false,
             patchMessageBeforeSending: (message) => {
