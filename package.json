@@ -60,8 +60,7 @@
     "yt-search": "^2.13.1"
   },
   "overrides": {
-    "sharp": "^0.34.1",
-    "request>form-data": "^4.0.6"
+    "sharp": "^0.34.1"
   },
   "resolutions": {
     "sharp": "^0.34.1"
