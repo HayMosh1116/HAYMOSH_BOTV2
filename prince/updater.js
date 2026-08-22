@@ -3,59 +3,41 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const AdmZip = require("adm-zip");
+const { execFile } = require("child_process");
 
 // ─── Platform detection ──────────────────────────────────────────────────────
 const ON_HEROKU = !!process.env.DYNO;
 
 // ─── VPS / local: recursive copy helper ─────────────────────────────────────
-function copyFolderSync(source, destination, excludeList = []) {
+function copyFolderSync(source, destination, excludeList = [], root = source) {
   if (!fs.existsSync(destination)) fs.mkdirSync(destination, { recursive: true });
   for (const item of fs.readdirSync(source)) {
     const srcPath = path.join(source, item);
     const destPath = path.join(destination, item);
-    const rel = path.relative(source, srcPath);
-    if (excludeList.some(ex => rel.startsWith(ex))) continue;
-    if (fs.statSync(srcPath).isDirectory()) copyFolderSync(srcPath, destPath, excludeList);
+    const rel = path.relative(root, srcPath).split(path.sep).join("/");
+    if (excludeList.some((ex) => ex.endsWith(".*")
+      ? rel === ex.slice(0, -2) || rel.startsWith(`${ex.slice(0, -2)}.`)
+      : rel === ex || rel.startsWith(`${ex}/`))) continue;
+    if (fs.statSync(srcPath).isDirectory()) copyFolderSync(srcPath, destPath, excludeList, root);
     else fs.copyFileSync(srcPath, destPath);
   }
 }
 
-// ─── Heroku: push a version file to GitHub → triggers GitHub auto-deploy ─────
-// This works with your existing GITHUB_TOKEN — no extra Heroku config needed.
-async function triggerHerokuRedeploy(repoName, branch, token, latestSha) {
-  const ghHeaders = {
-    Authorization: `token ${token}`,
-    Accept: "application/vnd.github+json",
-    "User-Agent": "HAYWHY-MDX-Bot",
-  };
-
-  const filePath = ".version";
-  const newContent = Buffer.from(
-    `${latestSha}\n${new Date().toISOString()}\n`
-  ).toString("base64");
-
-  // Get current file SHA so GitHub allows the update
-  let currentSha = null;
-  try {
-    const { data } = await axios.get(
-      `https://api.github.com/repos/${repoName}/contents/${filePath}?ref=${branch}`,
-      { headers: ghHeaders, timeout: 10000 }
-    );
-    currentSha = data.sha;
-  } catch (_) {}
-
-  const body = {
-    message: `chore: deploy trigger ${latestSha.slice(0, 7)}`,
-    content: newContent,
-    branch,
-  };
-  if (currentSha) body.sha = currentSha;
-
-  await axios.put(
-    `https://api.github.com/repos/${repoName}/contents/${filePath}`,
-    body,
-    { headers: ghHeaders, timeout: 15000 }
-  );
+function runPackageInstall() {
+  const cwd = path.join(__dirname, "..");
+  const packageManager = process.platform === "win32" ? "npm.cmd" : "npm";
+  const args = ["install", "--omit=dev", "--ignore-scripts"];
+  return new Promise((resolve, reject) => {
+    execFile("pnpm", ["install", "--prod", "--ignore-scripts", "--no-frozen-lockfile"],
+      { cwd, timeout: 120000 }, (pnpmError, stdout, stderr) => {
+        if (!pnpmError) return resolve(stdout);
+        execFile(packageManager, args, { cwd, timeout: 120000 },
+          (npmError, npmStdout, npmStderr) => {
+            if (npmError) return reject(new Error(npmStderr.trim() || npmError.message));
+            resolve(npmStdout);
+          });
+      });
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,16 +61,11 @@ gmd(
       const repoName  = "HayMosh1116/HAYMOSH_BOTV2";
       const repoShort = "HAYMOSH_BOTV2";
       const branch    = "main";
-      const ghToken   = process.env.GITHUB_TOKEN;
-
       // ── Fetch latest commit info ──────────────────────────────────────────
       const { data: commitData } = await axios.get(
         `https://api.github.com/repos/${repoName}/commits/${branch}`,
         {
-          headers: {
-            "User-Agent": "HAYWHY-MDX-Bot",
-            ...(ghToken ? { Authorization: `token ${ghToken}` } : {}),
-          },
+          headers: { "User-Agent": "HAYWHY-MDX-Bot" },
           timeout: 15000,
         }
       );
@@ -116,29 +93,7 @@ gmd(
       );
 
       // ══════════════════════════════════════════════════════════════════════
-      // HEROKU PATH — push a version marker to GitHub → Heroku auto-redeploys
-      // ══════════════════════════════════════════════════════════════════════
-      if (ON_HEROKU) {
-        if (!ghToken) {
-          await react("❌");
-          return reply(
-            "❌ *GITHUB_TOKEN not found in config vars.*\n" +
-            "Add it in your Heroku dashboard → Settings → Config Vars, then retry."
-          );
-        }
-
-        await triggerHerokuRedeploy(repoName, branch, ghToken, latestSha);
-
-        await react("✅");
-        return reply(
-          `✅ *Update triggered!*\n\n` +
-          `Heroku is now pulling the latest code from GitHub and redeploying.\n` +
-          `Your bot will be back up with the new version in *1–2 minutes*.`
-        );
-      }
-
-      // ══════════════════════════════════════════════════════════════════════
-      // VPS / LOCAL PATH — download ZIP, overwrite files, restart process
+      // ALL HOSTS — download ZIP, overwrite files, restart process
       // ══════════════════════════════════════════════════════════════════════
       const zipPath = path.join(__dirname, "..", `${repoShort}.zip`);
 
@@ -152,21 +107,32 @@ gmd(
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(extractPath, true);
 
-      const sourcePath      = path.join(extractPath, `${repoShort}-${branch}`);
+      const extractedRoot = fs.readdirSync(extractPath)
+        .map((item) => path.join(extractPath, item))
+        .find((item) => fs.statSync(item).isDirectory());
+      if (!extractedRoot) throw new Error("GitHub archive did not contain a project directory");
+      const sourcePath = extractedRoot;
       const destinationPath = path.join(__dirname, "..");
       const excludeList = [
-        ".env", "session", "config.js", "mayel/prince.db",
+        ".env", ".env.*", "session", "config.js", "mayel/prince.db",
         "node_modules", "package-lock.json",
+        "pnpm-lock.yaml", "latest", `${repoShort}.zip`,
       ];
 
-      copyFolderSync(sourcePath, destinationPath, excludeList);
+      copyFolderSync(sourcePath, destinationPath, excludeList, sourcePath);
+      if (fs.existsSync(path.join(destinationPath, "package.json"))) {
+        await runPackageInstall();
+      }
       setSetting("COMMIT_HASH", latestSha);
 
       try { fs.unlinkSync(zipPath); } catch {}
       try { fs.rmSync(extractPath, { recursive: true, force: true }); } catch {}
 
       await react("✅");
-      await reply("✅ *Update complete! Bot is restarting...*");
+      await reply(
+        `✅ *Update complete! Bot is restarting...*\n\n` +
+        `📦 Version: \`${latestSha.slice(0, 7)}\``
+      );
       setTimeout(() => process.exit(0), 4000);
 
     } catch (error) {
