@@ -1,5 +1,35 @@
 const { gmd, getContextInfo } = require("../mayel");
 
+const SEARCH_ENDPOINTS = [
+  "https://yts.gifted.co.ke/",
+  "https://yts.giftedtech.co.ke/",
+];
+
+function getDownloadUrl(payload) {
+  const candidates = [
+    payload?.result?.download_url,
+    payload?.result?.downloadUrl,
+    payload?.data?.download_url,
+    payload?.data?.downloadUrl,
+    payload?.download_url,
+    payload?.downloadUrl,
+    payload?.result?.url,
+    payload?.result?.url_dl,
+  ];
+  return candidates.find((url) => typeof url === "string" && /^https?:\/\//i.test(url));
+}
+
+async function searchYouTube(gmdJson, query) {
+  for (const endpoint of SEARCH_ENDPOINTS) {
+    const response = await gmdJson(`${endpoint}?q=${encodeURIComponent(query)}`);
+    if (response && !(response instanceof Error) && Array.isArray(response.videos)) {
+      const video = response.videos[0];
+      if (video?.url) return video;
+    }
+  }
+  return null;
+}
+
 
 
 gmd({
@@ -128,19 +158,13 @@ gmd({
     }
 
     try {
-      const searchResponse = await gmdJson(`https://yts.gifted.co.ke/?q=${encodeURIComponent(q)}`);
+      const firstVideo = await searchYouTube(gmdJson, q);
 
-      if (!searchResponse || !Array.isArray(searchResponse.videos)) {
+      if (!firstVideo) {
         await react("❌");
-        return reply("Invalid response from search API. Please try again.");
+        return reply("No song was found for that request. Try the song title and artist, or paste a YouTube link.");
       }
 
-      if (searchResponse.videos.length === 0) {
-        await react("❌");
-        return reply("No results found for your search.");
-      }
-
-      const firstVideo = searchResponse.videos[0];
       const videoUrl = firstVideo.url;
       
       const audioApis = [
@@ -157,8 +181,9 @@ gmd({
       for (const api of audioApis) {
         try {
           const response = await gmdJson(api);
-          if (response.result?.download_url) {
-            downloadUrl = response.result.download_url;
+          const candidate = getDownloadUrl(response);
+          if (candidate) {
+            downloadUrl = candidate;
             break;
           }
         } catch (e) {
@@ -171,19 +196,19 @@ gmd({
         return reply("Failed to get download URL for the audio.");
       }
 
-      const buffer = await gmdBuffer(downloadUrl);
-      const convertedBuffer = await formatAudio(buffer);
-      if (buffer instanceof Error) {
+       const buffer = await gmdBuffer(downloadUrl);
+       if (!Buffer.isBuffer(buffer)) {
         await react("❌");
-        return reply("Failed to download the audio file.");
+         return reply("The audio service returned an invalid file. Please try again.");
       }
+       const convertedBuffer = await formatAudio(buffer);
 
       const infoMess = {
         image: { url: firstVideo.thumbnail || botPic },
         caption: `> *${botName} 𝐒𝐎𝐍𝐆 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*  
 ╭───────────────◆  
-│⿻ *Title:* ${firstVideo.name}
-│⿻ *Duration:* ${firstVideo.duration}
+│⿻ *Title:* ${firstVideo.name || firstVideo.title || "Unknown"}
+│⿻ *Duration:* ${firstVideo.duration || "Unknown"}
 ╰────────────────◆
 ⏱ *Session expires in 2 minutes*
 ╭───────────────◆
@@ -211,10 +236,10 @@ gmd({
               await Prince.sendMessage(from, {
                 audio: convertedBuffer,
                 mimetype: "audio/mpeg",
-                fileName: `${firstVideo.name}.mp3`.replace(/[^\w\s.-]/gi, ''),
+                fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
                 caption: `${firstVideo.name}`,
                 externalAdReply: {
-                  title: `${firstVideo.name}.mp3`,
+                   title: `${firstVideo.name || firstVideo.title || "audio"}.mp3`,
                   body: 'Youtube Downloader',
                   mediaType: 1,
                   thumbnailUrl: firstVideo.thumbnail || botPic,
@@ -229,8 +254,8 @@ gmd({
               await Prince.sendMessage(from, {
                 document: convertedBuffer,
                 mimetype: "audio/mpeg",
-                fileName: `${firstVideo.name}.mp3`.replace(/[^\w\s.-]/gi, ''),
-                caption: `${firstVideo.name}`,
+                 fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
+                 caption: `${firstVideo.name || firstVideo.title || "Audio"}`,
               }, { quoted: messageData });
               break;
               
@@ -282,19 +307,12 @@ gmd({
     }
 
     try {
-      const searchResponse = await gmdJson(`https://yts.giftedtech.co.ke/?q=${encodeURIComponent(q)}`);
-      
-      if (!searchResponse || !Array.isArray(searchResponse.videos)) {
-        await react("❌");
-        return reply("Invalid response from search API. Please try again.");
-      }
+      const firstVideo = await searchYouTube(gmdJson, q);
 
-      if (searchResponse.videos.length === 0) {
+      if (!firstVideo) {
         await react("❌");
-        return reply("No results found for your search.");
+        return reply("No video was found for that request. Try a different title or paste a YouTube link.");
       }
-      
-      const firstVideo = searchResponse.videos[0];
       const videoUrl = firstVideo.url;
       
       const videoApis = [
@@ -311,8 +329,9 @@ gmd({
       for (const api of videoApis) {
         try {
           const response = await gmdJson(api);
-          if (response.result?.download_url) {
-            downloadUrl = response.result.download_url;
+          const candidate = getDownloadUrl(response);
+          if (candidate) {
+            downloadUrl = candidate;
             break;
           }
         } catch (e) {
@@ -325,19 +344,19 @@ gmd({
         return reply("Failed to get download URL for the video.");
       }
 
-      const buffer = await gmdBuffer(downloadUrl);
-      const convertedBuffer = await formatVideo(buffer);
-      if (buffer instanceof Error) {
+       const buffer = await gmdBuffer(downloadUrl);
+       if (!Buffer.isBuffer(buffer)) {
         await react("❌");
-        return reply("Failed to download the video file.");
+         return reply("The video service returned an invalid file. Please try again.");
       }
+       const convertedBuffer = await formatVideo(buffer);
 
       const infoMess = {
         image: { url: firstVideo.thumbnail || botPic },
         caption: `> *${botName} 𝐕𝐈𝐃𝐄𝐎 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*  
 ╭───────────────◆  
-│⿻ *Title:* ${firstVideo.name}
-│⿻ *Duration:* ${firstVideo.duration}
+│⿻ *Title:* ${firstVideo.name || firstVideo.title || "Unknown"}
+│⿻ *Duration:* ${firstVideo.duration || "Unknown"}
 ╰────────────────◆  
 ⏱ *Session expires in 2 minutes*
 ╭───────────────◆
@@ -366,8 +385,8 @@ gmd({
                 video: convertedBuffer,
                 mimetype: "video/mp4",
                 pvt: true,
-                fileName: `${firstVideo.name}.mp4`.replace(/[^\w\s.-]/gi, ''),
-                caption: `🎥 ${firstVideo.name}`,
+                 fileName: `${firstVideo.name || firstVideo.title || "video"}.mp4`.replace(/[^\w\s.-]/gi, ''),
+                 caption: `🎥 ${firstVideo.name || firstVideo.title || "Video"}`,
               }, { quoted: messageData });
               break;
               
@@ -375,8 +394,8 @@ gmd({
               await Prince.sendMessage(from, {
                 document: convertedBuffer,
                 mimetype: "video/mp4",
-                fileName: `${firstVideo.name}.mp4`.replace(/[^\w\s.-]/gi, ''),
-                caption: `📄 ${firstVideo.name}`,
+                 fileName: `${firstVideo.name || firstVideo.title || "video"}.mp4`.replace(/[^\w\s.-]/gi, ''),
+                 caption: `📄 ${firstVideo.name || firstVideo.title || "Video"}`,
               }, { quoted: messageData });
               break;
               
