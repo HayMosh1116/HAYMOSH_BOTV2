@@ -325,6 +325,66 @@ const PrinceViewOnce = (Prince) => {
             console.error("PrinceViewOnce reaction error:", err.message);
         }
     });
+
+    // The owner can also reply with plain "wow" or "lol" in a group or DM.
+    // Keep this owner-only and require a direct reply to cached media.
+    Prince.ev.on("messages.upsert", async ({ messages }) => {
+        try {
+            const ms = messages[0];
+            if (!ms?.message || !ms.key.fromMe) return;
+
+            const text = (
+                ms.message.conversation ||
+                ms.message.extendedTextMessage?.text ||
+                ""
+            ).trim().toLowerCase();
+            if (text !== "wow" && text !== "lol") return;
+
+            const quotedKey = ms.message.extendedTextMessage?.contextInfo?.stanzaId;
+            if (!quotedKey) return;
+            const cached = _voCache.get(quotedKey);
+            if (!cached) return;
+
+            const { voMsg, from, key } = cached;
+            const mediaType = voMsg.imageMessage
+                ? "image"
+                : voMsg.videoMessage
+                    ? "video"
+                    : null;
+            if (!mediaType) return;
+
+            const buffer = await downloadMediaMessage(
+                {
+                    key: {
+                        remoteJid: from,
+                        fromMe: false,
+                        id: quotedKey,
+                        participant: key.participant,
+                    },
+                    message: voMsg,
+                },
+                "buffer",
+                {},
+                { logger, reuploadRequest: Prince.updateMediaMessage },
+            );
+            if (!Buffer.isBuffer(buffer) || buffer.length === 0) return;
+
+            const revealed = {
+                [mediaType]: buffer,
+                caption: `🔓 *View Once ${mediaType === "image" ? "Image" : "Video"} Revealed*\n\n_Requested with ${text}_`,
+            };
+            await Prince.sendMessage(from, revealed);
+
+            // Prince.user.id is the connected bot account's personal DM.
+            const ownerDM = Prince.user?.id;
+            if (ownerDM && ownerDM !== from) {
+                await Prince.sendMessage(ownerDM, revealed);
+            }
+            _voCache.delete(quotedKey);
+        } catch (err) {
+            console.error("Plain wow/lol view-once reveal error:", err.message);
+        }
+    });
 };
 
 module.exports = {
