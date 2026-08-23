@@ -1,8 +1,6 @@
 const { gmd, getChannelContext: getContextInfo } = require("../mayel");
 const axios = require("axios");
 
-const MAX_MOVIE_SIZE = 400 * 1024 * 1024;
-
 function isHttpUrl(value) {
   try {
     const url = new URL(value);
@@ -120,9 +118,9 @@ gmd(
         if (isYts && Array.isArray(m.torrents)) {
           for (const t of m.torrents) {
             const sizeBytes = Number(t.size_bytes);
-            // YTS provides torrent files, not direct movie files. Only show
-            // real torrent-file URLs for releases whose movie size is <=400MB.
-            if (isHttpUrl(t.url) && sizeBytes > 0 && sizeBytes <= MAX_MOVIE_SIZE) {
+            // YTS provides torrent files, not direct movie files. Keep every
+            // verified release and choose the smallest one below.
+            if (isHttpUrl(t.url) && sizeBytes > 0) {
               downloads.push({
                 label: `${t.quality || "Movie"} — ${formatBytes(sizeBytes)}`,
                 link: t.url,
@@ -136,7 +134,7 @@ gmd(
           // PrinceTech-style response
           const addDirectFile = (label, link, sizeBytes) => {
             const bytes = Number(sizeBytes);
-            if (isHttpUrl(link) && bytes > 0 && bytes <= MAX_MOVIE_SIZE) {
+            if (isHttpUrl(link) && bytes > 0) {
               downloads.push({ label: `${label} — ${formatBytes(bytes)}`, link, type: "file", sizeBytes: bytes });
             }
           };
@@ -180,7 +178,7 @@ gmd(
             image: { url: info.poster },
             caption:
               infoBlock +
-              `\n\n❌ No downloadable release at or below *400 MB* was found for this movie.` +
+              `\n\n❌ No downloadable file was returned for this movie.` +
               `\n\n> *${botFooter}*`,
             contextInfo: getContextInfo(sender, newsletterJid, botName),
           }, { quoted: quotedMsg });
@@ -204,53 +202,12 @@ gmd(
           }, { quoted: quotedMsg });
         };
 
-        if (info.downloads.length === 1) {
-          const dl = info.downloads[0];
-          await sendDownloadFile(dl, quotedMsg);
-          await react("✅");
-          return;
-        }
-
-        // Multiple quality options — show selection menu
-        const optLines = info.downloads.map((d, i) => `│${i + 1}️⃣ ${d.label}`).join("\n");
-
-        const qualityMsg = await Prince.sendMessage(from, {
-          image: { url: info.poster },
-          caption:
-            `${infoBlock}\n\n` +
-            `⏱ *Session expires in 2 minutes*\n` +
-            `╭───────────────◆\n` +
-            `│📥 Reply with quality:\n` +
-            `${optLines}\n` +
-            `╰────────────────◆`,
-          contextInfo: getContextInfo(sender, newsletterJid, botName),
-        }, { quoted: quotedMsg });
-
-        const qualityId = qualityMsg.key.id;
-
-        const handleQuality = async (event) => {
-          const msgData = event.messages[0];
-          if (!msgData?.message || msgData.key.remoteJid !== from) return;
-          const isReply = msgData.message.extendedTextMessage?.contextInfo?.stanzaId === qualityId;
-          if (!isReply) return;
-
-          const choice = (msgData.message.conversation || msgData.message.extendedTextMessage?.text || "").trim();
-          const idx = parseInt(choice, 10) - 1;
-
-          if (isNaN(idx) || idx < 0 || idx >= info.downloads.length) {
-            await reply(`⚠️ Please reply with a number from 1 to ${info.downloads.length}.`);
-            return;
-          }
-
-          Prince.ev.off("messages.upsert", handleQuality);
-          const dl = info.downloads[idx];
-
-          await sendDownloadFile(dl, msgData);
-          await react("✅");
-        };
-
-        Prince.ev.on("messages.upsert", handleQuality);
-        setTimeout(() => Prince.ev.off("messages.upsert", handleQuality), 120000);
+        // Always send the smallest available release. A release may be over
+        // 400 MB because the provider does not offer a smaller encode, but it
+        // should still be sent instead of returning a false "not found".
+        const dl = [...info.downloads].sort((a, b) => a.sizeBytes - b.sizeBytes)[0];
+        await sendDownloadFile(dl, quotedMsg);
+        await react("✅");
       };
 
       if (movies.length === 1) {
