@@ -5,6 +5,18 @@ const giftedDls = new GIFTED_DLS();
 
 const MAX_MEDIA_SIZE = 60 * 1024 * 1024;
 
+function getDownloadUrl(payload) {
+  const candidates = [
+    payload?.result?.download_url,
+    payload?.result?.downloadUrl,
+    payload?.data?.download_url,
+    payload?.data?.downloadUrl,
+    payload?.download_url,
+    payload?.downloadUrl,
+  ];
+  return candidates.find((value) => typeof value === "string" && /^https?:\/\//i.test(value)) || null;
+}
+
 function getMimeFromUrl(url) {
   const ext = url.split('.').pop()?.toLowerCase().split('?')[0];
   const mimes = {
@@ -547,8 +559,12 @@ gmd(
     }
 
     try {
-      const searchResponse = await gmdJson(`${PrinceTechApi}/search/yts?apikey=${PrinceApiKey}&query=${encodeURIComponent(q)}`);
-      const videoInfo = searchResponse.results[0];
+       const searchResponse = await gmdJson(`${PrinceTechApi}/search/yts?apikey=${PrinceApiKey}&query=${encodeURIComponent(q)}`);
+       const videoInfo = searchResponse?.results?.[0] || searchResponse?.result?.[0] || searchResponse?.data?.[0];
+       if (!videoInfo) {
+         await react("❌");
+         return reply("No YouTube video was found for that URL.");
+       }
 
       const infoMessage = {
         image: { url: videoInfo.thumbnail || botPic },
@@ -557,7 +573,7 @@ gmd(
           `*Duration:* ${videoInfo.timestamp}\n` +
           `*Views:* ${videoInfo.views}\n` +
           `*Uploaded:* ${videoInfo.ago}\n` +
-          `*Artist:* ${videoInfo.author.name}\n\n` +
+           `*Artist:* ${videoInfo.author?.name || videoInfo.author || "Unknown"}\n\n` +
           `⏱ *Session expires in 2 minutes*\n` +
           `╭───────────────◆\n` +
           `│Reply With:\n` +
@@ -573,7 +589,7 @@ gmd(
 
       const handleResponse = async (event) => {
         const messageData = event.messages[0];
-        if (!messageData.message) return;
+         if (!messageData.message || messageData.key?.fromMe || messageData.key.remoteJid !== from) return;
         const isReply = messageData.message.extendedTextMessage?.contextInfo?.stanzaId === messageId;
         if (!isReply) return;
         const choice = (messageData.message.conversation || messageData.message.extendedTextMessage?.text || "").trim();
@@ -596,11 +612,26 @@ gmd(
               return reply("Invalid option. Please reply with: 1, 2 or 3", messageData);
           }
 
-          const downloadResult = await giftedDls.ytmp4(q, quality);
-          const downloadUrl = downloadResult.result.download_url;
+           const videoApis = [
+             `${PrinceTechApi}/api/download/ytmp4?apikey=${PrinceApiKey}&url=${encodeURIComponent(q)}&quality=${quality}`,
+             `${PrinceTechApi}/api/download/mp4?apikey=${PrinceApiKey}&url=${encodeURIComponent(q)}&quality=${quality}`,
+             `${PrinceTechApi}/api/download/ytv?apikey=${PrinceApiKey}&url=${encodeURIComponent(q)}&quality=${quality}`,
+           ];
+           let downloadUrl = null;
+           for (const api of videoApis) {
+             try {
+               downloadUrl = getDownloadUrl(await gmdJson(api));
+               if (downloadUrl) break;
+             } catch (_) {}
+           }
+           if (!downloadUrl) {
+             const downloadResult = await giftedDls.ytmp4(q, quality);
+             downloadUrl = getDownloadUrl(downloadResult);
+           }
+           if (!downloadUrl) throw new Error("Video API returned no download URL");
           const videoBuffer = await gmdBuffer(downloadUrl);
 
-          if (videoBuffer instanceof Error) {
+           if (!Buffer.isBuffer(videoBuffer) || videoBuffer.length === 0) {
             await react("❌");
             return reply("Failed to download the video.", messageData);
           }
