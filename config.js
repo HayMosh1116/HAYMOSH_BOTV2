@@ -35,6 +35,7 @@ module.exports = {
     AUTO_REACT : process.env.AUTO_REACT || 'false',
     AUTO_REPLY : process.env.AUTO_REPLY || 'false',
     AUTO_READ_MESSAGES : process.env.AUTO_READ_MESSAGES || 'false',
+    KEEP_PHONE_NOTIFICATIONS : process.env.KEEP_PHONE_NOTIFICATIONS || 'true',
     // AUTO_BIO is the public setting name; keep ANTI_BIO as a backwards-compatible alias.
     AUTO_BIO : process.env.AUTO_BIO || process.env.ANTI_BIO || 'false',
     ANTI_BIO : process.env.ANTI_BIO || process.env.AUTO_BIO || 'false',
