@@ -35,6 +35,7 @@ function endGame(Prince, from) {
   try { if (g.joinTimeout) clearTimeout(g.joinTimeout); } catch {}
   try { if (g.timeout) clearTimeout(g.timeout); } catch {}
   try { if (g.turnTimeout) clearTimeout(g.turnTimeout); } catch {}
+  try { if (g.hideTimer) clearTimeout(g.hideTimer); } catch {}
   games.delete(from);
   return true;
 }
@@ -1056,28 +1057,89 @@ function answerMatches(answer, expected) {
 }
 
 function startExtraAnswerGame(from, Prince, conText, type, prompt, expected, successText) {
-  const { sender, botName, newsletterJid, mek } = conText;
+  const { sender, botName, newsletterJid, mek, isGroup } = conText;
   if (games.has(from)) return conText.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
-  const send = (text) => Prince.sendMessage(from, {
-    text, contextInfo: getContextInfo(sender, newsletterJid, botName),
+  const send = (text, mentions = []) => Prince.sendMessage(from, {
+    text, mentions, contextInfo: getContextInfo(sender, newsletterJid, botName),
   }, { quoted: mek });
+  const participants = [];
+  const points = new Map();
+  let phase = isGroup ? "join" : "play";
+  let turn = 0;
+  const attempts = new Map();
+  let turnTimer;
+  const moniker = (jid) => `@${jid.split("@")[0]}`;
+  const advance = (player) => {
+    turn++;
+    if (turn >= participants.length) {
+      clearTimeout(turnTimer);
+      endGame(Prince, from);
+      return send(`🏁 Round complete!\n✅ Correct answer: *${expected}*\n\n` +
+        participants.map((p) => `${moniker(p)}: *${points.get(p) || 0} point(s)*`).join("\n"), participants);
+    }
+    startTurn();
+  };
+  const startTurn = () => {
+    if (!participants.length) return;
+    const player = participants[turn % participants.length];
+    attempts.set(player, 0);
+    clearTimeout(turnTimer);
+    send(`🎮 ${moniker(player)}, it's your turn!\n⏱️ You have 30 seconds and 3 attempts.`, [player]);
+    turnTimer = setTimeout(() => {
+      send(`⌛ ${moniker(player)} timed out.`, [player]);
+      advance(player);
+    }, 30 * 1000);
+  };
+  const finish = () => {
+    clearTimeout(turnTimer);
+    endGame(Prince, from);
+    const scoreboard = participants.map((p) => `${moniker(p)}: *${points.get(p) || 0} point(s)*`).join("\n");
+    return send(`🏁 *${type.toUpperCase()} ENDED*\n\n${scoreboard || "No players scored."}`, participants);
+  };
+  const begin = () => {
+    if (games.get(from)?.joinTimeout) clearTimeout(games.get(from).joinTimeout);
+    if (participants.length === 0) {
+      endGame(Prince, from);
+      return send(`⌛ *${type.toUpperCase()}* ended because nobody joined.\n✅ Correct answer: *${expected}*`);
+    }
+    phase = "play";
+    send(`🚀 *${type.toUpperCase()} STARTED*\n━━━━━━━━━━━━━━━━━━━━━━\n${prompt}\n\n` +
+      participants.map((p, i) => `${i + 1}. ${moniker(p)} — 0 point(s)`).join("\n") +
+      `\n\nThree attempts per player.`, participants);
+    startTurn();
+  };
   const handler = async ({ messages }) => {
     const m = messages[0];
     if (!m?.message || m.key.remoteJid !== from) return;
+    const player = senderOf(m, from);
     const answer = getText(m);
-    if (!answer || answer.startsWith(".")) return;
-    const who = senderOf(m, from).split("@")[0];
-    if (answerMatches(answer, expected)) {
-      endGame(Prince, from);
-      return send(`🎉 *${type.toUpperCase()} — Correct!*\n\n✅ @${who} ${successText}`);
+    if (phase === "join") {
+      if (cleanAnswer(answer) !== "join" || participants.includes(player)) return;
+      participants.push(player); points.set(player, 0);
+      return send(`✅ ${moniker(player)} joined! ${participants.length} player(s) joined.`, [player]);
     }
+    if (!answer || answer.startsWith(".") || player !== participants[turn % participants.length]) return;
+    const used = (attempts.get(player) || 0) + 1;
+    attempts.set(player, used);
+    if (answerMatches(answer, expected)) {
+      points.set(player, (points.get(player) || 0) + 1);
+      clearTimeout(turnTimer);
+      endGame(Prince, from);
+      return send(`🎉 ${moniker(player)} ${successText}\n✅ Correct answer: *${expected}*\n\n` +
+        participants.map((p) => `${moniker(p)}: *${points.get(p) || 0} point(s)*`).join("\n"), [player, ...participants]);
+    }
+    if (used < 3) return send(`❌ Wrong answer, ${moniker(player)}. Attempt ${used}/3. Try again.`, [player]);
+    send(`❌ ${moniker(player)} used all 3 attempts. Next player!\n✅ Correct answer: *${expected}*`, [player]);
+    advance(player);
   };
-  send(`🎮 *${type.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━━━━\n${prompt}\n\n_First correct answer wins._\nType *.endgame* to stop.`);
-  const timeout = setTimeout(() => {
-    if (games.has(from)) { endGame(Prince, from); send(`⌛ *${type.toUpperCase()}* timed out.`); }
-  }, 3 * 60 * 1000);
-  games.set(from, { type, handler, timeout });
+  if (!isGroup) {
+    participants.push(sender);
+    points.set(sender, 0);
+  }
+  games.set(from, { type, handler, joinTimeout: isGroup ? setTimeout(begin, 30 * 1000) : null });
   Prince.ev.on("messages.upsert", handler);
+  if (isGroup) send(`🎮 *${type.toUpperCase()} — JOIN NOW*\n━━━━━━━━━━━━━━━━━━━━━━\n${prompt}\n\nType *join* within *30 seconds* to participate!`, []);
+  else begin();
 }
 
 gmd({ pattern: "emoji", aliases: ["emojiguess", "guessemoji"], react: "🤔", category: "games",
@@ -1128,16 +1190,22 @@ gmd({ pattern: "memory", aliases: ["memorygame"], react: "🧠", category: "game
   description: "Remember and repeat the sequence." }, async (from, Prince, c) => {
   const sequence = Array.from({ length: 5 }, () => rand(["🍎", "🚀", "🐼", "⚽", "🔥", "🌈"])).join("");
   if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
-  const send = (text) => Prince.sendMessage(from, { text }, { quoted: c.mek });
+  const send = (text, extra = {}) => Prince.sendMessage(from, { text, ...extra }, { quoted: c.mek });
   const handler = async ({ messages }) => {
     const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
     if (cleanAnswer(getText(m)) !== cleanAnswer(sequence)) return;
     const who = senderOf(m, from).split("@")[0]; endGame(Prince, from);
     return send(`🎉 *MEMORY — Correct!*\n✅ @${who} remembered the sequence!`);
   };
-  send(`🧠 *MEMORY CHALLENGE*\n\nRemember this sequence:\n\n${sequence}\n\nIt will disappear soon. Type it back in the same order!`);
-  const timeout = setTimeout(() => { if (games.has(from)) { endGame(Prince, from); send("⌛ *MEMORY* timed out."); } }, 2 * 60 * 1000);
-  games.set(from, { type: "memory", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+  const shown = await send(`🧠 *MEMORY CHALLENGE*\n\nRemember this sequence:\n\n${sequence}\n\nYou have 20 seconds. It will then be hidden. Type the words or emojis back in the same order!`);
+  const hideTimer = setTimeout(async () => {
+    if (!games.has(from)) return;
+    try {
+      await Prince.sendMessage(from, { text: "🧠 *MEMORY CHALLENGE*\n\n⏳ Time is up! The sequence has been hidden.\n\nNow type the words or emojis you memorised, in the same order.", edit: shown.key });
+    } catch (e) { console.error("Memory edit error:", e.message); }
+  }, 20 * 1000);
+  const timeout = setTimeout(() => { if (games.has(from)) { endGame(Prince, from); send(`⌛ *MEMORY* timed out.\n✅ Correct sequence: *${sequence}*`); } }, 2 * 60 * 1000);
+  games.set(from, { type: "memory", handler, timeout, hideTimer }); Prince.ev.on("messages.upsert", handler);
 });
 
 gmd({ pattern: "wouldrather", aliases: ["wyr"], react: "🤷", category: "games",
@@ -1155,23 +1223,84 @@ gmd({ pattern: "fastest", aliases: ["fastestfinger", "quickquiz"], react: "⚡",
 });
 
 gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
-  description: "Play tic-tac-toe by replying with a square number." }, async (from, Prince, c) => {
+  description: "Play tagged tic-tac-toe by replying with a square number." }, async (from, Prince, c) => {
   if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
-  const board = Array(9).fill("⬜"); let turn = "❌";
-  const render = () => board.map((v, i) => v === "⬜" ? `${i + 1}️⃣` : v).join("");
-  const send = (text) => Prince.sendMessage(from, { text }, { quoted: c.mek });
+  const board = Array(9).fill("");
+  const players = [];
+  const points = new Map();
+  let phase = c.isGroup ? "join" : "play";
+  let turn = 0;
+  let moveTimer;
+  const symbols = ["❌", "⭕"];
+  const mention = (jid) => `@${jid.split("@")[0]}`;
+  const send = (text, mentions = []) => Prince.sendMessage(from, {
+    text, mentions,
+  }, { quoted: c.mek });
+  const render = () => [
+    "┌───┬───┬───┐",
+    `│ ${board[0] || "1️⃣"} │ ${board[1] || "2️⃣"} │ ${board[2] || "3️⃣"} │`,
+    "├───┼───┼───┤",
+    `│ ${board[3] || "4️⃣"} │ ${board[4] || "5️⃣"} │ ${board[5] || "6️⃣"} │`,
+    "├───┼───┼───┤",
+    `│ ${board[6] || "7️⃣"} │ ${board[7] || "8️⃣"} │ ${board[8] || "9️⃣"} │`,
+    "└───┴───┴───┘",
+  ].join("\n");
+  const status = () => players.map((p, i) => `${symbols[i]} ${mention(p)}: *${points.get(p) || 0} point(s)*`).join("\n");
+  const start = () => {
+    if (players.length < 2) {
+      endGame(Prince, from);
+      return send("⌛ Tic-tac-toe ended because at least two players did not join.");
+    }
+    phase = "play";
+    send(`❌⭕ *TIC-TAC-TOE*\n━━━━━━━━━━━━━━━━━━━━━━\n${symbols[0]} ${mention(players[0])}\n${symbols[1]} ${mention(players[1])}\n\n${render()}\n\n${status()}\n\n🎮 ${symbols[0]} ${mention(players[0])}'s turn\n⏱️ 30 seconds per move`, players);
+    nextTurn();
+  };
+  const nextTurn = () => {
+    clearTimeout(moveTimer);
+    const player = players[turn % 2];
+    moveTimer = setTimeout(() => {
+      send(`⌛ ${mention(player)} did not move in 30 seconds. ${symbols[(turn + 1) % 2]} wins!`, players);
+      points.set(players[(turn + 1) % 2], (points.get(players[(turn + 1) % 2]) || 0) + 1);
+      endGame(Prince, from);
+      send(status(), players);
+    }, 30 * 1000);
+  };
   const handler = async ({ messages }) => {
     const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
-    const n = Number(getText(m)); if (!Number.isInteger(n) || n < 1 || n > 9 || board[n - 1] !== "⬜") return;
-    board[n - 1] = turn;
+    const player = senderOf(m, from);
+    const answer = cleanAnswer(getText(m));
+    if (phase === "join") {
+      if (answer !== "join" || players.includes(player)) return;
+      if (players.length >= 2) return;
+      players.push(player); points.set(player, 0);
+      return send(`✅ ${mention(player)} joined tic-tac-toe (${players.length}/2).`, [player]);
+    }
+    if (player !== players[turn % 2]) return;
+    const n = Number(answer); if (!Number.isInteger(n) || n < 1 || n > 9 || board[n - 1]) return;
+    board[n - 1] = symbols[turn % 2];
     const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    const won = wins.some(([a,b,d]) => board[a] === turn && board[b] === turn && board[d] === turn);
-    if (won || !board.includes("⬜")) { endGame(Prince, from); return send(`${won ? `🎉 *${turn} wins!*` : "🤝 *Draw!*"}\n\n${render()}`); }
-    turn = turn === "❌" ? "⭕" : "❌"; return send(`${render()}\n\n${turn} turn — reply with a square number.`);
+    const symbol = symbols[turn % 2];
+    const won = wins.some(([a,b,d]) => board[a] === symbol && board[b] === symbol && board[d] === symbol);
+    if (won || !board.includes("")) {
+      clearTimeout(moveTimer); endGame(Prince, from);
+      if (won) points.set(player, (points.get(player) || 0) + 1);
+      return send(`${won ? `🎉 ${symbol} ${mention(player)} wins!` : "🤝 *Draw!*"}\n\n${render()}\n\n${status()}`, players);
+    }
+    turn++;
+    const next = players[turn % 2];
+    send(`${render()}\n\n${status()}\n\n🎮 ${symbols[turn % 2]} ${mention(next)}'s turn\n⏱️ 30 seconds per move`, players);
+    nextTurn();
   };
-  send(`❌⭕ *TIC-TAC-TOE*\n\n${render()}\n\n❌ goes first. Reply with a square number.`);
-  const timeout = setTimeout(() => { if (games.has(from)) { endGame(Prince, from); send("⌛ *TIC-TAC-TOE* timed out."); } }, 5 * 60 * 1000);
-  games.set(from, { type: "tictactoe", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+  games.set(from, { type: "tictactoe", handler, joinTimeout: c.isGroup ? setTimeout(start, 30 * 1000) : null });
+  Prince.ev.on("messages.upsert", handler);
+  if (c.isGroup) send(`❌⭕ *TIC-TAC-TOE — JOIN NOW*\n\nReply *join* within 30 seconds.\n\n${render()}`);
+  else {
+    players.push(c.sender); points.set(c.sender, 0);
+    const opponent = c.quotedUser;
+    if (opponent && opponent !== c.sender) { players.push(opponent); points.set(opponent, 0); }
+    if (players.length >= 2) start();
+    else send(`❌⭕ *TIC-TAC-TOE*\n\n${render()}\n\nReply to another player's message with *.ttt* to start a private match.`);
+  }
 });
 
 gmd({ pattern: "connect4", aliases: ["connectfour", "c4"], react: "🔴", category: "games",
