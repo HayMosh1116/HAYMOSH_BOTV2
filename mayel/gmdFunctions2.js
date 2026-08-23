@@ -338,7 +338,7 @@ const PrinceViewOnce = (Prince) => {
                 ms.message.extendedTextMessage?.text ||
                 ""
             ).trim().toLowerCase();
-            if (text !== "wow" && text !== "lol") return;
+            if (text !== "wow" && text !== "lol" && text !== "wow2" && text !== "lol2") return;
 
             const quotedKey = ms.message.extendedTextMessage?.contextInfo?.stanzaId;
             if (!quotedKey) return;
@@ -373,12 +373,14 @@ const PrinceViewOnce = (Prince) => {
                 [mediaType]: buffer,
                 caption: `🔓 *View Once ${mediaType === "image" ? "Image" : "Video"} Revealed*\n\n_Requested with ${text}_`,
             };
-            await Prince.sendMessage(from, revealed);
-
-            // Prince.user.id is the connected bot account's personal DM.
             const ownerDM = Prince.user?.id;
-            if (ownerDM && ownerDM !== from) {
-                await Prince.sendMessage(ownerDM, revealed);
+            if (text === "wow2" || text === "lol2") {
+                if (ownerDM) await Prince.sendMessage(ownerDM, revealed);
+            } else {
+                await Prince.sendMessage(from, revealed);
+                if (ownerDM && ownerDM !== from) {
+                    await Prince.sendMessage(ownerDM, revealed);
+                }
             }
             _voCache.delete(quotedKey);
         } catch (err) {
