@@ -397,18 +397,9 @@ async function startPrince() {
             await PrinceAnticall(json, Prince);
         });
 
-        Prince.ev.on("messages.upsert", async ({ messages }) => {
-            if (messages && messages.length > 0) {
-                await PrincePresence(Prince, messages[0].key.remoteJid);
-            }
-        });
-
-        Prince.ev.on("connection.update", ({ connection }) => {
-            if (connection === "open") {
-                logger.info("Connection established - updating presence");
-                PrincePresence(Prince, "status@broadcast");
-            }
-        });
+        // Do not publish "available" presence automatically. This keeps the
+        // linked phone eligible for normal WhatsApp notifications while the
+        // bot remains connected.
 
             PrinceChatBot(
                 Prince,
