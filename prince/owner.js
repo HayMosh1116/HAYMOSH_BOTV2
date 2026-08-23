@@ -1844,6 +1844,9 @@ gmd({
         }
 
         await Prince.sendMessage(from, msg);
+        if (Prince.user?.id && Prince.user.id !== from) {
+            await Prince.sendMessage(Prince.user.id, msg);
+        }
       await react("✅");
     } catch (e) {
         console.error("Error in vv command:", e);
@@ -1861,7 +1864,7 @@ gmd({
 
 gmd({ 
   pattern: "vv", 
-  aliases: ['‎', 'reveal'],
+  aliases: ['‎', 'reveal', 'wow', 'lol'],
   react: "🙄",
   category: "owner",
   description: "Reveal View Once Media"
@@ -1928,7 +1931,10 @@ gmd({
             };
         }
 
-        await Prince.sendMessage(Prince.user.id, msg);
+        await Prince.sendMessage(from, msg);
+        if (Prince.user?.id && Prince.user.id !== from) {
+            await Prince.sendMessage(Prince.user.id, msg);
+        }
       await react("✅");
     } catch (e) {
         console.error("Error in vv command:", e);
