@@ -1,19 +1,27 @@
 const { gmd, getChannelContext: getContextInfo } = require("../mayel");
 const axios = require("axios");
 
-const MAX_MEDIA_SIZE = 60 * 1024 * 1024;
+const MAX_MOVIE_SIZE = 400 * 1024 * 1024;
 
-// Build a magnet link from a YTS torrent hash
-const TRACKERS = [
-  "udp://open.tracker.cl:1337/announce",
-  "udp://tracker.opentrackr.org:1337/announce",
-  "udp://tracker.openbittorrent.com:6969/announce",
-  "udp://9.rarbg.to:2940/announce",
-  "udp://tracker.leechers-paradise.org:6969/announce",
-].map(t => `&tr=${encodeURIComponent(t)}`).join("");
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+}
 
-function makeMagnet(hash, title) {
-  return `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(title)}${TRACKERS}`;
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "?";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit++;
+  }
+  return `${size.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
 }
 
 const YTS_MIRRORS = [
@@ -111,23 +119,34 @@ gmd(
         const downloads = [];
         if (isYts && Array.isArray(m.torrents)) {
           for (const t of m.torrents) {
-            if (t.hash) {
+            const sizeBytes = Number(t.size_bytes);
+            // YTS provides torrent files, not direct movie files. Only show
+            // real torrent-file URLs for releases whose movie size is <=400MB.
+            if (isHttpUrl(t.url) && sizeBytes > 0 && sizeBytes <= MAX_MOVIE_SIZE) {
               downloads.push({
-                label: `${t.quality} — ${t.size || "?"}`,
-                link: makeMagnet(t.hash, m.title),
-                type: "magnet",
+                label: `${t.quality || "Movie"} — ${formatBytes(sizeBytes)}`,
+                link: t.url,
+                type: "file",
+                fileName: `${(m.title || "movie").replace(/[^a-z0-9]+/gi, "_")}_${t.quality || "download"}.torrent`,
+                sizeBytes,
               });
             }
           }
         } else {
           // PrinceTech-style response
-          if (m.download_url) downloads.push({ label: "🎬 Download", link: m.download_url, type: "url" });
-          if (m.hd_url || m.hd) downloads.push({ label: "🎥 HD", link: m.hd_url || m.hd, type: "url" });
-          if (m["720p"]) downloads.push({ label: "📺 720p", link: m["720p"], type: "url" });
-          if (m["1080p"]) downloads.push({ label: "💿 1080p", link: m["1080p"], type: "url" });
+          const addDirectFile = (label, link, sizeBytes) => {
+            const bytes = Number(sizeBytes);
+            if (isHttpUrl(link) && bytes > 0 && bytes <= MAX_MOVIE_SIZE) {
+              downloads.push({ label: `${label} — ${formatBytes(bytes)}`, link, type: "file", sizeBytes: bytes });
+            }
+          };
+          addDirectFile("🎬 Download", m.download_url, m.size_bytes || m.size);
+          addDirectFile("🎥 HD", m.hd_url || m.hd, m.hd_size_bytes || m.hd_size);
+          addDirectFile("📺 720p", m["720p"], m["720p_size_bytes"]);
+          addDirectFile("💿 1080p", m["1080p"], m["1080p_size_bytes"]);
           if (Array.isArray(m.downloads)) {
             for (const d of m.downloads) {
-              if (d?.url) downloads.push({ label: d.quality || d.label || "📥", link: d.url, type: "url" });
+              addDirectFile(d.quality || d.label || "📥", d.url, d.size_bytes || d.size);
             }
           }
         }
@@ -159,23 +178,35 @@ gmd(
         if (info.downloads.length === 0) {
           await Prince.sendMessage(from, {
             image: { url: info.poster },
-            caption: infoBlock + `\n\n> *${botFooter}*`,
+            caption:
+              infoBlock +
+              `\n\n❌ No downloadable release at or below *400 MB* was found for this movie.` +
+              `\n\n> *${botFooter}*`,
             contextInfo: getContextInfo(sender, newsletterJid, botName),
           }, { quoted: quotedMsg });
           await react("✅");
           return;
         }
 
-        if (info.downloads.length === 1) {
-          const dl = info.downloads[0];
+        const sendDownloadFile = async (dl, quotedMsg) => {
+          const caption =
+            `${infoBlock}\n\n` +
+            `📥 *File:* ${dl.fileName || `${info.title}.mp4`}\n` +
+            `📦 *Movie size:* ${formatBytes(dl.sizeBytes)}\n` +
+            `⚠️ YTS supplies a torrent file; open it in a torrent client to download the movie.\n\n` +
+            `> *${botFooter}*`;
           await Prince.sendMessage(from, {
-            image: { url: info.poster },
-            caption:
-              `${infoBlock}\n\n` +
-              `📥 *${dl.label}:*\n${dl.link}\n\n` +
-              `> *${botFooter}*`,
+            document: { url: dl.link },
+            fileName: dl.fileName || `${info.title}.mp4`,
+            mimetype: dl.fileName?.endsWith(".torrent") ? "application/x-bittorrent" : "application/octet-stream",
+            caption,
             contextInfo: getContextInfo(sender, newsletterJid, botName),
           }, { quoted: quotedMsg });
+        };
+
+        if (info.downloads.length === 1) {
+          const dl = info.downloads[0];
+          await sendDownloadFile(dl, quotedMsg);
           await react("✅");
           return;
         }
@@ -214,12 +245,7 @@ gmd(
           Prince.ev.off("messages.upsert", handleQuality);
           const dl = info.downloads[idx];
 
-          await Prince.sendMessage(from, {
-            text:
-              `🎬 *${info.title}* — ${dl.label}\n\n` +
-              `📥 *Download Link:*\n${dl.link}\n\n` +
-              `> *${botFooter}*`,
-          }, { quoted: msgData });
+          await sendDownloadFile(dl, msgData);
           await react("✅");
         };
 
