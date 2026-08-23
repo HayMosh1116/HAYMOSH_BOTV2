@@ -345,6 +345,19 @@ gmd({
     await react("✅");
 });
 
+// ─── .fm ──────────────────────────────────────────────────────────────────────
+gmd({
+  pattern: "fm",
+  aliases: ["firdoaus", "mordhiyyah"],
+  react: "📡",
+  category: "general",
+  description: "Show FIRDOAUS & MORDHIYYAH.",
+}, async (from, Prince, conText) => {
+  const { reply, react } = conText;
+  await reply("╭───────────────◆\n│ *FIRDOAUS & MORDHIYYAH*\n╰────────────────◆");
+  await react("✅");
+});
+
 
 // ─── .save ────────────────────────────────────────────────────────────────────
 gmd({
