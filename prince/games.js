@@ -1006,6 +1006,213 @@ gmd(
   }
 );
 
+// ── EXTRA QUICK GAMES ────────────────────────────────────────────────────────
+// These games intentionally use in-memory state only; ending/restarting the
+// bot clears active rounds and never affects messages or user data.
+const EXTRA_GAME_DATA = {
+  emoji: [
+    ["🦁👑", "the lion king"], ["🕷️🧑", "spider man"], ["🚢🧊💔", "titanic"],
+    ["🧙‍♂️💍🌋", "lord of the rings"], ["🐼🥋", "kung fu panda"],
+  ],
+  whoami: [
+    ["I am a footballer known as CR7.", "cristiano ronaldo"],
+    ["I am the wizard who attends Hogwarts.", "harry potter"],
+    ["I painted the Mona Lisa.", "leonardo da vinci"],
+    ["I am the superhero from Wakanda.", "black panther"],
+    ["I am the Nigerian Afrobeats star behind 'Essence'.", "wizkid"],
+  ],
+  football: [
+    ["Who won the 2022 FIFA World Cup?", "argentina"],
+    ["How many players does one football team have on the pitch?", "11"],
+    ["Which club plays at Old Trafford?", "manchester united"],
+    ["Who is known as the Egyptian King?", "mohamed salah"],
+    ["What country hosted the 2010 FIFA World Cup?", "south africa"],
+  ],
+  riddle: [
+    ["I have keys but no locks and space but no room. What am I?", "keyboard"],
+    ["What has a face and two hands but no arms or legs?", "clock"],
+    ["What gets wetter the more it dries?", "towel"],
+    ["I speak without a mouth and hear without ears. What am I?", "echo"],
+  ],
+  truth: [
+    "What is one skill you wish you had?", "What is the funniest thing that happened to you recently?",
+    "What is your dream travel destination?", "What is one food you could eat every day?",
+  ],
+  dare: [
+    "Send a voice note singing your favorite song.", "Use only GIFs for your next three messages.",
+    "Compliment the last person who messaged.", "Change your profile picture for ten minutes.",
+  ],
+};
+
+function cleanAnswer(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function answerMatches(answer, expected) {
+  const a = cleanAnswer(answer);
+  return Array.isArray(expected)
+    ? expected.some((x) => cleanAnswer(x) === a)
+    : cleanAnswer(expected) === a;
+}
+
+function startExtraAnswerGame(from, Prince, conText, type, prompt, expected, successText) {
+  const { sender, botName, newsletterJid, mek } = conText;
+  if (games.has(from)) return conText.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+  const send = (text) => Prince.sendMessage(from, {
+    text, contextInfo: getContextInfo(sender, newsletterJid, botName),
+  }, { quoted: mek });
+  const handler = async ({ messages }) => {
+    const m = messages[0];
+    if (!m?.message || m.key.remoteJid !== from) return;
+    const answer = getText(m);
+    if (!answer || answer.startsWith(".")) return;
+    const who = senderOf(m, from).split("@")[0];
+    if (answerMatches(answer, expected)) {
+      endGame(Prince, from);
+      return send(`🎉 *${type.toUpperCase()} — Correct!*\n\n✅ @${who} ${successText}`);
+    }
+  };
+  send(`🎮 *${type.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━━━━\n${prompt}\n\n_First correct answer wins._\nType *.endgame* to stop.`);
+  const timeout = setTimeout(() => {
+    if (games.has(from)) { endGame(Prince, from); send(`⌛ *${type.toUpperCase()}* timed out.`); }
+  }, 3 * 60 * 1000);
+  games.set(from, { type, handler, timeout });
+  Prince.ev.on("messages.upsert", handler);
+}
+
+gmd({ pattern: "emoji", aliases: ["emojiguess", "guessemoji"], react: "🤔", category: "games",
+  description: "Guess the movie or phrase from emojis." }, async (from, Prince, c) => {
+  const [clue, answer] = rand(EXTRA_GAME_DATA.emoji);
+  startExtraAnswerGame(from, Prince, c, "emoji guess", `Guess the movie from: *${clue}*`, answer, "guessed it!");
+});
+
+gmd({ pattern: "whoami", aliases: ["celebrity", "identity"], react: "🕵️", category: "games",
+  description: "Guess the person from clues." }, async (from, Prince, c) => {
+  const [clue, answer] = rand(EXTRA_GAME_DATA.whoami);
+  startExtraAnswerGame(from, Prince, c, "who am I", clue, answer, "identified the person!");
+});
+
+gmd({ pattern: "footballquiz", aliases: ["football", "soccerquiz"], react: "⚽", category: "games",
+  description: "Answer a football question." }, async (from, Prince, c) => {
+  const [question, answer] = rand(EXTRA_GAME_DATA.football);
+  startExtraAnswerGame(from, Prince, c, "football quiz", question, answer, "got the football answer!");
+});
+
+gmd({ pattern: "riddle", aliases: ["daily-riddle"], react: "🧩", category: "games",
+  description: "Solve a riddle." }, async (from, Prince, c) => {
+  const [question, answer] = rand(EXTRA_GAME_DATA.riddle);
+  startExtraAnswerGame(from, Prince, c, "riddle", question, answer, "solved the riddle!");
+});
+
+gmd({ pattern: "truth", aliases: ["truthgame"], react: "🗣️", category: "games",
+  description: "Get a truth question." }, async (from, Prince, c) => {
+  const prompt = rand(EXTRA_GAME_DATA.truth);
+  await c.reply(`🗣️ *TRUTH*\n\n${prompt}\n\nAnswer honestly!`);
+});
+
+gmd({ pattern: "dare", aliases: ["daregame"], react: "😈", category: "games",
+  description: "Get a dare." }, async (from, Prince, c) => {
+  const prompt = rand(EXTRA_GAME_DATA.dare);
+  await c.reply(`😈 *DARE*\n\n${prompt}`);
+});
+
+gmd({ pattern: "unscramble", aliases: ["unscrambleword", "jumbled"], react: "🔤", category: "games",
+  description: "Unscramble a word." }, async (from, Prince, c) => {
+  const words = ["javascript", "elephant", "football", "adventure", "chocolate", "rainbow", "keyboard"];
+  const word = rand(words);
+  const clue = word.split("").sort(() => Math.random() - 0.5).join("");
+  startExtraAnswerGame(from, Prince, c, "unscramble", `Unscramble: *${clue}*`, word, "unscrambled it!");
+});
+
+gmd({ pattern: "memory", aliases: ["memorygame"], react: "🧠", category: "games",
+  description: "Remember and repeat the sequence." }, async (from, Prince, c) => {
+  const sequence = Array.from({ length: 5 }, () => rand(["🍎", "🚀", "🐼", "⚽", "🔥", "🌈"])).join("");
+  if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+  const send = (text) => Prince.sendMessage(from, { text }, { quoted: c.mek });
+  const handler = async ({ messages }) => {
+    const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
+    if (cleanAnswer(getText(m)) !== cleanAnswer(sequence)) return;
+    const who = senderOf(m, from).split("@")[0]; endGame(Prince, from);
+    return send(`🎉 *MEMORY — Correct!*\n✅ @${who} remembered the sequence!`);
+  };
+  send(`🧠 *MEMORY CHALLENGE*\n\nRemember this sequence:\n\n${sequence}\n\nIt will disappear soon. Type it back in the same order!`);
+  const timeout = setTimeout(() => { if (games.has(from)) { endGame(Prince, from); send("⌛ *MEMORY* timed out."); } }, 2 * 60 * 1000);
+  games.set(from, { type: "memory", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+});
+
+gmd({ pattern: "wouldrather", aliases: ["wyr"], react: "🤷", category: "games",
+  description: "Play Would You Rather." }, async (from, Prince, c) => {
+  const choices = [["fly or be invisible", "fly", "invisible"], ["be rich or famous", "rich", "famous"],
+    ["live by the beach or mountains", "beach", "mountains"]];
+  const [question, a, b] = rand(choices);
+  await c.reply(`🤷 *WOULD YOU RATHER?*\n\nWould you rather *${question}*?\n\nReply with *${a}* or *${b}*.`);
+});
+
+gmd({ pattern: "fastest", aliases: ["fastestfinger", "quickquiz"], react: "⚡", category: "games",
+  description: "Be the fastest player to answer." }, async (from, Prince, c) => {
+  const [question, answer] = rand(EXTRA_GAME_DATA.football);
+  startExtraAnswerGame(from, Prince, c, "fastest finger", question, answer, "was the fastest!");
+});
+
+gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
+  description: "Play tic-tac-toe by replying with a square number." }, async (from, Prince, c) => {
+  if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+  const board = Array(9).fill("⬜"); let turn = "❌";
+  const render = () => board.map((v, i) => v === "⬜" ? `${i + 1}️⃣` : v).join("");
+  const send = (text) => Prince.sendMessage(from, { text }, { quoted: c.mek });
+  const handler = async ({ messages }) => {
+    const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
+    const n = Number(getText(m)); if (!Number.isInteger(n) || n < 1 || n > 9 || board[n - 1] !== "⬜") return;
+    board[n - 1] = turn;
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const won = wins.some(([a,b,d]) => board[a] === turn && board[b] === turn && board[d] === turn);
+    if (won || !board.includes("⬜")) { endGame(Prince, from); return send(`${won ? `🎉 *${turn} wins!*` : "🤝 *Draw!*"}\n\n${render()}`); }
+    turn = turn === "❌" ? "⭕" : "❌"; return send(`${render()}\n\n${turn} turn — reply with a square number.`);
+  };
+  send(`❌⭕ *TIC-TAC-TOE*\n\n${render()}\n\n❌ goes first. Reply with a square number.`);
+  const timeout = setTimeout(() => { if (games.has(from)) { endGame(Prince, from); send("⌛ *TIC-TAC-TOE* timed out."); } }, 5 * 60 * 1000);
+  games.set(from, { type: "tictactoe", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+});
+
+gmd({ pattern: "connect4", aliases: ["connectfour", "c4"], react: "🔴", category: "games",
+  description: "Play a quick Connect Four game." }, async (from, Prince, c) => {
+  if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+  const board = Array.from({ length: 6 }, () => Array(7).fill("⚪")); let turn = "🔴";
+  const render = () => board.map((row) => row.join("")).join("\n");
+  const send = (text) => Prince.sendMessage(from, { text }, { quoted: c.mek });
+  const handler = async ({ messages }) => {
+    const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
+    const col = Number(getText(m)) - 1; if (!Number.isInteger(col) || col < 0 || col > 6) return;
+    let row = 5; while (row >= 0 && board[row][col] !== "⚪") row--; if (row < 0) return;
+    board[row][col] = turn;
+    const four = (dr, dc) => { for (let r=0;r<6;r++) for (let c2=0;c2<7;c2++) if (board[r][c2]===turn && [1,2,3].every(k => board[r+dr*k]?.[c2+dc*k]===turn)) return true; return false; };
+    if (four(0,1)||four(1,0)||four(1,1)||four(1,-1)||!board[0].includes("⚪")) { endGame(Prince, from); return send(`${four(0,1)||four(1,0)||four(1,1)||four(1,-1) ? `🎉 ${turn} wins!` : "🤝 Draw!"}\n\n${render()}`); }
+    turn = turn === "🔴" ? "🟡" : "🔴"; send(`${render()}\n\n${turn} turn — choose a column from 1 to 7.`);
+  };
+  send(`🔴🟡 *CONNECT FOUR*\n\n${render()}\n\n🔴 goes first. Choose a column from 1 to 7.`);
+  const timeout = setTimeout(() => { if (games.has(from)) { endGame(Prince, from); send("⌛ *CONNECT FOUR* timed out."); } }, 8 * 60 * 1000);
+  games.set(from, { type: "connect4", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+});
+
+gmd({ pattern: "blackjack", aliases: ["21"], react: "🃏", category: "games",
+  description: "Play a simple blackjack round against the bot." }, async (from, Prince, c) => {
+  if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+  const card = () => rand([2,3,4,5,6,7,8,9,10,10,10,10,11]);
+  let player = card() + card(), dealerVisible = card(), dealerHidden = card();
+  let dealer = dealerVisible + dealerHidden;
+  const send = (text) => Prince.sendMessage(from, { text }, { quoted: c.mek });
+  const finish = (text) => { endGame(Prince, from); return send(text); };
+  const handler = async ({ messages }) => {
+    const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
+    const action = cleanAnswer(getText(m));
+    if (action === "hit") { player += card(); if (player >= 21) return finish(`🃏 You have *${player}*. ${player === 21 ? "🎉 Blackjack!" : "💥 Bust!"}`); return send(`🃏 You have *${player}*. Reply *hit* or *stand*.`); }
+    if (action === "stand") { while (dealer < 17) dealer += card(); return finish(`🃏 You: *${player}* | Dealer: *${dealer}*\n${player > 21 || dealer > player && dealer <= 21 ? "💥 Dealer wins!" : player === dealer ? "🤝 Draw!" : "🎉 You win!"}`); }
+  };
+  send(`🃏 *BLACKJACK*\n\nYour cards total: *${player}*\nDealer shows: *${dealerVisible}*\nReply *hit* or *stand*.`);
+  const timeout = setTimeout(() => { if (games.has(from)) finish("⌛ *BLACKJACK* timed out."); }, 5 * 60 * 1000);
+  games.set(from, { type: "blackjack", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+});
+
 // ── CONTROL ─────────────────────────────────────────────────────────────────
 gmd(
   {
@@ -1047,6 +1254,18 @@ gmd(
       `🧮 *${prefix}math* — fastest correct answer wins\n` +
       `❓ *${prefix}trivia* — answer the question first\n` +
       `🔗 *${prefix}wordchain* — word chain (multiplayer)\n\n` +
+      `🤔 *${prefix}emoji* — guess the movie from emojis\n` +
+      `🕵️ *${prefix}whoami* — identify the person from clues\n` +
+      `⚽ *${prefix}footballquiz* — football knowledge quiz\n` +
+      `🧩 *${prefix}riddle* — solve a riddle\n` +
+      `🗣️ *${prefix}truth* / *${prefix}dare* — party prompts\n` +
+      `🔤 *${prefix}unscramble* — fix the jumbled word\n` +
+      `⚡ *${prefix}fastest* — fastest correct answer wins\n` +
+      `🧠 *${prefix}memory* — remember the emoji sequence\n` +
+      `🤷 *${prefix}wouldrather* — choose between two options\n` +
+      `🃏 *${prefix}blackjack* — beat the bot at 21\n` +
+      `❌ *${prefix}tictactoe* — play tic-tac-toe\n` +
+      `🔴 *${prefix}connect4* — play Connect Four\n\n` +
       `🛑 *${prefix}endgame* — stop the current game\n` +
       `━━━━━━━━━━━━━━━━━━━━━━`;
 
