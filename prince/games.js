@@ -18,8 +18,9 @@ async function isRealWord(word) {
     );
     return res.status === 200 && Array.isArray(res.data) && res.data.length > 0;
   } catch (_) {
-    // If the API fails, accept the word (don't penalise for connectivity)
-    return true;
+    // Fail closed. Accepting on API failure lets random strings such as
+    // "hahahajah" pass as valid English words.
+    return false;
   }
 }
 
