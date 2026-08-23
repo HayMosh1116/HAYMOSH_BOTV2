@@ -153,7 +153,8 @@ function PrinceChatBot(Prince, chatBot, chatBotMode, createContext, createContex
 }
 
 const PrincePresence = async (Prince, jid) => {
-    try { await Prince.sendPresenceUpdate('available', jid); } catch (e) {}
+    // Intentionally do not publish "available" automatically. This keeps
+    // companion-phone notification behavior under WhatsApp's control.
 };
 
 const PrinceAnticall = async (json, Prince) => {
