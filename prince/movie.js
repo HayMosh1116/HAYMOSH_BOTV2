@@ -124,7 +124,7 @@ gmd(
               downloads.push({
                 label: `${t.quality || "Movie"} — ${formatBytes(sizeBytes)}`,
                 link: t.url,
-                type: "file",
+                type: "torrent",
                 fileName: `${(m.title || "movie").replace(/[^a-z0-9]+/gi, "_")}_${t.quality || "download"}.torrent`,
                 sizeBytes,
               });
@@ -135,7 +135,7 @@ gmd(
           const addDirectFile = (label, link, sizeBytes) => {
             const bytes = Number(sizeBytes);
             if (isHttpUrl(link) && bytes > 0) {
-              downloads.push({ label: `${label} — ${formatBytes(bytes)}`, link, type: "file", sizeBytes: bytes });
+              downloads.push({ label: `${label} — ${formatBytes(bytes)}`, link, type: "video", fileName: `${label.replace(/[^a-z0-9]+/gi, "_")}.mp4`, sizeBytes: bytes });
             }
           };
           addDirectFile("🎬 Download", m.download_url, m.size_bytes || m.size);
@@ -191,15 +191,22 @@ gmd(
             `${infoBlock}\n\n` +
             `📥 *File:* ${dl.fileName || `${info.title}.mp4`}\n` +
             `📦 *Movie size:* ${formatBytes(dl.sizeBytes)}\n` +
-            `⚠️ YTS supplies a torrent file; open it in a torrent client to download the movie.\n\n` +
+            dl.type === "torrent"
+              ? `⚠️ This provider supplies a torrent file; open it in a torrent client to download the movie.\n\n`
+              : `🎬 *MP4 video file ready to download.*\n\n` +
             `> *${botFooter}*`;
-          await Prince.sendMessage(from, {
-            document: { url: dl.link },
-            fileName: dl.fileName || `${info.title}.mp4`,
-            mimetype: dl.fileName?.endsWith(".torrent") ? "application/x-bittorrent" : "application/octet-stream",
-            caption,
-            contextInfo: getContextInfo(sender, newsletterJid, botName),
-          }, { quoted: quotedMsg });
+          const media = dl.type === "torrent"
+            ? {
+                document: { url: dl.link },
+                fileName: dl.fileName,
+                mimetype: "application/x-bittorrent",
+              }
+            : {
+                video: { url: dl.link },
+                fileName: dl.fileName,
+                mimetype: "video/mp4",
+              };
+          await Prince.sendMessage(from, { ...media, caption, contextInfo: getContextInfo(sender, newsletterJid, botName) }, { quoted: quotedMsg });
         };
 
         // Always send the smallest available release. A release may be over
