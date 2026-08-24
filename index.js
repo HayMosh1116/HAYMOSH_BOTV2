@@ -106,7 +106,6 @@ const {
     AUTO_REPLY_STATUS: autoReplyStatus,
     STATUS_REPLY_TEXT: statusReplyText,
     AUTO_READ_MESSAGES: autoRead,
-    KEEP_PHONE_NOTIFICATIONS: keepPhoneNotifications,
     AUTO_BLOCK: autoBlock,
     AUTO_BIO: autoBio,
 } = config;
@@ -302,8 +301,12 @@ async function startPrince() {
 
                 const { key } = ms;
                 if (!key?.remoteJid) return;
-                if (key.fromMe) return;
                 if (key.remoteJid === "status@broadcast") return;
+                const isDeleteProtocol = ms.message?.protocolMessage?.type === 0;
+                // A group admin deletion can arrive as fromMe on some
+                // multi-device sessions. Process delete protocols first;
+                // ordinary messages sent by the bot are still ignored below.
+                if (key.fromMe && !isDeleteProtocol) return;
 
                 const sender =
                     key.senderPn ||
@@ -312,38 +315,45 @@ async function startPrince() {
                     key.remoteJid;
                 const senderPushName = key.pushName || ms.pushName;
 
-                if (sender === botJid || sender === botOwnerJid || key.fromMe)
+                if (!isDeleteProtocol && (sender === botJid || sender === botOwnerJid || key.fromMe))
                     return;
 
-                if (!Mayel.chats[key.remoteJid])
-                    Mayel.chats[key.remoteJid] = [];
-                Mayel.chats[key.remoteJid].push({
-                    ...ms,
-                    originalSender: sender,
-                    originalPushName: senderPushName,
-                    timestamp: Date.now(),
-                });
+                if (!isDeleteProtocol) {
+                    if (!Mayel.chats[key.remoteJid])
+                        Mayel.chats[key.remoteJid] = [];
+                    Mayel.chats[key.remoteJid].push({
+                        ...ms,
+                        originalSender: sender,
+                        originalPushName: senderPushName,
+                        timestamp: Date.now(),
+                    });
 
-                if (Mayel.chats[key.remoteJid].length > 50) {
-                    Mayel.chats[key.remoteJid] =
-                        Mayel.chats[key.remoteJid].slice(-50);
+                    if (Mayel.chats[key.remoteJid].length > 50) {
+                        Mayel.chats[key.remoteJid] =
+                            Mayel.chats[key.remoteJid].slice(-50);
+                    }
                 }
 
-                if (ms.message?.protocolMessage?.type === 0) {
-                    const deletedId = ms.message.protocolMessage.key.id;
-                    const deletedMsg = Mayel.chats[key.remoteJid].find(
+                if (isDeleteProtocol) {
+                    const deleteKey = ms.message.protocolMessage.key || {};
+                    const deletedId = deleteKey.id;
+                    const chatJid = key.remoteJid;
+                    const deletedMsg = (Mayel.chats[chatJid] || []).find(
                         (m) => m.key.id === deletedId,
                     );
                     if (!deletedMsg?.message) return;
 
                     const deleter =
-                        key.participantPn || key.participant || key.remoteJid;
+                        key.participantPn ||
+                        key.participant ||
+                        key.senderPn ||
+                        key.remoteJid;
                     const deleterPushName = key.pushName || ms.pushName;
 
                     if (deleter === botJid || deleter === botOwnerJid) return;
 
                     const activeAntiDelete = getSetting("ANTIDELETE", antiDelete);
-                    const isGroup = key.remoteJid.endsWith("@g.us");
+                    const isGroup = chatJid.endsWith("@g.us");
 
                     let shouldExecute = false;
                     const mode = String(activeAntiDelete).toLowerCase();
@@ -352,11 +362,10 @@ async function startPrince() {
                     else if (mode === "group" && isGroup) shouldExecute = true;
 
                     if (shouldExecute) {
-                        const isGroup = key.remoteJid.endsWith("@g.us");
                         let groupName = "";
                         if (isGroup) {
                             try {
-                                const metadata = await Prince.groupMetadata(key.remoteJid);
+                                const metadata = await Prince.groupMetadata(chatJid);
                                 groupName = metadata.subject;
                             } catch (e) {}
                         }
@@ -373,9 +382,9 @@ async function startPrince() {
                         );
                     }
 
-                    Mayel.chats[key.remoteJid] = Mayel.chats[
-                        key.remoteJid
-                    ].filter((m) => m.key.id !== deletedId);
+                    Mayel.chats[chatJid] = Mayel.chats[chatJid].filter(
+                        (m) => m.key.id !== deletedId,
+                    );
                 }
             } catch (error) {
                 logger.error("Anti-delete system error:", error);
@@ -740,9 +749,6 @@ async function startPrince() {
             const activeAutoRead = String(
                 getSetting("AUTO_READ_MESSAGES", config.AUTO_READ_MESSAGES || "false"),
             ).toLowerCase();
-            const protectPhoneNotifications = String(
-                getSetting("KEEP_PHONE_NOTIFICATIONS", keepPhoneNotifications || "true"),
-            ).toLowerCase() !== "false";
             const isGroupMessage = from.endsWith("@g.us");
             const shouldRead =
                 activeAutoRead === "true" ||
@@ -751,14 +757,8 @@ async function startPrince() {
                 (activeAutoRead === "dm" && !isGroupMessage) ||
                 (activeAutoRead === "groups" && isGroupMessage) ||
                 (activeAutoRead === "commands" && isCommand);
-            if (
-                !protectPhoneNotifications &&
-                shouldRead &&
-                activeAutoRead !== "false" &&
-                activeAutoRead !== "off"
-            ) {
+            if (shouldRead && activeAutoRead !== "false" && activeAutoRead !== "off")
                 await Prince.readMessages([ms.key]);
-            }
 
             // ============ ANTI-GROUP MENTION SYSTEM ============
             const antiMentionSetting = getGroupSetting(from, 'STATUS_MENTION', 'false').toLowerCase();
