@@ -186,15 +186,18 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
         const isGroup = from.endsWith('@g.us');
         const msgType = getContentType(deletedMsg.message);
         
-        let text = `*🛡️ HAYMOSH_MDX ANTIDELETE*\n\n`;
-        text += `*From:* @${sender.split('@')[0]}\n`;
-        text += `*Chat:* ${isGroup ? 'Group' : 'Private'}\n`;
-        if (isGroup) text += `*Group Name:* ${deletedMsg.groupName || 'Unknown'}\n`;
-        text += `*Time:* ${new Date(deletedMsg.timestamp).toLocaleString()}\n\n`;
-        text += `*Message Content:* \n`;
+        const sentBy = senderPushName || sender.split('@')[0];
+        const deletedBy = deleterPushName || deleter.split('@')[0];
+        let text = `🚫 *MESSAGE DELETED*\n\n`;
+        text += isGroup
+            ? `👥 *Group:* ${deletedMsg.groupName || 'Unknown'} *(CONFIRMED)*\n`
+            : `👤 *Chat:* Private DM\n`;
+        text += `📝 *Sent by:* @${sender.split('@')[0]}${sentBy ? ` (${sentBy})` : ''}\n`;
+        text += `🗑️ *Deleted by:* @${deleter.split('@')[0]}${deletedBy ? ` (${deletedBy})` : ''}\n\n`;
+        text += `🔒 *Message:*\n`;
 
         const contextInfo = {
-            mentionedJid: [sender],
+            mentionedJid: [sender, deleter],
             forwardingScore: 999,
             isForwarded: true
         };
@@ -202,10 +205,10 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
         if (msgType === 'conversation' || msgType === 'extendedTextMessage') {
             const body = deletedMsg.message.conversation || deletedMsg.message.extendedTextMessage?.text;
             text += `_${body}_`;
-            await Prince.sendMessage(botOwnerJid, { text, mentions: [sender], contextInfo });
+            await Prince.sendMessage(botOwnerJid, { text, mentions: [sender, deleter], contextInfo });
         } else {
             text += `_Sent a ${msgType.replace('Message', '')}_`;
-            await Prince.sendMessage(botOwnerJid, { text, mentions: [sender], contextInfo });
+            await Prince.sendMessage(botOwnerJid, { text, mentions: [sender, deleter], contextInfo });
             
             // Fixed: Use sendMessage with forward instead of non-existent copyNForward
             await Prince.sendMessage(botOwnerJid, { forward: deletedMsg }, { contextInfo });
@@ -331,7 +334,21 @@ const PrinceViewOnce = (Prince) => {
     Prince.ev.on("messages.upsert", async ({ messages }) => {
         try {
             const ms = messages[0];
-            if (!ms?.message || !ms.key.fromMe) return;
+            if (!ms?.message) return;
+
+            // Messages typed on the linked phone are not consistently marked
+            // fromMe by every WhatsApp multi-device session. Check the
+            // connected account and configured owner number as a fallback.
+            const normalize = (jid) => String(jid || "").split("@")[0].replace(/\D/g, "");
+            const ownerNumber = normalize(config.OWNER_NUMBER);
+            const connectedNumber = normalize(Prince.user?.id);
+            const messageSender = normalize(
+                ms.key.participantPn || ms.key.participant || ms.key.remoteJid,
+            );
+            const isOwner = ms.key.fromMe === true ||
+                (ownerNumber && messageSender === ownerNumber) ||
+                (connectedNumber && messageSender === connectedNumber);
+            if (!isOwner) return;
 
             const text = (
                 ms.message.conversation ||
@@ -340,9 +357,21 @@ const PrinceViewOnce = (Prince) => {
             ).trim().toLowerCase();
             if (text !== "wow" && text !== "lol" && text !== "wow2" && text !== "lol2") return;
 
-            const quotedKey = ms.message.extendedTextMessage?.contextInfo?.stanzaId;
+            const quotedContext = ms.message.extendedTextMessage?.contextInfo;
+            const quotedKey = quotedContext?.stanzaId;
             if (!quotedKey) return;
-            const cached = _voCache.get(quotedKey);
+            const cached = _voCache.get(quotedKey) || (
+                quotedContext.quotedMessage
+                    ? {
+                        voMsg: quotedContext.quotedMessage.viewOnceMessage?.message ||
+                            quotedContext.quotedMessage.viewOnceMessageV2?.message ||
+                            quotedContext.quotedMessage.viewOnceMessageV2Extension?.message ||
+                            quotedContext.quotedMessage,
+                        from: ms.key.remoteJid,
+                        key: { participant: quotedContext.participant },
+                    }
+                    : null
+            );
             if (!cached) return;
 
             const { voMsg, from, key } = cached;
