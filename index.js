@@ -52,6 +52,7 @@ const {
     createContext,
     createContext2,
     getContextInfo,
+    normalizeMentionedContent,
     PrinceStatusMention,
     verifyJidState,
     PrincePresence,
@@ -207,6 +208,18 @@ async function startPrince() {
         };
 
         Prince = princeConnect(princeSock);
+
+        // Normalize every outgoing mention at the socket boundary. This keeps
+        // the actual JID for WhatsApp notifications while replacing raw ids in
+        // visible text with the profile name WhatsApp provides.
+        const rawSendMessage = Prince.sendMessage.bind(Prince);
+        Prince.sendMessage = async (remoteJid, content, options) => {
+            const normalizedContent = await normalizeMentionedContent(remoteJid, content, {
+                Prince,
+                store,
+            });
+            return rawSendMessage(remoteJid, normalizedContent, options);
+        };
 
         store.bind(Prince.ev);
 
@@ -414,8 +427,8 @@ async function startPrince() {
 
             PrinceChatBot(
                 Prince,
-                chatBot,
-                chatBotMode,
+                getSetting("CHATBOT", chatBot),
+                getSetting("CHATBOT_MODE", chatBotMode),
                 createContext,
                 createContext2,
                 googleTTS,
@@ -619,6 +632,15 @@ async function startPrince() {
                 null;
             const type = getContentType(ms.message);
             const pushName = ms.pushName || "Prince-Md User";
+            if (store?.contacts && sender && pushName !== "Prince-Md User") {
+                const existingContact = store.contacts.get(sender) || {};
+                store.contacts.set(sender, {
+                    ...existingContact,
+                    id: sender,
+                    notify: pushName,
+                    pushName,
+                });
+            }
             const quoted =
                 type == "extendedTextMessage" &&
                 ms.message.extendedTextMessage.contextInfo != null
