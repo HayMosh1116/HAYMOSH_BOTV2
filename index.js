@@ -493,8 +493,9 @@ async function startPrince() {
                     }
 
                     if (getSetting("AUTO_LIKE_STATUS", autoLikeStatus) === "true" && mek.key.participant) {
-                        const emojis =
-                            statusLikeEmojis?.split(",") || "💛,❤️,💜,🤍,💙";
+                        const emojis = String(
+                            getSetting("STATUS_LIKE_EMOJIS", statusLikeEmojis || "💛,❤️,💜,🤍,💙"),
+                        ).split(",").filter(Boolean);
                         const randomEmoji =
                             emojis[Math.floor(Math.random() * emojis.length)];
                         await Prince.sendMessage(
@@ -518,8 +519,10 @@ async function startPrince() {
                         ).toLowerCase() === "true"
                     ) {
                         if (mek.key.fromMe) return;
-                        const customMessage =
-                            statusReplyText || "✅ Status Viewed By Prince-Md";
+                        const customMessage = getSetting(
+                            "STATUS_REPLY_TEXT",
+                            statusReplyText || "✅ Status Viewed By Prince-Md",
+                        );
                         await Prince.sendMessage(
                             fromJid,
                             { text: customMessage },
