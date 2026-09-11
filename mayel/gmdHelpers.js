@@ -133,8 +133,8 @@ function replaceMentionToken(value, jid, displayName) {
     let result = value;
     const variants = mentionJidVariants(jid).sort((a, b) => b.length - a.length);
     for (const variant of variants) {
-        const escaped = variant.replace(/[\^$.*+?()[\]{}|]/g, "\\
-module.exports = {");
+        const specialCharacters = new Set(["\\", "^", "$", ".", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|"]);
+        const escaped = [...variant].map((character) => specialCharacters.has(character) ? "\\" + character : character).join("");
         const pattern = variant.includes("@")
             ? new RegExp("@" + escaped, "gi")
             : new RegExp("@" + escaped + "(?!\\d)", "g");
