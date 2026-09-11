@@ -106,6 +106,7 @@ const {
     AUTO_REPLY_STATUS: autoReplyStatus,
     STATUS_REPLY_TEXT: statusReplyText,
     AUTO_READ_MESSAGES: autoRead,
+    KEEP_PHONE_NOTIFICATIONS: keepPhoneNotifications,
     AUTO_BLOCK: autoBlock,
     AUTO_BIO: autoBio,
 } = config;
@@ -749,6 +750,9 @@ async function startPrince() {
             const activeAutoRead = String(
                 getSetting("AUTO_READ_MESSAGES", config.AUTO_READ_MESSAGES || "false"),
             ).toLowerCase();
+            const protectPhoneNotifications = String(
+                getSetting("KEEP_PHONE_NOTIFICATIONS", keepPhoneNotifications || "true"),
+            ).toLowerCase() !== "false";
             const isGroupMessage = from.endsWith("@g.us");
             const shouldRead =
                 activeAutoRead === "true" ||
@@ -757,8 +761,14 @@ async function startPrince() {
                 (activeAutoRead === "dm" && !isGroupMessage) ||
                 (activeAutoRead === "groups" && isGroupMessage) ||
                 (activeAutoRead === "commands" && isCommand);
-            if (shouldRead && activeAutoRead !== "false" && activeAutoRead !== "off")
+            if (
+                !protectPhoneNotifications &&
+                shouldRead &&
+                activeAutoRead !== "false" &&
+                activeAutoRead !== "off"
+            ) {
                 await Prince.readMessages([ms.key]);
+            }
 
             // ============ ANTI-GROUP MENTION SYSTEM ============
             const antiMentionSetting = getGroupSetting(from, 'STATUS_MENTION', 'false').toLowerCase();
