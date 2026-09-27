@@ -4,7 +4,7 @@ const path = require("path");
 module.exports = { 
     // Online database link (MongoDB Atlas). Keeps settings safe across restarts.
     // Paste your link between the quotes. Keep this GitHub repo PRIVATE.
-    MONGODB_URI: process.env.MONGODB_URI || '',
+    MONGODB_URI: process.env.MONGODB_URI || 'mongodb+srv://ibrahimfridaous11_db_user:tyDfbglBg45FLzTt@haywhyv5.db9i2bt.mongodb.net/?appName=HAYWHYV5',
     SESSION_ID: process.env.SESSION_ID || '',
     PREFIX: process.env.PREFIX || ".",
     OWNER_NAME: process.env.OWNER_NAME || "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩ ",
