@@ -327,6 +327,24 @@ gmd({
   const input = (q || '').trim().toLowerCase();
   const validModes = ['chat', 'group', 'all', 'off'];
 
+  // Per-group toggle: ".antidelete on" / ".antidelete off" inside a group.
+  // Stored per group in the database, so Group A never affects Group B and
+  // the state survives reconnects/restarts. ".antidelete default" removes
+  // the override and falls back to the global mode.
+  if (from.endsWith('@g.us') && ['on', 'off', 'default'].includes(input)) {
+    const { getGroupSetting, setGroupSetting } = conText;
+    if (input === 'default') {
+      require('../mayel/gmdSudoUtil').deleteGroupSetting(from, 'ANTIDELETE');
+      await react("✅");
+      return reply(`✅ Antidelete for this group now follows the global mode (*${currentMode.toUpperCase()}*).`);
+    }
+    const cur = String(getGroupSetting(from, 'ANTIDELETE', '') || '').toLowerCase();
+    if (cur === input) return reply(`⚠️ Antidelete is already *${input.toUpperCase()}* in this group.`);
+    setGroupSetting(from, 'ANTIDELETE', input);
+    await react("✅");
+    return reply(`✅ *Antidelete ${input.toUpperCase()}* for this group.`);
+  }
+
   if (!input || !validModes.includes(input)) {
     const statusText = `*𝐏𝐑𝐈𝐍𝐂𝐄 𝐌𝐃𝐗 𝐀𝐍𝐓𝐈𝐃𝐄𝐋𝐄𝐓𝐄 𝐒𝐄𝐓𝐓𝐈𝐍𝐆𝐒*
 
@@ -341,6 +359,7 @@ Reply With:
 
 _Or use directly:_
 *.antidelete chat/group/all/off*
+_In a group:_ *.antidelete on/off/default*
 
 ╭────────────────◆  
 │ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘɪɴᴄᴇ ᴛᴇᴄʜ  

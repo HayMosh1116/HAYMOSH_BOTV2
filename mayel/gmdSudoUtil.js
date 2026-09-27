@@ -6,6 +6,7 @@ const dbPath = path.join(__dirname, "prince.db");
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
+require('./cloudSync').watch(db);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS sudo_users (

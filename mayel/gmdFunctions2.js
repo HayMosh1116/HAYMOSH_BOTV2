@@ -2,7 +2,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const { pipeline } = require("stream/promises");
 const config = require("../config");
-const { createContext } = require("./gmdHelpers");
+const { createContext, toMentionJid, mentionTag } = require("./gmdHelpers");
 const { getSetting, addWarning, resetWarnings } = require("./gmdSudoUtil");
 const logger = require("prince-baileys/lib/Utils/logger").default.child({});
 const { isJidGroup, downloadMediaMessage, getContentType } = require("prince-baileys");
@@ -186,18 +186,19 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
         const isGroup = from.endsWith('@g.us');
         const msgType = getContentType(deletedMsg.message);
         
-        const sentBy = senderPushName || sender.split('@')[0];
-        const deletedBy = deleterPushName || deleter.split('@')[0];
+        const senderJid = toMentionJid(sender);
+        const deleterJid = toMentionJid(deleter);
+        const mentions = [...new Set([senderJid, deleterJid].filter(Boolean))];
         let text = `🚫 *MESSAGE DELETED*\n\n`;
         text += isGroup
-            ? `👥 *Group:* ${deletedMsg.groupName || 'Unknown'} *(CONFIRMED)*\n`
+            ? `👥 *Group:* ${deletedMsg.groupName || 'Unknown'}\n`
             : `👤 *Chat:* Private DM\n`;
-        text += `📝 *Sent by:* @${sender.split('@')[0]}${sentBy ? ` (${sentBy})` : ''}\n`;
-        text += `🗑️ *Deleted by:* @${deleter.split('@')[0]}${deletedBy ? ` (${deletedBy})` : ''}\n\n`;
+        text += `📝 *Sent By:* ${mentionTag(senderJid)}\n`;
+        text += `🗑️ *Deleted By:* ${mentionTag(deleterJid)}\n\n`;
         text += `🔒 *Message:*\n`;
 
         const contextInfo = {
-            mentionedJid: [sender, deleter],
+            mentionedJid: mentions,
             forwardingScore: 999,
             isForwarded: true
         };
@@ -205,10 +206,10 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
         if (msgType === 'conversation' || msgType === 'extendedTextMessage') {
             const body = deletedMsg.message.conversation || deletedMsg.message.extendedTextMessage?.text;
             text += `_${body}_`;
-            await Prince.sendMessage(botOwnerJid, { text, mentions: [sender, deleter], contextInfo });
+            await Prince.sendMessage(botOwnerJid, { text, mentions, contextInfo });
         } else {
             text += `_Sent a ${msgType.replace('Message', '')}_`;
-            await Prince.sendMessage(botOwnerJid, { text, mentions: [sender, deleter], contextInfo });
+            await Prince.sendMessage(botOwnerJid, { text, mentions, contextInfo });
             
             // Fixed: Use sendMessage with forward instead of non-existent copyNForward
             await Prince.sendMessage(botOwnerJid, { forward: deletedMsg }, { contextInfo });

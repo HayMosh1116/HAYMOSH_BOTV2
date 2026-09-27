@@ -1,4 +1,4 @@
-const { gmd, getContextInfo, getGroupSetting, setGroupSetting } = require("../mayel");
+const { gmd, getContextInfo, getGroupSetting, setGroupSetting, toMentionJid, mentionTag } = require("../mayel");
 
 gmd(
   {
@@ -249,7 +249,7 @@ gmd(
 
     const targetId = participant.id;
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
-    const displayJid = targetNum + "@s.whatsapp.net";
+    const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
 
     const ownerJid = (conText.ownerNumber || "").replace(/\D/g, '');
     const botJidNum = (Prince.user?.id || "").split(":")[0];
@@ -259,13 +259,13 @@ gmd(
     }
 
     if (participant.admin === "superadmin") {
-      return reply(`❌ @${targetNum} is the group owner and cannot be demoted.`, {
+      return reply(`❌ ${mentionTag(displayJid)} is the group owner and cannot be demoted.`, {
         mentions: [displayJid],
       });
     }
 
     if (!participant.admin) {
-      return reply(`❌ @${targetNum} is not an admin.`, {
+      return reply(`❌ ${mentionTag(displayJid)} is not an admin.`, {
         mentions: [displayJid],
       });
     }
@@ -273,7 +273,7 @@ gmd(
     try {
       await Prince.groupParticipantsUpdate(from, [targetId], "demote");
       await react("✅");
-      await reply(`👑 @${targetNum} is no longer an admin.`, {
+      await reply(`👑 ${mentionTag(displayJid)} is no longer an admin.`, {
         mentions: [displayJid],
       });
     } catch (error) {
@@ -354,16 +354,16 @@ gmd(
 
     const targetId = participant.id;
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
-    const displayJid = targetNum + "@s.whatsapp.net";
+    const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
 
     if (participant.admin === "superadmin") {
-      return reply(`❌ @${targetNum} is the group owner and is already an admin.`, {
+      return reply(`❌ ${mentionTag(displayJid)} is the group owner and is already an admin.`, {
         mentions: [displayJid],
       });
     }
 
     if (participant.admin === "admin") {
-      return reply(`❌ @${targetNum} is already an admin.`, {
+      return reply(`❌ ${mentionTag(displayJid)} is already an admin.`, {
         mentions: [displayJid],
       });
     }
@@ -371,7 +371,7 @@ gmd(
     try {
       await Prince.groupParticipantsUpdate(from, [targetId], "promote");
       await react("✅");
-      await reply(`👑 @${targetNum} is now an admin.`, {
+      await reply(`👑 ${mentionTag(displayJid)} is now an admin.`, {
         mentions: [displayJid],
       });
     } catch (error) {
@@ -453,7 +453,7 @@ gmd(
 
     const targetId = participant.id;
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
-    const displayJid = targetNum + "@s.whatsapp.net";
+    const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
 
     const sudoNums = superUser.map(u => u.split("@")[0]);
     if (sudoNums.includes(targetNum)) {
@@ -469,7 +469,7 @@ gmd(
 
     if (participant.admin === "superadmin") {
       await react("❌");
-      return reply(`❌ @${targetNum} is the group owner and cannot be kicked.`, {
+      return reply(`❌ ${mentionTag(displayJid)} is the group owner and cannot be kicked.`, {
         mentions: [displayJid],
       });
     }
@@ -477,7 +477,7 @@ gmd(
     try {
       await Prince.groupParticipantsUpdate(from, [targetId], "remove");
       await react("✅");
-      await reply(`🚫 @${targetNum} has been removed from the group.`, {
+      await reply(`🚫 ${mentionTag(displayJid)} has been removed from the group.`, {
         mentions: [displayJid],
       });
     } catch (error) {

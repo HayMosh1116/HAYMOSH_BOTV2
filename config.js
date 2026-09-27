@@ -2,6 +2,9 @@ const fs = require('fs-extra');
 const path = require("path");
 
 module.exports = { 
+    // Online database link (MongoDB Atlas). Keeps settings safe across restarts.
+    // Paste your link between the quotes. Keep this GitHub repo PRIVATE.
+    MONGODB_URI: process.env.MONGODB_URI || '',
     SESSION_ID: process.env.SESSION_ID || '',
     PREFIX: process.env.PREFIX || ".",
     OWNER_NAME: process.env.OWNER_NAME || "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩ ",

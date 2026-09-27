@@ -366,14 +366,23 @@ async function startPrince() {
 
                     if (deleter === botJid || deleter === botOwnerJid) return;
 
-                    const activeAntiDelete = getSetting("ANTIDELETE", antiDelete);
                     const isGroup = chatJid.endsWith("@g.us");
-
+                    // Per-group override (.antidelete on/off inside a group)
+                    // wins; otherwise fall back to the global mode. Both are
+                    // read from the database on every event, so they survive
+                    // reconnects and restarts.
+                    const groupOverride = isGroup
+                        ? String(getGroupSetting(chatJid, "ANTIDELETE", "") || "").toLowerCase()
+                        : "";
                     let shouldExecute = false;
-                    const mode = String(activeAntiDelete).toLowerCase();
-                    if (mode === "all") shouldExecute = true;
-                    else if (mode === "chat" && !isGroup) shouldExecute = true;
-                    else if (mode === "group" && isGroup) shouldExecute = true;
+                    if (groupOverride === "on") shouldExecute = true;
+                    else if (groupOverride === "off") shouldExecute = false;
+                    else {
+                        const mode = String(getSetting("ANTIDELETE", antiDelete)).toLowerCase();
+                        if (mode === "all") shouldExecute = true;
+                        else if (mode === "chat" && !isGroup) shouldExecute = true;
+                        else if (mode === "group" && isGroup) shouldExecute = true;
+                    }
 
                     if (shouldExecute) {
                         let groupName = "";
@@ -904,12 +913,13 @@ async function startPrince() {
                     }
 
                     try {
-                        const reply = (teks) => {
-                            Prince.sendMessage(
-                                from,
-                                { text: teks },
-                                { quoted: ms },
-                            );
+                        // reply(text, { mentions: [jid] }) — mentions were previously
+                        // dropped here, which is why many commands showed raw numbers.
+                        const reply = (teks, opts = {}) => {
+                            const content = { text: teks };
+                            if (Array.isArray(opts.mentions) && opts.mentions.length)
+                                content.mentions = opts.mentions;
+                            return Prince.sendMessage(from, content, { quoted: ms });
                         };
                         /*const reply = async (text, options = {}) => {
                             if (typeof text !== 'string') return;
@@ -1516,7 +1526,8 @@ async function reconnectWithRetry() {
     }, delay);
 }
 
-setTimeout(() => {
+setTimeout(async () => {
+    try { await require("./mayel/cloudSync").restore(require("./mayel/gmdSudoUtil").db); } catch (e) { console.error("[CLOUD]", e.message); }
     startPrince().catch((err) => {
         console.error("Initialization error:", err);
         reconnectWithRetry();

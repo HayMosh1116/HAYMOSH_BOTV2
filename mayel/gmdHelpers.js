@@ -61,106 +61,126 @@ const getChannelContext = () => ({
 });
 
 // ---------------------------------------------------------------------------
-// Global WhatsApp mention normalizer
-// Commands may build mention text from a JID, a phone number, or a participant
-// id. Baileys still needs the real JID in mentions/mentionedJid for the
-// notification to work, but the visible text should use the WhatsApp name.
-// This normalizer is applied at the socket boundary so new commands inherit it.
+// GLOBAL WHATSAPP MENTION HELPER
+// WhatsApp only renders a real (blue, tappable) mention when BOTH are true:
+//   1. the visible text contains "@<user>" where <user> is the JID user part
+//   2. the exact same JID is listed in mentions / contextInfo.mentionedJid
+// If either side is missing or they disagree (phone vs LID, device suffix
+// ":12", double "@s.whatsapp.net"), WhatsApp prints the raw number instead.
+// Every outgoing message passes through normalizeMentionedContent (wired at
+// the socket boundary in index.js), so all commands inherit correct mentions.
 // ---------------------------------------------------------------------------
-const mentionGroupCache = new Map();
+const mentionGroupCache = new Map(); // short-lived metadata cache only (not settings)
 const MENTION_GROUP_CACHE_TTL = 5 * 60 * 1000;
 
-function canonicalMentionJid(value) {
+/** Normalize anything (jid, "234..", "234..:5@s.whatsapp.net", "x@lid") to a clean JID. */
+function toMentionJid(value) {
     if (!value) return "";
-    return String(value).trim();
-}
-
-function mentionJidVariants(jid) {
-    const value = canonicalMentionJid(jid);
-    if (!value) return [];
-    const [user] = value.split("@");
-    const base = user.split(":")[0];
-    return [...new Set([value, base + "@s.whatsapp.net", base + "@c.us", base])];
-}
-
-function cleanMentionName(value) {
-    if (value === undefined || value === null) return null;
-    const name = String(value).replace(/\s+/g, " ").trim().replace(/^@+/, "");
-    if (!name) return null;
-    if (/^(?:\d{5,}|\d+:\d+|[^\s@]+@[^\s@]+)$/.test(name)) return null;
-    return name;
-}
-
-function readMentionName(record) {
-    if (!record) return null;
-    for (const candidate of [record.notify, record.pushName, record.name, record.verifiedName, record.vname]) {
-        const name = cleanMentionName(candidate);
-        if (name) return name;
+    let v = String(value).trim().replace(/^@+/, "");
+    if (!v) return "";
+    let [user, server] = v.split("@");
+    user = (user || "").split(":")[0];
+    if (!server) {
+        user = user.replace(/\D/g, "");
+        if (!user) return "";
+        return user + "@s.whatsapp.net";
     }
-    return null;
+    server = server.toLowerCase();
+    if (server === "c.us") server = "s.whatsapp.net";
+    return user + "@" + server;
+}
+
+/** Visible token for a JID: "@2348012345678" (or "@<lid>" for LID users). */
+function mentionTag(jid) {
+    const clean = toMentionJid(jid);
+    return clean ? "@" + clean.split("@")[0] : "@member";
+}
+
+/** Build { text, mentions } from a template. Usage: buildMention`Hi ${jid}` is not needed — use tag(). */
+function withMentions(text, jids = []) {
+    const mentions = [...new Set((jids || []).map(toMentionJid).filter(Boolean))];
+    return { text, mentions };
+}
+
+async function getGroupMeta(remoteJid, Prince) {
+    if (!remoteJid?.endsWith("@g.us") || !Prince?.groupMetadata) return null;
+    let cached = mentionGroupCache.get(remoteJid);
+    if (!cached || Date.now() - cached.loadedAt > MENTION_GROUP_CACHE_TTL) {
+        try {
+            cached = { loadedAt: Date.now(), group: await Prince.groupMetadata(remoteJid) };
+            mentionGroupCache.set(remoteJid, cached);
+        } catch (_) {
+            return null;
+        }
+    }
+    return cached.group;
+}
+
+function participantIds(p) {
+    return [p.id, p.pn, p.lid, p.phoneNumber, p.jid].filter(Boolean).map(toMentionJid);
 }
 
 async function getMentionName(remoteJid, jid, { Prince, store } = {}) {
-    const variants = mentionJidVariants(jid);
-    if (!variants.length) return "member";
-    for (const variant of variants) {
-        const record = store?.contacts?.get?.(variant);
-        const name = readMentionName(record);
-        if (name) return name;
-    }
-    if (remoteJid?.endsWith("@g.us") && Prince?.groupMetadata) {
-        let metadata = mentionGroupCache.get(remoteJid);
-        if (!metadata || Date.now() - metadata.loadedAt > MENTION_GROUP_CACHE_TTL) {
-            try {
-                metadata = { loadedAt: Date.now(), group: await Prince.groupMetadata(remoteJid) };
-                mentionGroupCache.set(remoteJid, metadata);
-            } catch (_) {
-                metadata = null;
-            }
-        }
-        const participant = metadata?.group?.participants?.find((entry) => {
-            const ids = [entry.id, entry.pn, entry.lid, entry.phoneNumber].filter(Boolean);
-            return ids.some((id) => variants.includes(String(id)) || variants.includes(String(id).split("@")[0]));
-        });
-        const name = readMentionName(participant);
-        if (name) return name;
-    }
-    return "member";
+    const clean = toMentionJid(jid);
+    if (!clean) return "member";
+    const rec = store?.contacts?.get?.(clean);
+    const n = rec && (rec.notify || rec.name || rec.verifiedName);
+    if (n && !/^\d+$/.test(n)) return String(n);
+    const meta = await getGroupMeta(remoteJid, Prince);
+    const p = meta?.participants?.find((x) => participantIds(x).includes(clean));
+    if (p && (p.notify || p.name)) return String(p.notify || p.name);
+    return clean.split("@")[0];
 }
 
-function replaceMentionToken(value, jid, displayName) {
-    if (typeof value !== "string") return value;
-    let result = value;
-    const variants = mentionJidVariants(jid).sort((a, b) => b.length - a.length);
-    for (const variant of variants) {
-        const specialCharacters = new Set(["\\", "^", "$", ".", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|"]);
-        const escaped = [...variant].map((character) => specialCharacters.has(character) ? "\\" + character : character).join("");
-        const pattern = variant.includes("@")
-            ? new RegExp("@" + escaped, "gi")
-            : new RegExp("@" + escaped + "(?!\\d)", "g");
-        result = result.replace(pattern, "@" + displayName);
-    }
-    return result;
-}
-
+/**
+ * Makes text tokens and mentionedJid agree:
+ *  - cleans every mentioned JID (device suffix, c.us, bare numbers)
+ *  - if text has "@<phone>" but the listed JID is that user's LID (or vice
+ *    versa), rewrites the token to match the JID actually listed
+ *  - any "@<digits>" token in the text with no JID listed gets its JID added
+ *    (resolved against group participants so LID users work), so commands
+ *    that forgot `mentions` still produce real mentions.
+ */
 async function normalizeMentionedContent(remoteJid, content, options = {}) {
     if (!content || typeof content !== "object") return content;
-    const contextInfo = content.contextInfo || {};
-    const mentioned = [...new Set([
+    const field = typeof content.text === "string" ? "text" : typeof content.caption === "string" ? "caption" : null;
+    const ctx = content.contextInfo || {};
+    let mentioned = [
         ...(Array.isArray(content.mentions) ? content.mentions : []),
-        ...(Array.isArray(contextInfo.mentionedJid) ? contextInfo.mentionedJid : []),
-    ].filter(Boolean).map(canonicalMentionJid))];
-    if (!mentioned.length) return content;
-    const normalized = { ...content };
-    for (const jid of mentioned) {
-        const name = await getMentionName(remoteJid, jid, options);
-        if (typeof normalized.text === "string") normalized.text = replaceMentionToken(normalized.text, jid, name);
-        if (typeof normalized.caption === "string") normalized.caption = replaceMentionToken(normalized.caption, jid, name);
+        ...(Array.isArray(ctx.mentionedJid) ? ctx.mentionedJid : []),
+    ].map(toMentionJid).filter(Boolean);
+    const text = field ? content[field] : "";
+    const tokens = field ? [...text.matchAll(/@(\d{6,})/g)].map((m) => m[1]) : [];
+    if (!mentioned.length && !tokens.length) return content;
+
+    const meta = tokens.length || mentioned.length ? await getGroupMeta(remoteJid, options.Prince) : null;
+    const parts = meta?.participants || [];
+    let newText = text;
+
+    // Tokens without a matching mentioned JID
+    for (const digits of [...new Set(tokens)]) {
+        if (mentioned.some((j) => j.split("@")[0] === digits)) continue;
+        const p = parts.find((x) => participantIds(x).some((id) => id.split("@")[0] === digits));
+        if (p) {
+            const ids = participantIds(p);
+            const listed = mentioned.find((j) => ids.includes(j));
+            if (listed) {
+                // Token uses phone but JID listed is LID (or reverse): align token
+                newText = newText.replace(new RegExp("@" + digits + "(?!\\d)", "g"), mentionTag(listed));
+            } else {
+                mentioned.push(toMentionJid(p.id));
+                const idUser = toMentionJid(p.id).split("@")[0];
+                if (idUser !== digits) newText = newText.replace(new RegExp("@" + digits + "(?!\\d)", "g"), "@" + idUser);
+            }
+        } else if (digits.length <= 15) {
+            mentioned.push(digits + "@s.whatsapp.net");
+        }
     }
-    normalized.mentions = mentioned;
-    if (Object.prototype.hasOwnProperty.call(content, "contextInfo")) {
-        normalized.contextInfo = { ...contextInfo, mentionedJid: mentioned };
-    }
+    // Mentioned JIDs with no token in text: nothing to rewrite (WhatsApp ignores them)
+    mentioned = [...new Set(mentioned)];
+    const normalized = { ...content, mentions: mentioned };
+    if (field) normalized[field] = newText;
+    if (content.contextInfo) normalized.contextInfo = { ...ctx, mentionedJid: mentioned };
     return normalized;
 }
 module.exports = {
@@ -170,4 +190,7 @@ module.exports = {
     getChannelContext,
     normalizeMentionedContent,
     getMentionName,
+    toMentionJid,
+    mentionTag,
+    withMentions,
 };

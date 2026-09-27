@@ -6,20 +6,40 @@
  * Control: .games (menu), .endgame (stop the current chat's game)
  */
 
-const { gmd, getContextInfo } = require("../mayel");
+const { gmd, getContextInfo, mentionTag } = require("../mayel");
 const axios = require("axios");
 
-// Dictionary API validation — rejects gibberish words
+// Word validation for Word Chain.
+// Root cause of valid words being rejected: validation relied only on
+// dictionaryapi.dev, which returns 404 for many normal inflections
+// ("running", "cats", "played") and fails on timeouts/rate limits — and a
+// failure was treated as "not a word". Now an offline ~275k-word English
+// list is checked first (instant, no network), and the online dictionary is
+// only a fallback for rare words. Gibberish is still rejected.
+let _wordSet = null;
+function wordSet() {
+  if (!_wordSet) {
+    try { _wordSet = new Set(require("an-array-of-english-words")); }
+    catch (e) { console.error("Word list unavailable:", e.message); _wordSet = new Set(); }
+  }
+  return _wordSet;
+}
+const _apiCache = new Map();
 async function isRealWord(word) {
+  const w = String(word || "").toLowerCase().trim();
+  if (!/^[a-z]+$/.test(w)) return false;
+  if (wordSet().has(w)) return true;
+  if (_apiCache.has(w)) return _apiCache.get(w);
   try {
     const res = await axios.get(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`,
       { timeout: 5000 }
     );
-    return res.status === 200 && Array.isArray(res.data) && res.data.length > 0;
-  } catch (_) {
-    // Fail closed. Accepting on API failure lets random strings such as
-    // "hahahajah" pass as valid English words.
+    const ok = res.status === 200 && Array.isArray(res.data) && res.data.length > 0;
+    _apiCache.set(w, ok);
+    return ok;
+  } catch (e) {
+    if (e.response?.status === 404) _apiCache.set(w, false);
     return false;
   }
 }
@@ -668,7 +688,7 @@ gmd(
 
     games.set(from, state);
 
-    const mention = (jid) => `@${jid.split("@")[0]}`;
+    const mention = (jid) => mentionTag(jid);
     const sendMsg = (text, mentions = []) =>
       Prince.sendMessage(from, { text, mentions });
 
@@ -1232,7 +1252,7 @@ gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
   let turn = 0;
   let moveTimer;
   const symbols = ["❌", "⭕"];
-  const mention = (jid) => `@${jid.split("@")[0]}`;
+  const mention = (jid) => mentionTag(jid);
   const send = (text, mentions = []) => Prince.sendMessage(from, {
     text, mentions,
   }, { quoted: c.mek });
