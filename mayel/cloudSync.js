@@ -26,6 +26,15 @@ async function connect() {
   return coll;
 }
 
+function explain(e) {
+  const m = String(e && e.message || e);
+  if (/SSL|tls|ServerSelection|ECONNREFUSED|timed out/i.test(m))
+    return m + "\n[CLOUD] 👉 MongoDB Atlas is blocking this server. In Atlas open Network Access → Add IP Address → Allow access from anywhere (0.0.0.0/0).";
+  if (/auth|password|credential/i.test(m))
+    return m + "\n[CLOUD] 👉 Wrong database username/password in MONGODB_URI.";
+  return m;
+}
+
 function tableExists(name) {
   return !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
 }
@@ -61,7 +70,8 @@ async function restore(database) {
     console.log(`[CLOUD] ✅ Restored ${docs.length} settings tables from online database.`);
     return true;
   } catch (e) {
-    console.error("[CLOUD][RESTORE_ERROR]:", e.message);
+    console.error("[CLOUD][RESTORE_ERROR]:", explain(e));
+    coll = null; client = null;
     return false;
   }
 }
@@ -78,7 +88,8 @@ async function pushNow() {
       await c.replaceOne({ _id: t }, { _id: t, rows, updatedAt: new Date() }, { upsert: true });
     }
   } catch (e) {
-    console.error("[CLOUD][SAVE_ERROR]:", e.message);
+    console.error("[CLOUD][SAVE_ERROR]:", explain(e));
+    coll = null; client = null;
   } finally {
     syncing = false;
     if (pending) { pending = false; scheduleSync(); }
