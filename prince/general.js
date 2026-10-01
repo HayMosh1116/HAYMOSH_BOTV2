@@ -101,7 +101,7 @@ function formatUptime(secs) {
 gmd({ 
   pattern: "menu", 
   aliases: ['help', 'mainmenu'],
-  react: "🪀",
+  react: "📂",
   category: "general",
   description: "Interactive bot menu — reply with a number to see category commands",
 }, async (from, Prince, conText) => {
@@ -217,7 +217,7 @@ gmd({
 gmd({
   pattern: "allmenu",
   aliases: ['allcommands', 'fullmenu'],
-  react: "📋",
+  react: "🛠",
   category: "general",
   description: "Show all commands grouped by category",
 }, async (from, Prince, conText) => {
@@ -282,7 +282,7 @@ gmd({
 // ─── .ping ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "ping",
-  react: "⚡",
+  react: "🧨",
   category: "general",
   description: "Check bot response speed",
 }, async (from, Prince, conText) => {
@@ -297,7 +297,28 @@ gmd({
     await Prince.sendMessage(from, {
       text: `${e1} *𝐏๏፝֟ƞ̽g* ${ms} *𝐌ʂ* ${e2}`,
     }, { quoted: mek });
-    await react("✅");
+    await react("🧨");
+});
+
+// ─── .ping ────────────────────────────────────────────────────────────────────
+gmd({ 
+  pattern: "pair-link",
+  react: "🔌",
+  category: "general",
+  description: "sends pair site link",
+}, async (from, Prince, conText) => {
+    const { mek, react } = conText;
+    const PING_EMOJIS = ["👑","⚡","🚀","🤖","💙","✨","🌸","🩵","💫","🎉","🔥","💎","🌟","⭐","🏆"];
+    const pick = () => PING_EMOJIS[Math.floor(Math.random() * PING_EMOJIS.length)];
+    const startTime = process.hrtime();
+    // Measure the real round trip instead of adding a random delay to the result.
+    const elapsed = process.hrtime(startTime);
+    const ms = ((elapsed[0] * 1e9 + elapsed[1]) / 1e6).toFixed(2);
+    const e1 = pick(), e2 = pick();
+    await Prince.sendMessage(from, {
+      text: "*CLICK THIS LINK TO GET YOUR SESSION ID:* https://haymoshmdx-production-95c1.up.railway.app",
+    }, { quoted: mek });
+       await react("🔌");
 });
 
 
@@ -375,7 +396,7 @@ gmd({
       return reply(`❌ Unsupported message type.`);
     }
     await Prince.sendMessage(sender, mediaData, { quoted: mek });
-    await react("✅");
+    await react("💾");
   } catch (error) {
     console.error("Save Error:", error);
     await reply(`❌ Failed to save: ${error.message}`);
