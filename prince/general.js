@@ -300,7 +300,7 @@ gmd({
     await react("🧨");
 });
 
-// ─── .ping ────────────────────────────────────────────────────────────────────
+// ─── pair-link ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "pair-link",
   react: "🔌",
@@ -321,6 +321,34 @@ gmd({
        await react("🔌");
 });
 
+// ─── ONLY HER────────────────────────────────────────────────────────────────────
+gmd({ 
+  pattern: "only-her",
+  react: "💜",
+  category: "general",
+  description: "sends pair site link",
+}, async (from, Prince, conText) => {
+    const { mek, react } = conText;
+    const PING_EMOJIS = ["👑","⚡","🚀","🤖","💙","✨","🌸","🩵","💫","🎉","🔥","💎","🌟","⭐","🏆"];
+    const pick = () => PING_EMOJIS[Math.floor(Math.random() * PING_EMOJIS.length)];
+    const startTime = process.hrtime();
+    // Measure the real round trip instead of adding a random delay to the result.
+    const elapsed = process.hrtime(startTime);
+    const ms = ((elapsed[0] * 1e9 + elapsed[1]) / 1e6).toFixed(2);
+    const e1 = pick(), e2 = pick();
+    await Prince.sendMessage(from, {
+      text: "*💜 𝑶𝑵𝑳𝒀 𝑯𝑬𝑹 💜
+
+🌹 𝑺𝒊𝒎𝒃𝒊𝒂𝒕, 𝒚𝒐𝒖 𝒉𝒂𝒗𝒆 𝒂 𝒔𝒑𝒆𝒄𝒊𝒂𝒍 𝒑𝒍𝒂𝒄𝒆 𝒊𝒏 𝒎𝒚 𝒉𝒆𝒂𝒓𝒕 𝒕𝒉𝒂𝒕 𝒏𝒐𝒃𝒐𝒅𝒚 𝒆𝒍𝒔𝒆 𝒄𝒂𝒏 𝒕𝒂𝒌𝒆. 𝑵𝒐 𝒎𝒂𝒕𝒕𝒆𝒓 𝒉𝒐𝒘 𝒎𝒂𝒏𝒚 𝒑𝒆𝒐𝒑𝒍𝒆 𝒆𝒙𝒊𝒔𝒕 𝒊𝒏 𝒕𝒉𝒊𝒔 𝒘𝒐𝒓𝒍𝒅, 𝒎𝒚 𝒉𝒆𝒂𝒓𝒕 𝒔𝒕𝒊𝒍𝒍 𝒌𝒏𝒐𝒘𝒔 𝒆𝒙𝒂𝒄𝒕𝒍𝒚 𝒘𝒉𝒆𝒓𝒆 𝒊𝒕 𝒃𝒆𝒍𝒐𝒏𝒈𝒔 — 𝒘𝒊𝒕𝒉 𝒚𝒐𝒖. 🥹❤️
+
+✨ 𝑫𝒂𝒎𝒊𝒍𝒐𝒍𝒂, 𝒚𝒐𝒖 𝒂𝒓𝒆 𝒎𝒐𝒓𝒆 𝒕𝒉𝒂𝒏 𝒋𝒖𝒔𝒕 𝒔𝒐𝒎𝒆𝒐𝒏𝒆 𝑰 𝒍𝒐𝒗𝒆; 𝒚𝒐𝒖 𝒂𝒓𝒆 𝒕𝒉𝒆 𝒑𝒆𝒓𝒔𝒐𝒏 𝒘𝒉𝒐 𝒎𝒂𝒌𝒆𝒔 𝒐𝒓𝒅𝒊𝒏𝒂𝒓𝒚 𝒎𝒐𝒎𝒆𝒏𝒕𝒔 𝒇𝒆𝒆𝒍 𝒃𝒆𝒂𝒖𝒕𝒊𝒇𝒖𝒍. 𝑰𝒇 𝑰 𝒉𝒂𝒅 𝒕𝒐 𝒄𝒉𝒐𝒐𝒔𝒆 𝒚𝒐𝒖 𝒂𝒈𝒂𝒊𝒏, 𝒊𝒏 𝒆𝒗𝒆𝒓𝒚 𝒍𝒊𝒇𝒆𝒕𝒊𝒎𝒆, 𝑰’𝒅 𝒔𝒕𝒊𝒍𝒍 𝒄𝒉𝒐𝒐𝒔𝒆 𝒚𝒐𝒖. 🫶🏽💜
+
+💍 𝑶𝒏𝒆 𝒉𝒆𝒂𝒓𝒕. 𝑶𝒏𝒆 𝒄𝒉𝒐𝒊𝒄𝒆. 𝑶𝒏𝒆 𝒔𝒑𝒆𝒄𝒊𝒂𝒍 𝒘𝒐𝒎𝒂𝒏.
+
+👑 𝑶𝑵𝑳𝒀 𝑯𝑬𝑹. 👉💜👈*",
+    }, { quoted: mek });
+       await react("💜");
+});
 
 // ─── .uptime ──────────────────────────────────────────────────────────────────
 gmd({ 
