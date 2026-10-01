@@ -346,7 +346,7 @@ gmd({
   }
 
   if (!input || !validModes.includes(input)) {
-    const statusText = `*𝐏𝐑𝐈𝐍𝐂𝐄 𝐌𝐃𝐗 𝐀𝐍𝐓𝐈𝐃𝐄𝐋𝐄𝐓𝐄 𝐒𝐄𝐓𝐓𝐈𝐍𝐆𝐒*
+    const statusText = `*HAYWHY_MDX ANTIDELETE SETTINGS*
 
 📊 Current Mode: *${currentMode.toUpperCase()}*
 
@@ -362,7 +362,7 @@ _Or use directly:_
 _In a group:_ *.antidelete on/off/default*
 
 ╭────────────────◆  
-│ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘɪɴᴄᴇ ᴛᴇᴄʜ  
+│ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ‎👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖
 ╰─────────────────◆`;
 
     const sentMsg = await Prince.sendMessage(from, {
