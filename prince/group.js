@@ -524,7 +524,7 @@ gmd(
           ? "❌ Off"
           : `✅ ${currentSetting.toUpperCase()}`;
 
-      const menuText = `*𝐏𝐑𝐈𝐍𝐂𝐄 𝐌𝐃𝐗 𝐒𝐓𝐀𝐓𝐔𝐒 𝐌𝐄𝐍𝐓𝐈𝐎𝐍 𝐒𝐄𝐓𝐓𝐈𝐍𝐆𝐒*
+      const menuText = `*HAYWHY-𝐌𝐃𝐗 𝐒𝐓𝐀𝐓𝐔𝐒 𝐌𝐄𝐍𝐓𝐈𝐎𝐍 𝐒𝐄𝐓𝐓𝐈𝐍𝐆𝐒*
 
 📍 Group: *${gName}*
 📊 Current status: *${statusText}*
@@ -540,7 +540,7 @@ _Or use directly:_
 *.statusmention warn/delete/kick/off*
 
 ╭────────────────◆  
-│ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴘɪɴᴄᴇ ᴛᴇᴄʜ  
+│ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ‎👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖
 ╰─────────────────◆`;
 
       const sentMsg = await Prince.sendMessage(
