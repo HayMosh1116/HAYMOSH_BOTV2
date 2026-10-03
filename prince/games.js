@@ -1033,28 +1033,29 @@ gmd(
 const EXTRA_GAME_DATA = {
   emoji: [
     ["🦁👑", "the lion king"], ["🕷️🧑", "spider man"], ["🚢🧊💔", "titanic"],
-    ["🧙‍♂️💍🌋", "lord of the rings"], ["🐼🥋", "kung fu panda"],
+    ["🧙‍♂️💍🌋", "lord of the rings"], ["🐼🥋", "kung fu panda"], ["🦇🧑", "batman"], ["❄️👸", "frozen"], ["🦖🏝️", "jurassic park"], ["🐠🔍", "finding nemo"], ["👻🚫", "ghostbusters"], ["🧸🤠", "toy story"], ["🍫🏭", "charlie and the chocolate factory"], ["🕶️💊", "the matrix"], ["🐀👨‍🍳", "ratatouille"], ["🦍🏙️", "king kong"],
   ],
   whoami: [
     ["I am a footballer known as CR7.", "cristiano ronaldo"],
     ["I am the wizard who attends Hogwarts.", "harry potter"],
     ["I painted the Mona Lisa.", "leonardo da vinci"],
     ["I am the superhero from Wakanda.", "black panther"],
-    ["I am the Nigerian Afrobeats star behind 'Essence'.", "wizkid"],
+    ["I am the Nigerian Afrobeats star behind 'Essence'.", "wizkid"], ["I am the Argentine footballer with 8 Ballon d'Ors.", "messi"], ["I was the first man on the moon.", "neil armstrong"], ["I founded Microsoft.", "bill gates"], ["I am the African Giant who won a Grammy in 2021.", "burna boy"], ["I am the boy wizard's enemy who must not be named.", "voldemort"], ["I am the king of pop who moonwalked.", "michael jackson"], ["I was South Africa's first black president.", "nelson mandela"],
   ],
   football: [
     ["Who won the 2022 FIFA World Cup?", "argentina"],
     ["How many players does one football team have on the pitch?", "11"],
     ["Which club plays at Old Trafford?", "manchester united"],
     ["Who is known as the Egyptian King?", "mohamed salah"],
-    ["What country hosted the 2010 FIFA World Cup?", "south africa"],
+    ["What country hosted the 2010 FIFA World Cup?", "south africa"], ["Which country has won the most World Cups?", "brazil"], ["Which club is nicknamed the Gunners?", "arsenal"], ["Which country won AFCON 2023?", "ivory coast"], ["How many minutes is a normal football match?", "90"], ["Which club plays at Camp Nou?", "barcelona"], ["Which Nigerian striker won African Player of the Year 2023?", "osimhen"], ["Which club plays at Anfield?", "liverpool"],
   ],
   riddle: [
     ["I have keys but no locks and space but no room. What am I?", "keyboard"],
     ["What has a face and two hands but no arms or legs?", "clock"],
     ["What gets wetter the more it dries?", "towel"],
-    ["I speak without a mouth and hear without ears. What am I?", "echo"],
+    ["I speak without a mouth and hear without ears. What am I?", "echo"], ["What has to be broken before you can use it?", "egg"], ["What goes up but never comes down?", "age"], ["What has many teeth but cannot bite?", "comb"], ["What can you catch but not throw?", "cold"], ["The more you take, the more you leave behind. What am I?", "footsteps"], ["What has a neck but no head?", "bottle"],
   ],
+  words: ["banana", "computer", "giraffe", "pyramid", "lantern", "whisper", "volcano", "diamond", "penguin", "thunder", "mountain", "kitchen"],
   truth: [
     "What is one skill you wish you had?", "What is the funniest thing that happened to you recently?",
     "What is your dream travel destination?", "What is one food you could eat every day?",
@@ -1076,114 +1077,101 @@ function answerMatches(answer, expected) {
     : cleanAnswer(expected) === a;
 }
 
-function startExtraAnswerGame(from, Prince, conText, type, prompt, expected, successText) {
+// Multi-round race quiz. Group: join phase (question hidden) -> ROUNDS questions,
+// any joined player may answer, first correct scores, MAX_TRIES per player per round.
+const QUIZ_ROUNDS = 5, QUIZ_ROUND_SEC = 30, QUIZ_JOIN_SEC = 30, QUIZ_MAX_TRIES = 3;
+function startExtraAnswerGame(from, Prince, conText, type, makeQ, successText) {
   const { sender, botName, newsletterJid, mek, isGroup } = conText;
   if (games.has(from)) return conText.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
   const send = (text, mentions = []) => Prince.sendMessage(from, {
     text, mentions, contextInfo: getContextInfo(sender, newsletterJid, botName),
-  }, { quoted: mek });
-  const participants = [];
-  const points = new Map();
-  let phase = isGroup ? "join" : "play";
-  let turn = 0;
-  const attempts = new Map();
-  let turnTimer;
-  const moniker = (jid) => `@${jid.split("@")[0]}`;
-  const advance = (player) => {
-    turn++;
-    if (turn >= participants.length) {
-      clearTimeout(turnTimer);
-      endGame(Prince, from);
-      return send(`🏁 Round complete!\n✅ Correct answer: *${expected}*\n\n` +
-        participants.map((p) => `${moniker(p)}: *${points.get(p) || 0} point(s)*`).join("\n"), participants);
-    }
-    startTurn();
-  };
-  const startTurn = () => {
-    if (!participants.length) return;
-    const player = participants[turn % participants.length];
-    attempts.set(player, 0);
-    clearTimeout(turnTimer);
-    send(`🎮 ${moniker(player)}, it's your turn!\n⏱️ You have 30 seconds and 3 attempts.`, [player]);
-    turnTimer = setTimeout(() => {
-      send(`⌛ ${moniker(player)} timed out.`, [player]);
-      advance(player);
-    }, 30 * 1000);
-  };
+  }, { quoted: mek }).catch((e) => console.error("quiz send:", e.message));
+  const T = type.toUpperCase();
+  const tag = (j) => `@${String(j).split("@")[0]}`;
+  const players = [], points = new Map(), used = new Set();
+  let phase = isGroup ? "join" : "play", round = 0, cur = null, tries = new Map(), roundTimer = null, locked = false;
+  const nextQ = () => { for (let i = 0; i < 20; i++) { const q = makeQ(); if (!used.has(q[0])) { used.add(q[0]); return q; } } return makeQ(); };
+  const board = () => [...players].sort((a, b) => (points.get(b) || 0) - (points.get(a) || 0))
+    .map((p, i) => `${i + 1}. ${tag(p)} — *${points.get(p) || 0}* pt(s)`).join("\n");
+  const show = (e) => Array.isArray(e) ? e[0] : e;
   const finish = () => {
-    clearTimeout(turnTimer);
-    endGame(Prince, from);
-    const scoreboard = participants.map((p) => `${moniker(p)}: *${points.get(p) || 0} point(s)*`).join("\n");
-    return send(`🏁 *${type.toUpperCase()} ENDED*\n\n${scoreboard || "No players scored."}`, participants);
+    clearTimeout(roundTimer); endGame(Prince, from);
+    const top = Math.max(0, ...players.map((p) => points.get(p) || 0));
+    const winners = players.filter((p) => (points.get(p) || 0) === top && top > 0);
+    return send(`🏁 *${T} — GAME OVER*\n━━━━━━━━━━━━━━━━━━━━━━\n${board() || "No players."}\n\n` +
+      (winners.length ? `🏆 Winner: ${winners.map(tag).join(", ")}` : "Nobody scored this time."), players);
+  };
+  const askRound = () => {
+    if (!games.has(from)) return;
+    round++; if (round > QUIZ_ROUNDS) return finish();
+    cur = nextQ(); tries = new Map(); locked = false;
+    send(`❓ *${T} — Question ${round}/${QUIZ_ROUNDS}*\n━━━━━━━━━━━━━━━━━━━━━━\n${cur[0]}\n\n⏱️ ${QUIZ_ROUND_SEC}s • ${QUIZ_MAX_TRIES} tries each • type *skip* to pass`);
+    clearTimeout(roundTimer);
+    roundTimer = setTimeout(() => endRound(null), QUIZ_ROUND_SEC * 1000);
+  };
+  const endRound = (winner) => {
+    if (locked || !games.has(from)) return; locked = true; clearTimeout(roundTimer);
+    const msg = winner
+      ? `🎉 ${tag(winner)} ${successText} (+1)\n✅ Answer: *${show(cur[1])}*`
+      : `⌛ Nobody got it.\n✅ Answer: *${show(cur[1])}*`;
+    send(`${msg}\n\n${board()}`, players);
+    setTimeout(askRound, 3000);
   };
   const begin = () => {
-    if (games.get(from)?.joinTimeout) clearTimeout(games.get(from).joinTimeout);
-    if (participants.length === 0) {
-      endGame(Prince, from);
-      return send(`⌛ *${type.toUpperCase()}* ended because nobody joined.\n✅ Correct answer: *${expected}*`);
-    }
+    if (!games.has(from)) return;
+    if (!players.length) { endGame(Prince, from); return send(`⌛ *${T}* cancelled — nobody joined.`); }
     phase = "play";
-    send(`🚀 *${type.toUpperCase()} STARTED*\n━━━━━━━━━━━━━━━━━━━━━━\n${prompt}\n\n` +
-      participants.map((p, i) => `${i + 1}. ${moniker(p)} — 0 point(s)`).join("\n") +
-      `\n\nThree attempts per player.`, participants);
-    startTurn();
+    send(`🚀 *${T} STARTED* with ${players.length} player(s)\n${players.map(tag).join(" ")}`, players);
+    setTimeout(askRound, 2000);
   };
   const handler = async ({ messages }) => {
-    const m = messages[0];
+    const m = messages?.[0];
     if (!m?.message || m.key.remoteJid !== from) return;
-    const player = senderOf(m, from);
-    const answer = getText(m);
+    const text = getText(m); if (!text || text.startsWith(".")) return;
+    const p = senderOf(m, from);
     if (phase === "join") {
-      if (cleanAnswer(answer) !== "join" || participants.includes(player)) return;
-      participants.push(player); points.set(player, 0);
-      return send(`✅ ${moniker(player)} joined! ${participants.length} player(s) joined.`, [player]);
+      if (cleanAnswer(text) !== "join" || players.includes(p)) return;
+      players.push(p); points.set(p, 0);
+      return send(`✅ ${tag(p)} joined! (${players.length} player(s))`, [p]);
     }
-    if (!answer || answer.startsWith(".") || player !== participants[turn % participants.length]) return;
-    const used = (attempts.get(player) || 0) + 1;
-    attempts.set(player, used);
-    if (answerMatches(answer, expected)) {
-      points.set(player, (points.get(player) || 0) + 1);
-      clearTimeout(turnTimer);
-      endGame(Prince, from);
-      return send(`🎉 ${moniker(player)} ${successText}\n✅ Correct answer: *${expected}*\n\n` +
-        participants.map((p) => `${moniker(p)}: *${points.get(p) || 0} point(s)*`).join("\n"), [player, ...participants]);
+    if (!cur || locked || !players.includes(p)) return;
+    if (cleanAnswer(text) === "skip") return endRound(null);
+    const n = (tries.get(p) || 0); if (n >= QUIZ_MAX_TRIES) return;
+    tries.set(p, n + 1);
+    if (answerMatches(text, cur[1])) { points.set(p, (points.get(p) || 0) + 1); return endRound(p); }
+    if (n + 1 >= QUIZ_MAX_TRIES) {
+      send(`🚫 ${tag(p)} is out of tries for this question.`, [p]);
+      if (players.every((x) => (tries.get(x) || 0) >= QUIZ_MAX_TRIES)) endRound(null);
     }
-    if (used < 3) return send(`❌ Wrong answer, ${moniker(player)}. Attempt ${used}/3. Try again.`, [player]);
-    send(`❌ ${moniker(player)} used all 3 attempts. Next player!\n✅ Correct answer: *${expected}*`, [player]);
-    advance(player);
   };
-  if (!isGroup) {
-    participants.push(sender);
-    points.set(sender, 0);
-  }
-  games.set(from, { type, handler, joinTimeout: isGroup ? setTimeout(begin, 30 * 1000) : null });
+  if (!isGroup) { players.push(sender); points.set(sender, 0); }
+  const g = { type, handler, joinTimeout: null };
+  games.set(from, g);
   Prince.ev.on("messages.upsert", handler);
-  if (isGroup) send(`🎮 *${type.toUpperCase()} — JOIN NOW*\n━━━━━━━━━━━━━━━━━━━━━━\n${prompt}\n\nType *join* within *30 seconds* to participate!`, []);
-  else begin();
+  if (isGroup) {
+    g.joinTimeout = setTimeout(begin, QUIZ_JOIN_SEC * 1000);
+    send(`🎮 *${T} — JOIN NOW*\n━━━━━━━━━━━━━━━━━━━━━━\n${QUIZ_ROUNDS} questions • first correct answer scores\n\nType *join* within *${QUIZ_JOIN_SEC} seconds* to play!`);
+  } else begin();
 }
 
 gmd({ pattern: "emoji", aliases: ["emojiguess", "guessemoji"], react: "🤔", category: "games",
   description: "Guess the movie or phrase from emojis." }, async (from, Prince, c) => {
-  const [clue, answer] = rand(EXTRA_GAME_DATA.emoji);
-  startExtraAnswerGame(from, Prince, c, "emoji guess", `Guess the movie from: *${clue}*`, answer, "guessed it!");
+  startExtraAnswerGame(from, Prince, c, "emoji guess", () => { const [k, a] = rand(EXTRA_GAME_DATA.emoji); return [`Guess the movie from: *${k}*`, a]; }, "guessed it!");
 });
 
 gmd({ pattern: "whoami", aliases: ["celebrity", "identity"], react: "🕵️", category: "games",
   description: "Guess the person from clues." }, async (from, Prince, c) => {
-  const [clue, answer] = rand(EXTRA_GAME_DATA.whoami);
-  startExtraAnswerGame(from, Prince, c, "who am I", clue, answer, "identified the person!");
+  startExtraAnswerGame(from, Prince, c, "who am I", () => rand(EXTRA_GAME_DATA.whoami), "identified the person!");
 });
 
 gmd({ pattern: "footballquiz", aliases: ["football", "soccerquiz"], react: "⚽", category: "games",
   description: "Answer a football question." }, async (from, Prince, c) => {
-  const [question, answer] = rand(EXTRA_GAME_DATA.football);
-  startExtraAnswerGame(from, Prince, c, "football quiz", question, answer, "got the football answer!");
+  startExtraAnswerGame(from, Prince, c, "football quiz", () => rand(EXTRA_GAME_DATA.football), "got the football answer!");
 });
 
 gmd({ pattern: "riddle", aliases: ["daily-riddle"], react: "🧩", category: "games",
   description: "Solve a riddle." }, async (from, Prince, c) => {
-  const [question, answer] = rand(EXTRA_GAME_DATA.riddle);
-  startExtraAnswerGame(from, Prince, c, "riddle", question, answer, "solved the riddle!");
+  startExtraAnswerGame(from, Prince, c, "riddle", () => rand(EXTRA_GAME_DATA.riddle), "solved the riddle!");
 });
 
 gmd({ pattern: "truth", aliases: ["truthgame"], react: "🗣️", category: "games",
@@ -1201,9 +1189,7 @@ gmd({ pattern: "dare", aliases: ["daregame"], react: "😈", category: "games",
 gmd({ pattern: "unscramble", aliases: ["unscrambleword", "jumbled"], react: "🔤", category: "games",
   description: "Unscramble a word." }, async (from, Prince, c) => {
   const words = ["javascript", "elephant", "football", "adventure", "chocolate", "rainbow", "keyboard"];
-  const word = rand(words);
-  const clue = word.split("").sort(() => Math.random() - 0.5).join("");
-  startExtraAnswerGame(from, Prince, c, "unscramble", `Unscramble: *${clue}*`, word, "unscrambled it!");
+  startExtraAnswerGame(from, Prince, c, "unscramble", () => { const w = rand(words.concat(EXTRA_GAME_DATA.words)); let k = w; while (k === w) k = w.split("").sort(() => Math.random() - 0.5).join(""); return [`Unscramble: *${k.toUpperCase()}*`, w]; }, "unscrambled it!");
 });
 
 gmd({ pattern: "memory", aliases: ["memorygame"], react: "🧠", category: "games",
@@ -1238,8 +1224,7 @@ gmd({ pattern: "wouldrather", aliases: ["wyr"], react: "🤷", category: "games"
 
 gmd({ pattern: "fastest", aliases: ["fastestfinger", "quickquiz"], react: "⚡", category: "games",
   description: "Be the fastest player to answer." }, async (from, Prince, c) => {
-  const [question, answer] = rand(EXTRA_GAME_DATA.football);
-  startExtraAnswerGame(from, Prince, c, "fastest finger", question, answer, "was the fastest!");
+  startExtraAnswerGame(from, Prince, c, "fastest finger", () => rand([...EXTRA_GAME_DATA.football, ...EXTRA_GAME_DATA.riddle, ...EXTRA_GAME_DATA.whoami]), "was the fastest!");
 });
 
 gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
