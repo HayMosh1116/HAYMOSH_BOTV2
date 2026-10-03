@@ -26,6 +26,18 @@ async function connect() {
   return coll;
 }
 
+// Each deployed bot gets its own private space in the shared database,
+// keyed by its owner's number (fallback: fingerprint of its session).
+const LEGACY_OWNER = "2349122761580";
+function botKey() {
+  const num = String(config.OWNER_NUMBER || "").split(",")[0].replace(/\D/g, "");
+  if (num) return "bot_" + num;
+  const sid = String(config.SESSION_ID || "");
+  if (sid) return "bot_s" + require("crypto").createHash("sha256").update(sid).digest("hex").slice(0, 16);
+  return "bot_default";
+}
+const docId = (t) => `${botKey()}:${t}`;
+
 function explain(e) {
   const m = String(e && e.message || e);
   if (/SSL|tls|ServerSelection|ECONNREFUSED|timed out/i.test(m))
@@ -47,7 +59,13 @@ async function restore(database) {
   }
   try {
     const c = await connect();
-    const docs = await c.find({ _id: { $in: TABLES } }).toArray();
+    let docs = await c.find({ _id: { $in: TABLES.map(docId) } }).toArray();
+    docs = docs.map((d) => ({ ...d, table: String(d._id).split(":").pop() }));
+    if (!docs.length && botKey() === "bot_" + LEGACY_OWNER) {
+      // one-time move of the original shared settings into the owner's own space
+      docs = (await c.find({ _id: { $in: TABLES } }).toArray()).map((d) => ({ ...d, table: d._id }));
+      if (docs.length) console.log("[CLOUD] Migrating old shared settings into this bot's private space.");
+    }
     if (!docs.length) {
       console.log("[CLOUD] Online database empty — uploading current settings.");
       await pushNow();
@@ -55,19 +73,21 @@ async function restore(database) {
     }
     const tx = db.transaction(() => {
       for (const d of docs) {
-        if (!tableExists(d._id) || !Array.isArray(d.rows)) continue;
-        db.prepare(`DELETE FROM ${d._id}`).run();
+        const t = d.table;
+        if (!TABLES.includes(t) || !tableExists(t) || !Array.isArray(d.rows)) continue;
+        db.prepare(`DELETE FROM ${t}`).run();
         for (const row of d.rows) {
           const cols = Object.keys(row);
           if (!cols.length) continue;
           db.prepare(
-            `INSERT OR REPLACE INTO ${d._id} (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`
+            `INSERT OR REPLACE INTO ${t} (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`
           ).run(...cols.map((k) => row[k]));
         }
       }
     });
     tx();
-    console.log(`[CLOUD] ✅ Restored ${docs.length} settings tables from online database.`);
+    if (docs.some((d) => d._id === d.table)) await pushNow();
+    console.log(`[CLOUD] ✅ [${botKey()}] Restored ${docs.length} settings tables from online database.`);
     return true;
   } catch (e) {
     console.error("[CLOUD][RESTORE_ERROR]:", explain(e));
@@ -85,7 +105,7 @@ async function pushNow() {
     for (const t of TABLES) {
       if (!tableExists(t)) continue;
       const rows = db.prepare(`SELECT * FROM ${t}`).all();
-      await c.replaceOne({ _id: t }, { _id: t, rows, updatedAt: new Date() }, { upsert: true });
+      await c.replaceOne({ _id: docId(t) }, { _id: docId(t), bot: botKey(), table: t, rows, updatedAt: new Date() }, { upsert: true });
     }
   } catch (e) {
     console.error("[CLOUD][SAVE_ERROR]:", explain(e));
@@ -117,4 +137,4 @@ function watch(database) {
   };
 }
 
-module.exports = { restore, watch, pushNow, scheduleSync };
+module.exports = { botKey, restore, watch, pushNow, scheduleSync };
