@@ -359,7 +359,10 @@ db.exec(`
   )
 `);
 
+function warnKey(j) { let [u, sv] = String(j || "").split("@"); u = (u || "").split(":")[0]; sv = (sv || "s.whatsapp.net").replace("c.us", "s.whatsapp.net"); return u + "@" + sv; }
+
 function addWarning(groupJid, userJid, reason, type) {
+  userJid = warnKey(userJid);
   try {
     const existing = db.prepare("SELECT count FROM user_warnings WHERE group_jid = ? AND user_jid = ?").get(groupJid, userJid);
     if (existing) {
@@ -377,8 +380,9 @@ function addWarning(groupJid, userJid, reason, type) {
 }
 
 function getUserWarnings(groupJid, userJid) {
+  userJid = warnKey(userJid);
   try {
-    const row = db.prepare("SELECT count FROM user_warnings WHERE group_jid = ? AND user_jid = ?").get(groupJid, userJid);
+    const row = db.prepare("SELECT count, reason FROM user_warnings WHERE group_jid = ? AND user_jid = ?").get(groupJid, userJid);
     return row || { count: 0 };
   } catch (e) {
     console.error("[WARNINGS][GET_ERROR]:", e);
@@ -387,6 +391,7 @@ function getUserWarnings(groupJid, userJid) {
 }
 
 function resetWarnings(groupJid, userJid) {
+  userJid = warnKey(userJid);
   try {
     db.prepare("DELETE FROM user_warnings WHERE group_jid = ? AND user_jid = ?").run(groupJid, userJid);
     return true;
@@ -396,4 +401,9 @@ function resetWarnings(groupJid, userJid) {
   }
 }
 
-module.exports = { getSudoNumbers, setSudo, delSudo, getSetting, setSetting, getGroupSetting, setGroupSetting, deleteGroupSetting, resetAllGroupSettings, getAllGroupSettings, addNote, getNote, getAllNotes, updateNote, deleteNote, deleteAllNotes, getAllUsersNotes, deleteNoteById, updateNoteById, clearAllSudo, resetSetting, resetAllSettings, setTempEmail, getTempEmail, deleteTempEmail, addWarning, getUserWarnings, resetWarnings, TEMPMAIL_EXPIRY_MINUTES, db };
+function getGroupWarnings(groupJid) {
+  try { return db.prepare("SELECT user_jid, count, reason FROM user_warnings WHERE group_jid = ? ORDER BY count DESC").all(groupJid); }
+  catch (e) { console.error("[WARNINGS][LIST_ERROR]:", e); return []; }
+}
+
+module.exports = { getSudoNumbers, setSudo, delSudo, getSetting, setSetting, getGroupSetting, setGroupSetting, deleteGroupSetting, resetAllGroupSettings, getAllGroupSettings, addNote, getNote, getAllNotes, updateNote, deleteNote, deleteAllNotes, getAllUsersNotes, deleteNoteById, updateNoteById, clearAllSudo, resetSetting, resetAllSettings, setTempEmail, getTempEmail, deleteTempEmail, addWarning, getUserWarnings, resetWarnings, getGroupWarnings, TEMPMAIL_EXPIRY_MINUTES, db };
