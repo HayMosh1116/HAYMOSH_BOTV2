@@ -1192,7 +1192,8 @@ gmd({ pattern: "dare", aliases: ["daregame"], react: "😈", category: "games",
 
 gmd({ pattern: "unscramble", aliases: ["unscrambleword", "jumbled"], react: "🔤", category: "games",
   description: "Unscramble a word." }, async (from, Prince, c) => {
-  const words = ["javascript", "elephant", "football", "adventure", "chocolate", "rainbow", "keyboard"];
+  const words = ["javascript", "elephant", "football", "adventure", "chocolate", "rainbow", "keyboard", "ayobami", "firdaous", "simbiat", "damilola", "purple","alabi", "ayinke", 
+  "algambary", "haywhy", "typescript", "haywhy"];
   startExtraAnswerGame(from, Prince, c, "unscramble", () => { const w = rand(words.concat(EXTRA_GAME_DATA.words)); let k = w; while (k === w) k = w.split("").sort(() => Math.random() - 0.5).join(""); return [`Unscramble: *${k.toUpperCase()}*`, w]; }, "unscrambled it!");
 });
 
