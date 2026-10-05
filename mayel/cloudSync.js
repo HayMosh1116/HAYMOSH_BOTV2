@@ -3,7 +3,7 @@
 // MongoDB and restored into SQLite before the bot connects to WhatsApp.
 const config = require("../config");
 
-const TABLES = ["bot_settings", "group_settings", "sudo_users", "user_notes", "user_warnings"];
+const TABLES = ["bot_settings", "group_settings", "sudo_users", "user_notes", "user_warnings", "warning_log"];
 let client = null;
 let coll = null;
 let db = null;
