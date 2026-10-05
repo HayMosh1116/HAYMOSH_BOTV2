@@ -359,11 +359,25 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS warning_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_jid TEXT NOT NULL,
+    user_jid TEXT NOT NULL,
+    reason TEXT,
+    admin_jid TEXT,
+    type TEXT,
+    created_at INTEGER NOT NULL
+  )
+`);
+
 function warnKey(j) { let [u, sv] = String(j || "").split("@"); u = (u || "").split(":")[0]; sv = (sv || "s.whatsapp.net").replace("c.us", "s.whatsapp.net"); return u + "@" + sv; }
 
-function addWarning(groupJid, userJid, reason, type) {
+function addWarning(groupJid, userJid, reason, type, adminJid) {
   userJid = warnKey(userJid);
   try {
+    db.prepare("INSERT INTO warning_log (group_jid, user_jid, reason, admin_jid, type, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(groupJid, userJid, reason || null, adminJid ? warnKey(adminJid) : null, type || "auto", Date.now());
     const existing = db.prepare("SELECT count FROM user_warnings WHERE group_jid = ? AND user_jid = ?").get(groupJid, userJid);
     if (existing) {
       const newCount = existing.count + 1;
@@ -394,6 +408,7 @@ function resetWarnings(groupJid, userJid) {
   userJid = warnKey(userJid);
   try {
     db.prepare("DELETE FROM user_warnings WHERE group_jid = ? AND user_jid = ?").run(groupJid, userJid);
+    db.prepare("DELETE FROM warning_log WHERE group_jid = ? AND user_jid = ?").run(groupJid, userJid);
     return true;
   } catch (e) {
     console.error("[WARNINGS][RESET_ERROR]:", e);
@@ -401,9 +416,14 @@ function resetWarnings(groupJid, userJid) {
   }
 }
 
+function getWarningHistory(groupJid, userJid, limit = 20) {
+  try { return db.prepare("SELECT reason, admin_jid, type, created_at FROM warning_log WHERE group_jid = ? AND user_jid = ? ORDER BY created_at DESC, id DESC LIMIT ?").all(groupJid, warnKey(userJid), limit); }
+  catch (e) { console.error("[WARNINGS][HISTORY_ERROR]:", e); return []; }
+}
+
 function getGroupWarnings(groupJid) {
   try { return db.prepare("SELECT user_jid, count, reason FROM user_warnings WHERE group_jid = ? ORDER BY count DESC").all(groupJid); }
   catch (e) { console.error("[WARNINGS][LIST_ERROR]:", e); return []; }
 }
 
-module.exports = { getSudoNumbers, setSudo, delSudo, getSetting, setSetting, getGroupSetting, setGroupSetting, deleteGroupSetting, resetAllGroupSettings, getAllGroupSettings, addNote, getNote, getAllNotes, updateNote, deleteNote, deleteAllNotes, getAllUsersNotes, deleteNoteById, updateNoteById, clearAllSudo, resetSetting, resetAllSettings, setTempEmail, getTempEmail, deleteTempEmail, addWarning, getUserWarnings, resetWarnings, getGroupWarnings, TEMPMAIL_EXPIRY_MINUTES, db };
+module.exports = { getSudoNumbers, setSudo, delSudo, getSetting, setSetting, getGroupSetting, setGroupSetting, deleteGroupSetting, resetAllGroupSettings, getAllGroupSettings, addNote, getNote, getAllNotes, updateNote, deleteNote, deleteAllNotes, getAllUsersNotes, deleteNoteById, updateNoteById, clearAllSudo, resetSetting, resetAllSettings, setTempEmail, getTempEmail, deleteTempEmail, addWarning, getUserWarnings, resetWarnings, getGroupWarnings, getWarningHistory, TEMPMAIL_EXPIRY_MINUTES, db };
