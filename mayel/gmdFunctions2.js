@@ -71,7 +71,7 @@ const PrinceAntiLink = async (Prince, message, antiLink) => {
                 mentions: [sender]
             });
         } else if (antiLink === 'warn') {
-            const warnings = await addWarning(from, sender, "Anti-Link");
+            const warnings = await addWarning(from, sender, "Anti-Link", "antilink", "bot");
             if (warnings >= 3) {
                 await Prince.groupParticipantsUpdate(from, [sender], 'remove');
                 await Prince.sendMessage(from, {
@@ -116,7 +116,7 @@ const PrinceStatusMention = async (Prince, message, mode) => {
                 mentions: [sender]
             });
         } else if (mode === 'warn') {
-            const warnings = await addWarning(from, sender, "Status Mention");
+            const warnings = await addWarning(from, sender, "Status Mention", "statusmention", "bot");
             if (warnings >= 3) {
                 await Prince.groupParticipantsUpdate(from, [sender], 'remove');
                 await Prince.sendMessage(from, {
