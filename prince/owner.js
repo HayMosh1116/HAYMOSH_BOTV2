@@ -848,6 +848,20 @@ gmd({
     } else if (q) {
       userNumber = q.replace(/[^0-9]/g, '');
     }
+    // Tagged users often arrive as a hidden "lid" id — use their real phone number.
+    try {
+      const rawTarget = quotedUser || (mentionedJid && mentionedJid[0]) || "";
+      if (isGroup && userNumber) {
+        const meta = conText.groupMetadata || await Prince.groupMetadata(from);
+        const pp = meta?.participants?.find((p) => [p.id, p.lid, p.pn, p.phoneNumber].some((v) => v && String(v).split("@")[0].split(":")[0] === userNumber));
+        const pn = pp && (pp.pn || pp.phoneNumber);
+        if (pn) userNumber = String(pn).split("@")[0].split(":")[0];
+      }
+      if (String(rawTarget).endsWith("@lid") && typeof Prince.getJidFromLid === "function") {
+        const r = await Prince.getJidFromLid(rawTarget);
+        if (r && !String(r).endsWith("@lid")) userNumber = String(r).split("@")[0].split(":")[0];
+      }
+    } catch (e) {}
 
     if (!userNumber || userNumber.length < 5) {
       await react("❌");
@@ -902,6 +916,20 @@ gmd({
     } else if (q) {
       userNumber = q.replace(/[^0-9]/g, '');
     }
+    // Tagged users often arrive as a hidden "lid" id — use their real phone number.
+    try {
+      const rawTarget = quotedUser || (mentionedJid && mentionedJid[0]) || "";
+      if (isGroup && userNumber) {
+        const meta = conText.groupMetadata || await Prince.groupMetadata(from);
+        const pp = meta?.participants?.find((p) => [p.id, p.lid, p.pn, p.phoneNumber].some((v) => v && String(v).split("@")[0].split(":")[0] === userNumber));
+        const pn = pp && (pp.pn || pp.phoneNumber);
+        if (pn) userNumber = String(pn).split("@")[0].split(":")[0];
+      }
+      if (String(rawTarget).endsWith("@lid") && typeof Prince.getJidFromLid === "function") {
+        const r = await Prince.getJidFromLid(rawTarget);
+        if (r && !String(r).endsWith("@lid")) userNumber = String(r).split("@")[0].split(":")[0];
+      }
+    } catch (e) {}
 
     if (!userNumber || userNumber.length < 5) {
       await react("❌");
