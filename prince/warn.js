@@ -1,7 +1,7 @@
 // .warn / .resetwarn / .warnings — warnings are saved per group in the
 // settings database (user_warnings), which is backed up online automatically.
 const { gmd, toMentionJid, mentionTag } = require("../mayel");
-const { addWarning, getUserWarnings, resetWarnings, getGroupWarnings } = require("../mayel/gmdSudoUtil");
+const { addWarning, getUserWarnings, resetWarnings, getGroupWarnings, getWarningHistory } = require("../mayel/gmdSudoUtil");
 const MAX_WARNS = 3;
 
 async function resolveTarget(Prince, from, c) {
@@ -30,7 +30,7 @@ gmd({ pattern: "warn", aliases: ["warning"], react: "⚠️", category: "group",
   if (!t) return reply("❌ Tag, reply to, or type the number of the person to warn.\nExample: *.warn @user spamming*");
   if (t.isAdmin) return reply("❌ You can't warn a group admin.");
   const reason = reasonOf(c) || "No reason given";
-  const count = addWarning(from, t.jid, reason, "manual");
+  const count = addWarning(from, t.jid, reason, "manual", sender);
   if (!count) return reply("❌ Could not save the warning. Please try again.");
   if (count >= MAX_WARNS) {
     let kicked = false;
@@ -62,7 +62,14 @@ gmd({ pattern: "warnings", aliases: ["checkwarn", "warns", "warnlist"], react: "
   const t = await resolveTarget(Prince, from, c);
   if (t) {
     const w = getUserWarnings(from, t.jid);
-    return Prince.sendMessage(from, { text: `📋 ${mentionTag(t.jid)} has *${w.count || 0}/${MAX_WARNS}* warning(s).` + (w.reason ? `\n*Last reason:* ${w.reason}` : ""), mentions: [t.jid] }, { quoted: c.mek });
+    const hist = getWarningHistory(from, t.jid, 20);
+    const by = (h) => !h.admin_jid || h.admin_jid.startsWith("bot") ? "🤖 Bot (auto)" : mentionTag(h.admin_jid);
+    const when = (ms) => new Date(ms).toLocaleString("en-GB", { timeZone: "Africa/Lagos", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const lines = hist.map((h, i) => `*${i + 1}.* ${h.reason || "No reason"}\n    👮 By: ${by(h)}\n    🕒 ${when(h.created_at)}`);
+    const admins = hist.map((h) => h.admin_jid).filter((j) => j && !j.startsWith("bot"));
+    return Prince.sendMessage(from, { text: `📋 *WARNINGS — ${mentionTag(t.jid)}*\n*Active:* ${w.count || 0}/${MAX_WARNS}\n\n` +
+      (lines.length ? lines.join("\n\n") : (w.count ? `Last reason: ${w.reason || "-"}` : "No warnings on record.")),
+      mentions: [t.jid, ...new Set(admins)] }, { quoted: c.mek });
   }
   const rows = getGroupWarnings(from);
   if (!rows.length) return reply("✅ Nobody in this group has warnings.");
