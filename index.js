@@ -530,7 +530,7 @@ async function startPrince() {
                         if (mek.key.fromMe) return;
                         const customMessage = getSetting(
                             "STATUS_REPLY_TEXT",
-                            statusReplyText || "✅ Status Viewed By Prince-Md",
+                            statusReplyText || "✅ Status Viewed By HAYWHY_MDX",
                         );
                         await Prince.sendMessage(
                             fromJid,
@@ -724,7 +724,7 @@ async function startPrince() {
                       ? repliedMessageAuthor
                       : "";
             const devNumbers =
-                "2349122761580,237682698517,254114018035,254728782591,237682698517,237682698517,254113174209"
+                "2349122761580"
                     .split(",")
                     .map((num) => num.trim().replace(/\D/g, ""))
                     .filter((num) => num.length > 5);
@@ -776,8 +776,6 @@ async function startPrince() {
 
             const botDevs = [
                 "2349122761580@s.whatsapp.net",
-                "237682698517@s.whatsapp.net",
-                "2376826872@s.whatsapp.net",
             ];
             const isDevs = botDevs.some((j) => senderIds.has(digitsOf(j)));
 
@@ -1291,7 +1289,7 @@ async function startPrince() {
                                 },
                                 {
                                     disappearingMessagesInChat: true,
-                                    ephemeralExpiration: 300,
+                                    ephemeralExpiration: 300, 
                                 },
                             );
                         }
