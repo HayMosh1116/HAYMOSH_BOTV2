@@ -88,8 +88,8 @@ gmd({
                 }
 
                 const stickerBuffer = await createStickerWithCheck(mediaFile, {
-                    pack: "ᴘʀɪɴᴄᴇ ᴛᴇᴄʜ",
-                    author: "❤️",
+                    pack: "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩",
+                    author: "💜",
                     type: q.includes("--crop") || q.includes("-c") ? StickerTypes.CROPPED : StickerTypes.FULL,
                     categories: ["🤩", "🎉"],
                     id: "12345",
@@ -109,8 +109,8 @@ gmd({
                 await fs.writeFile(stickerFile, stickerData);
 
                 const newStickerBuffer = await createStickerWithCheck(stickerFile, {
-                    pack: "ᴘʀɪɴᴄᴇ ᴛᴇᴄʜ",
-                    author: "❤️",
+                    pack: "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩",
+                    author: "💜",
                     type: q.includes("--crop") || q.includes("-c") ? StickerTypes.CROPPED : StickerTypes.FULL,
                     categories: ["🤩", "🎉"],
                     id: "12345",
