@@ -429,9 +429,9 @@ const gmdBuffer = async (url, options = {}) => {
                 'DNT': 1,
                 'Upgrade-Insecure-Request': 1
             },
+            timeout: 300000,
             ...options,
             responseType: 'arraybuffer',
-            timeout: 960000 
         });
         
         if (!res.data || res.data.length === 0) {
@@ -454,8 +454,9 @@ const gmdJson = async (url, options = {}) => {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
                 'Accept': 'application/json'
             },
+            // A dead API used to hang a command for up to 40 minutes.
+            timeout: 30000,
             ...options,
-            timeout: 2400000
         });
         
         if (!res.data) {
@@ -517,6 +518,7 @@ async function dBinary(str) {
 class gmdStore {
     constructor() {
         this.messages = new Map();
+        this.byId = new Map();
         this.contacts = new Map();
         this.chats = new Map();
         this.maxMessages = 10000;
@@ -526,7 +528,13 @@ class gmdStore {
 
     loadMessage(jid, id) {
         const chatMessages = this.messages.get(jid);
-        return chatMessages?.get(id) || null;
+        const direct = chatMessages?.get(id);
+        if (direct) return direct;
+        // WhatsApp retry requests (the phone asking the bot to resend a
+        // message it could not decrypt) can reference the chat by LID or a
+        // device-suffixed JID. Fall back to the message id so the resend
+        // succeeds instead of leaving "Waiting for this message".
+        return this.byId.get(id) || null;
     }
 
     saveMessage(jid, message) {
@@ -536,6 +544,10 @@ class gmdStore {
         
         const chatMessages = this.messages.get(jid);
         chatMessages.set(message.key.id, message);
+        this.byId.set(message.key.id, message);
+        if (this.byId.size > this.maxMessages) {
+            this.byId.delete(this.byId.keys().next().value);
+        }
         
         if (chatMessages.size > this.maxMessages) {
             const firstKey = chatMessages.keys().next().value;
@@ -584,6 +596,7 @@ class gmdStore {
             clearInterval(this.cleanupInterval);
         }
         this.messages.clear();
+        this.byId.clear();
         this.contacts.clear();
         this.chats.clear();
     }

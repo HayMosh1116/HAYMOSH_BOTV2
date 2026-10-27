@@ -141,6 +141,12 @@ const MAX_RECONNECT_ATTEMPTS = 50;
 const RECONNECT_DELAY = 5000;
 let isShuttingDown = false;
 
+// Group metadata cache: fetching it from WhatsApp on every group message was
+// a major source of slow replies. Entries expire after 5 minutes and are
+// dropped immediately when the group or its participants change.
+const groupMetaCache = new Map();
+const GROUP_META_TTL = 5 * 60 * 1000;
+
 async function startPrince() {
     try {
         let version;
@@ -167,6 +173,10 @@ async function startPrince() {
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger),
+            },
+            cachedGroupMetadata: async (jid) => {
+                const hit = groupMetaCache.get(jid);
+                return hit && Date.now() - hit.at < GROUP_META_TTL ? hit.data : undefined;
             },
             getMessage: async (key) => {
                 if (store) {
@@ -218,10 +228,33 @@ async function startPrince() {
                 Prince,
                 store,
             });
-            return rawSendMessage(remoteJid, normalizedContent, options);
+            const sent = await rawSendMessage(remoteJid, normalizedContent, options);
+            // Keep every outgoing message so WhatsApp retry requests can be
+            // answered (prevents "Waiting for this message" in DMs/self-chat).
+            try { if (sent?.key?.id && sent.message && store) store.saveMessage(sent.key.remoteJid || remoteJid, sent); } catch (_) {}
+            return sent;
         };
 
         store.bind(Prince.ev);
+
+        const rawGroupMetadata = Prince.groupMetadata.bind(Prince);
+        const groupMetaInflight = new Map();
+        Prince.groupMetadata = async (jid) => {
+            const hit = groupMetaCache.get(jid);
+            if (hit && Date.now() - hit.at < GROUP_META_TTL) return hit.data;
+            if (groupMetaInflight.has(jid)) return groupMetaInflight.get(jid);
+            const p = rawGroupMetadata(jid)
+                .then((data) => { groupMetaCache.set(jid, { data, at: Date.now() }); return data; })
+                .finally(() => groupMetaInflight.delete(jid));
+            groupMetaInflight.set(jid, p);
+            return p;
+        };
+        Prince.ev.on("groups.update", (updates) => {
+            for (const u of updates || []) if (u?.id) groupMetaCache.delete(u.id);
+        });
+        Prince.ev.on("group-participants.update", (u) => {
+            if (u?.id) groupMetaCache.delete(u.id);
+        });
 
         Prince.ev.process(async (events) => {
             if (events["creds.update"]) {
@@ -1073,11 +1106,11 @@ async function startPrince() {
                                     quoted,
                                     messageType,
                                 );
-                                let buffer = Buffer.from([]);
-
+                                const chunks = [];
                                 for await (const chunk of stream) {
-                                    buffer = Buffer.concat([buffer, chunk]);
+                                    chunks.push(chunk);
                                 }
+                                let buffer = Buffer.concat(chunks);
 
                                 let fileTypeResult;
                                 try {

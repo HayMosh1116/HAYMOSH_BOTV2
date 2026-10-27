@@ -182,7 +182,17 @@ gmd({
             return reply("❌ Failed to download the sticker. Please try again.");
         }
 
-        const imageBuffer = await stickerToImage(stickerBuffer);
+        // Fast path: decode only the first frame and encode a quick PNG.
+        // The old path rendered up to 200 frames into a max-quality GIF and
+        // palette-quantised PNGs, which made .toimg very slow.
+        let imageBuffer;
+        try {
+            imageBuffer = await require("sharp")(stickerBuffer, { pages: 1, limitInputPixels: false })
+                .png({ compressionLevel: 3, effort: 1 })
+                .toBuffer();
+        } catch (_) {
+            imageBuffer = await stickerToImage(stickerBuffer);
+        }
 
         await Prince.sendMessage(from, {
             image: imageBuffer,

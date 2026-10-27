@@ -19,13 +19,50 @@ function getDownloadUrl(payload) {
   return candidates.find((url) => typeof url === "string" && /^https?:\/\//i.test(url));
 }
 
+const yts = require("yt-search");
+
+function normalizeVideo(v) {
+  if (!v || !v.url) return null;
+  return {
+    ...v,
+    name: v.name || v.title,
+    title: v.title || v.name,
+    duration: v.timestamp || v.duration?.timestamp || v.duration,
+    thumbnail: v.thumbnail || v.image,
+  };
+}
+
+function extractVideoId(text) {
+  const m = String(text || "").match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Searches YouTube directly (yt-search) first; the old third-party search
+// endpoints are kept only as a fallback because they are frequently offline.
 async function searchYouTube(gmdJson, query) {
-  for (const endpoint of SEARCH_ENDPOINTS) {
-    const response = await gmdJson(`${endpoint}?q=${encodeURIComponent(query)}`);
-    if (response && !(response instanceof Error) && Array.isArray(response.videos)) {
-      const video = response.videos[0];
-      if (video?.url) return video;
+  const videoId = extractVideoId(query);
+  try {
+    if (videoId) {
+      const v = await yts({ videoId });
+      const found = normalizeVideo(v && { ...v, url: v.url || `https://youtube.com/watch?v=${videoId}` });
+      if (found) return found;
+    } else {
+      const r = await yts(query);
+      const found = normalizeVideo((r?.videos || [])[0]);
+      if (found) return found;
     }
+  } catch (e) {
+    console.log("yt-search failed:", e.message);
+  }
+  if (videoId) return { url: `https://youtube.com/watch?v=${videoId}`, name: "YouTube Audio", title: "YouTube Audio" };
+  for (const endpoint of SEARCH_ENDPOINTS) {
+    try {
+      const response = await gmdJson(`${endpoint}?q=${encodeURIComponent(query)}`);
+      if (response && !(response instanceof Error) && Array.isArray(response.videos)) {
+        const video = normalizeVideo(response.videos[0]);
+        if (video) return video;
+      }
+    } catch (_) {}
   }
   return null;
 }
@@ -176,32 +213,27 @@ gmd({
         `${PrinceTechApi}/api/download/ytmusic?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`
       ];
 
-      let downloadUrl = null;
-
-      for (const api of audioApis) {
-        try {
-          const response = await gmdJson(api);
-          const candidate = getDownloadUrl(response);
-          if (candidate) {
-            downloadUrl = candidate;
-            break;
+      // Prepare the audio in the background so the song card is sent
+      // immediately instead of after the whole download + conversion.
+      const audioPromise = (async () => {
+        // Try each source until one returns a real audio file (some mirrors
+        // return an HTML page instead of the MP3).
+        for (const api of audioApis) {
+          try {
+            const downloadUrl = getDownloadUrl(await gmdJson(api));
+            if (!downloadUrl) continue;
+            const buffer = await gmdBuffer(downloadUrl);
+            if (!Buffer.isBuffer(buffer) || buffer.length < 10000) continue;
+            const head = buffer.slice(0, 64).toString("utf8").trimStart().toLowerCase();
+            if (head.startsWith("<!doctype") || head.startsWith("<html") || head.startsWith("{")) continue;
+            return await formatAudio(buffer);
+          } catch (e) {
+            console.log(`API ${api} failed: ${e.message}`);
           }
-        } catch (e) {
-          console.log(`API ${api} failed: ${e.message}`);
         }
-      }
-      
-      if (!downloadUrl) {
-        await react("❌");
-        return reply("Failed to get download URL for the audio.");
-      }
-
-       const buffer = await gmdBuffer(downloadUrl);
-       if (!Buffer.isBuffer(buffer)) {
-        await react("❌");
-         return reply("The audio service returned an invalid file. Please try again.");
-      }
-       const convertedBuffer = await formatAudio(buffer);
+        throw new Error("Failed to get download URL for the audio.");
+      })();
+      audioPromise.catch(() => {});
 
       const infoMess = {
         image: { url: firstVideo.thumbnail || botPic },
@@ -231,7 +263,14 @@ gmd({
         await react("⬇️");
         
         try {
-          switch (messageContent.trim()) {
+          let convertedBuffer;
+          try {
+            convertedBuffer = await audioPromise;
+          } catch (prepErr) {
+            await react("❌");
+            return reply(prepErr.message, messageData);
+          }
+          switch (String(messageContent || "").trim()) {
             case "1":
               await Prince.sendMessage(from, {
                 audio: convertedBuffer,

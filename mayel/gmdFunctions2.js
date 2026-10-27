@@ -180,6 +180,54 @@ const PrinceAnticall = async (json, Prince) => {
     }
 };
 
+// Unwraps view-once / ephemeral / document-with-caption containers and
+// returns the inner media message plus its type.
+function unwrapMedia(message) {
+    let m = message || {};
+    for (let i = 0; i < 5; i++) {
+        const inner =
+            m.ephemeralMessage?.message ||
+            m.viewOnceMessage?.message ||
+            m.viewOnceMessageV2?.message ||
+            m.viewOnceMessageV2Extension?.message ||
+            m.documentWithCaptionMessage?.message;
+        if (!inner) break;
+        m = inner;
+    }
+    const type = ["imageMessage", "videoMessage", "audioMessage", "stickerMessage", "documentMessage"]
+        .find((t) => m[t]);
+    return type ? { type, media: m[type], message: m } : null;
+}
+
+async function resendMediaFresh(Prince, jid, original, caption) {
+    const found = unwrapMedia(original?.message);
+    if (!found) return false;
+    try {
+        const buffer = await downloadMediaMessage(
+            { key: original.key, message: { [found.type]: found.media } },
+            "buffer", {},
+            { logger, reuploadRequest: Prince.updateMediaMessage },
+        );
+        if (!Buffer.isBuffer(buffer) || !buffer.length) return false;
+        const media = found.media;
+        const cap = caption !== undefined ? caption : (media.caption || "");
+        const mimetype = media.mimetype;
+        let content;
+        switch (found.type) {
+            case "imageMessage": content = { image: buffer, caption: cap, mimetype }; break;
+            case "videoMessage": content = { video: buffer, caption: cap, mimetype, gifPlayback: !!media.gifPlayback }; break;
+            case "audioMessage": content = { audio: buffer, mimetype: mimetype || "audio/mp4", ptt: !!media.ptt }; break;
+            case "stickerMessage": content = { sticker: buffer }; break;
+            default: content = { document: buffer, mimetype: mimetype || "application/octet-stream", fileName: media.fileName || "file", caption: cap };
+        }
+        await Prince.sendMessage(jid, content);
+        return true;
+    } catch (e) {
+        console.error("Anti-delete media resend failed:", e.message);
+        return false;
+    }
+}
+
 const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwnerJid, deleterPushName, senderPushName) => {
     try {
         const from = key.remoteJid;
@@ -211,8 +259,13 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
             text += `_Sent a ${msgType.replace('Message', '')}_`;
             await Prince.sendMessage(botOwnerJid, { text, mentions, contextInfo });
             
-            // Fixed: Use sendMessage with forward instead of non-existent copyNForward
-            await Prince.sendMessage(botOwnerJid, { forward: deletedMsg }, { contextInfo });
+            // Forwarding the original media (especially view-once) makes
+            // WhatsApp show "Waiting for this message" in DMs. Download the
+            // media and send it as a brand-new message instead.
+            const sentFresh = await resendMediaFresh(Prince, botOwnerJid, deletedMsg);
+            if (!sentFresh) {
+                await Prince.sendMessage(botOwnerJid, { forward: deletedMsg }, { contextInfo });
+            }
         }
     } catch (e) {
         console.error('Anti-delete forwarding error:', e);
@@ -242,7 +295,7 @@ const PrinceViewOnce = (Prince) => {
                     ms.message.viewOnceMessageV2?.message ||
                     ms.message.viewOnceMessageV2Extension?.message;
                 if (!voMsg) continue;
-                if (!voMsg.imageMessage && !voMsg.videoMessage) continue;
+                if (!voMsg.imageMessage && !voMsg.videoMessage && !voMsg.audioMessage) continue;
 
                 _voCache.set(ms.key.id, {
                     voMsg,
@@ -285,7 +338,8 @@ const PrinceViewOnce = (Prince) => {
             const { voMsg, from, key } = cached;
             const isImage = !!voMsg.imageMessage;
             const isVideo = !!voMsg.videoMessage;
-            if (!isImage && !isVideo) return;
+            const isAudio = !!voMsg.audioMessage;
+            if (!isImage && !isVideo && !isAudio) return;
 
             // Always send to the bot owner's DM
             const ownerDM = ownerNum + "@s.whatsapp.net";
@@ -296,9 +350,10 @@ const PrinceViewOnce = (Prince) => {
             } catch (_) {}
 
             // Build a fake message object for downloadMediaMessage
+            const voType = isImage ? "imageMessage" : isVideo ? "videoMessage" : "audioMessage";
             const fakeMsg = {
                 key: { remoteJid: from, fromMe: false, id: reactedKeyId, participant: key.participant },
-                message: voMsg,
+                message: { [voType]: voMsg[voType] },
             };
 
             let buffer;
@@ -314,15 +369,18 @@ const PrinceViewOnce = (Prince) => {
 
             if (!Buffer.isBuffer(buffer) || buffer.length === 0) return;
 
-            const mediaLabel = isImage ? "Image" : "Video";
+            const mediaLabel = isImage ? "Image" : isVideo ? "Video" : "Audio";
             const caption =
                 `🔓 *View Once ${mediaLabel} Revealed*\n` +
                 `_Forwarded by ${config.BOT_NAME}_`;
 
+            const mime = voMsg[voType]?.mimetype;
             if (isImage) {
-                await Prince.sendMessage(ownerDM, { image: buffer, caption });
+                await Prince.sendMessage(ownerDM, { image: buffer, caption, mimetype: mime });
+            } else if (isVideo) {
+                await Prince.sendMessage(ownerDM, { video: buffer, caption, mimetype: mime || "video/mp4" });
             } else {
-                await Prince.sendMessage(ownerDM, { video: buffer, caption });
+                await Prince.sendMessage(ownerDM, { audio: buffer, mimetype: mime || "audio/mp4", ptt: !!voMsg.audioMessage?.ptt });
             }
 
         } catch (err) {

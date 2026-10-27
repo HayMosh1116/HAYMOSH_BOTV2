@@ -1,7 +1,7 @@
 const { gmd, commands, config, getContextInfo, uploadToImgBB, getSetting, setSetting } = require("../mayel");
 const fs = require("fs");
 const fsA = require('node:fs');
-const { S_WHATSAPP_NET } = require("prince-baileys");
+const { S_WHATSAPP_NET, downloadMediaMessage } = require("prince-baileys");
 const Jimp = require("jimp");
 const path = require("path");
 const { exec, spawn } = require('node:child_process');
@@ -1821,6 +1821,57 @@ gmd({
 });
 
 
+// Shared view-once reveal used by .vv / .wow / .vv2.
+// Handles viewOnceMessage, viewOnceMessageV2 (used for most videos),
+// viewOnceMessageV2Extension (voice notes) and inline viewOnce flags, then
+// downloads into memory and sends the media as a fresh, normal message.
+async function revealViewOnce(Prince, conText, targets) {
+    const { mek, reply, quoted, react, botName, isSuperUser } = conText;
+    if (!quoted || (Array.isArray(quoted) && !quoted.length)) return reply(`Please reply to/quote a ViewOnce message`);
+    if (!isSuperUser) return reply(`Owner Only Command!`);
+
+    let inner = quoted;
+    for (let i = 0; i < 5; i++) {
+        const next = inner?.ephemeralMessage?.message || inner?.viewOnceMessage?.message ||
+            inner?.viewOnceMessageV2?.message || inner?.viewOnceMessageV2Extension?.message;
+        if (!next) break;
+        inner = next;
+    }
+    const mediaType = ["imageMessage", "videoMessage", "audioMessage"].find((t) => inner?.[t]);
+    if (!mediaType) return reply('Please reply to a view once media message.');
+    const media = inner[mediaType];
+
+    try {
+        const ctx = mek.message?.extendedTextMessage?.contextInfo || {};
+        const buffer = await downloadMediaMessage(
+            { key: { remoteJid: mek.key.remoteJid, id: ctx.stanzaId, participant: ctx.participant, fromMe: false }, message: { [mediaType]: media } },
+            "buffer", {},
+            { reuploadRequest: Prince.updateMediaMessage }
+        );
+        if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("Media could not be downloaded (it may have expired)");
+
+        const caption = `${media.caption ? media.caption + "\n\n" : ""}> *REVEALED BY ${botName}*`;
+        let msg;
+        if (mediaType === "imageMessage") msg = { image: buffer, caption, mimetype: media.mimetype || "image/jpeg" };
+        else if (mediaType === "videoMessage") msg = { video: buffer, caption, mimetype: media.mimetype || "video/mp4" };
+        else msg = { audio: buffer, ptt: !!media.ptt, mimetype: media.mimetype || "audio/ogg; codecs=opus" };
+
+        // Normalise "number:device@s.whatsapp.net" -> "number@s.whatsapp.net";
+        // sending to the device-suffixed id shows "Waiting for this message".
+        const selfJid = Prince.user?.id ? Prince.user.id.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
+        const sent = new Set();
+        for (const t of targets(conText.from, selfJid)) {
+            if (!t || sent.has(t)) continue;
+            sent.add(t);
+            await Prince.sendMessage(t, msg);
+        }
+        await react("✅");
+    } catch (e) {
+        console.error("Error in vv command:", e);
+        reply(`Error: ${e.message}`);
+    }
+}
+
 gmd({ 
   pattern: "vv2", 
   aliases: ['‎2', 'reveal2', 'wow2', 'lol2'],
@@ -1830,80 +1881,7 @@ gmd({
 }, async (from, Prince, conText) => {
     const { mek, reply, quoted, react, botName, isSuperUser } = conText;
 
-    if (!quoted) return reply(`Please reply to/quote a ViewOnce message`);
-    if (!isSuperUser) return reply(`Owner Only Command!`);
-    
-    let viewOnceContent, mediaType;
-    
-    if (quoted.imageMessage?.viewOnce || quoted.videoMessage?.viewOnce || quoted.audioMessage?.viewOnce) {
-        mediaType = Object.keys(quoted).find(key => 
-            key.endsWith('Message') && 
-            ['image', 'video', 'audio'].some(t => key.includes(t))
-        );
-        viewOnceContent = { [mediaType]: quoted[mediaType] };
-    } 
-    else if (quoted.viewOnceMessage) {
-        viewOnceContent = quoted.viewOnceMessage.message;
-        mediaType = Object.keys(viewOnceContent).find(key => 
-            key.endsWith('Message') && 
-            ['image', 'video', 'audio'].some(t => key.includes(t))
-        );
-    } else {
-        return reply('Please reply to a view once media message.');
-    }
-
-    if (!mediaType) return reply('Unsupported ViewOnce message type.');
-
-    let msg;
-    let tempFilePath = null;
-
-    try {
-        const mediaMessage = {
-            ...viewOnceContent[mediaType],
-            viewOnce: false
-        };
-
-        tempFilePath = await Prince.downloadAndSaveMediaMessage(mediaMessage, 'temp_media');
-        
-        const caption = `${mediaMessage.caption}\n\n> *REVEALED BY ${botName}*`;
-        const mime = mediaMessage.mimetype || '';
-
-        if (mediaType.includes('image')) {
-            msg = { 
-                image: { url: tempFilePath }, 
-                caption,
-                mimetype: mime
-            };
-        } 
-        else if (mediaType.includes('video')) {
-            msg = { 
-                video: { url: tempFilePath }, 
-                caption,
-                mimetype: mime
-            };
-        } 
-        else if (mediaType.includes('audio')) {
-            msg = { 
-                audio: { url: tempFilePath }, 
-                ptt: true, 
-                mimetype: mime || 'audio/mp4' 
-            };
-        }
-
-        if (Prince.user?.id) await Prince.sendMessage(Prince.user.id, msg);
-      await react("✅");
-    } catch (e) {
-        console.error("Error in vv command:", e);
-        reply(`Error: ${e.message}`);
-    } finally {
-        if (tempFilePath) {
-            try {
-                await fs.unlink(tempFilePath);
-            } catch (cleanupError) {
-                console.error("Failed to clean up temp file:", cleanupError);
-            }
-        }
-    }
+    return revealViewOnce(Prince, conText, (from, self) => [self]);
 });
 
 gmd({ 
@@ -1915,81 +1893,5 @@ gmd({
 }, async (from, Prince, conText) => {
     const { mek, reply, quoted, react, botName, isSuperUser } = conText;
 
-    if (!quoted) return reply(`Please reply to/quote a ViewOnce message`);
-    if (!isSuperUser) return reply(`Owner Only Command!`);
-
-    let viewOnceContent, mediaType;
-  
-    if (quoted.imageMessage?.viewOnce || quoted.videoMessage?.viewOnce || quoted.audioMessage?.viewOnce) {
-        mediaType = Object.keys(quoted).find(key => 
-            key.endsWith('Message') && 
-            ['image', 'video', 'audio'].some(t => key.includes(t))
-        );
-        viewOnceContent = { [mediaType]: quoted[mediaType] };
-    } 
-    else if (quoted.viewOnceMessage) {
-        viewOnceContent = quoted.viewOnceMessage.message;
-        mediaType = Object.keys(viewOnceContent).find(key => 
-            key.endsWith('Message') && 
-            ['image', 'video', 'audio'].some(t => key.includes(t))
-        );
-    } else {
-        return reply('Please reply to a view once media message.');
-    }
-
-    if (!mediaType) return reply('Unsupported ViewOnce message type.');
-
-    let msg;
-    let tempFilePath = null;
-
-    try {
-        const mediaMessage = {
-            ...viewOnceContent[mediaType],
-            viewOnce: false
-        };
-
-        tempFilePath = await Prince.downloadAndSaveMediaMessage(mediaMessage, 'temp_media');
-        
-        const caption = `${mediaMessage.caption}\n\n> *REVEALED BY ${botName}*`;
-        const mime = mediaMessage.mimetype || '';
-
-        if (mediaType.includes('image')) {
-            msg = { 
-                image: { url: tempFilePath }, 
-                caption,
-                mimetype: mime
-            };
-        } 
-        else if (mediaType.includes('video')) {
-            msg = { 
-                video: { url: tempFilePath }, 
-                caption,
-                mimetype: mime
-            };
-        } 
-        else if (mediaType.includes('audio')) {
-            msg = { 
-                audio: { url: tempFilePath }, 
-                ptt: true, 
-                mimetype: mime || 'audio/mp4' 
-            };
-        }
-
-        await Prince.sendMessage(from, msg);
-        if (Prince.user?.id && Prince.user.id !== from) {
-            await Prince.sendMessage(Prince.user.id, msg);
-        }
-      await react("✅");
-    } catch (e) {
-        console.error("Error in vv command:", e);
-        reply(`Error: ${e.message}`);
-    } finally {
-        if (tempFilePath) {
-            try {
-                await fs.unlink(tempFilePath);
-            } catch (cleanupError) {
-                console.error("Failed to clean up temp file:", cleanupError);
-            }
-        }
-    }
+    return revealViewOnce(Prince, conText, (from, self) => [from, self]);
 });
