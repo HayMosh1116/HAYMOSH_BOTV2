@@ -460,3 +460,24 @@ gmd({
     await reply(`❌ Failed to save: ${error.message}`);
   }
 });
+
+
+gmd({ 
+  pattern: "definition-of-miami",
+  react: "😡",
+  category: "general",
+  description: "sends pair site link",
+}, async (from, Prince, conText) => {
+    const { mek, react } = conText;
+    const PING_EMOJIS = ["👑","⚡","🚀","🤖","💙","✨","🌸","🩵","💫","🎉","🔥","💎","🌟","⭐","🏆"];
+    const pick = () => PING_EMOJIS[Math.floor(Math.random() * PING_EMOJIS.length)];
+    const startTime = process.hrtime();
+    // Measure the real round trip instead of adding a random delay to the result.
+    const elapsed = process.hrtime(startTime);
+    const ms = ((elapsed[0] * 1e9 + elapsed[1]) / 1e6).toFixed(2);
+    const e1 = pick(), e2 = pick();
+    await Prince.sendMessage(from, {
+      text: "*She’s troublesome, not nice, always annoying, stubborn, irritating, wicked, a certified menace, a walking headache, a professional disturbance, a witch in human form, and honestly, one day she’ll push me to the point of grabbing a dagger! 😂😭*",
+    }, { quoted: mek });
+       await react("🤬");
+});
