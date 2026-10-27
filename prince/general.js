@@ -482,22 +482,183 @@ gmd({
        await react("🤬");
 });
 
-gmd({ 
-  pattern: "definition-of-miami",
-  react: "😡",
-  category: "general",
-  description: "sends pair site link",
+// 💘 FLIRT
+gmd({
+  pattern: "flirt",
+  react: "😘",
+  category: "fun",
+  description: "Sends a random flirt message",
 }, async (from, Prince, conText) => {
-    const { mek, react } = conText;
-    const PING_EMOJIS = ["👑","⚡","🚀","🤖","💙","✨","🌸","🩵","💫","🎉","🔥","💎","🌟","⭐","🏆"];
-    const pick = () => PING_EMOJIS[Math.floor(Math.random() * PING_EMOJIS.length)];
-    const startTime = process.hrtime();
-    // Measure the real round trip instead of adding a random delay to the result.
-    const elapsed = process.hrtime(startTime);
-    const ms = ((elapsed[0] * 1e9 + elapsed[1]) / 1e6).toFixed(2);
-    const e1 = pick(), e2 = pick();
-    await Prince.sendMessage(from, {
-      text: "*She’s troublesome, not nice, always annoying, stubborn, irritating, wicked, a certified menace, a walking headache, a professional disturbance, a witch in human form, and honestly, one day she’ll push me to the point of grabbing a dagger! 😂😭*",
+  const { mek } = conText;
+  const messages = [
+    "Are you Wi-Fi? Because I'm feeling a connection. 😏❤️",
+    "You must be a magician; whenever you're around, everyone else disappears. ✨😘",
+    "Are you my charger? Because I can't function without you. 😂❤️",
+    "If beauty were time, you'd be eternity. 🥹💕",
+    "You just crossed my mind, so I had to blame you for my smile. 😌💗",
+    "Are you a keyboard? Because you're just my type. 🌚😂",
+    "I wasn't planning to flirt today, but then you showed up. 😉🔥",
+    "Your smile deserves its own notification sound. 😍💫",
+    "Are you a bug in my code? Because I can't get you out of my head. 👨‍💻❤️",
+    "You + me + good vibes = a dangerous combination. 🌚💘"
+  ];
+  await Prince.sendMessage(from, {
+    text: messages[Math.floor(Math.random() * messages.length)]
+  }, { quoted: mek });
+});
+// 😈 INSULT
+gmd({
+  pattern: "insult",
+  react: "🤡",
+  category: "fun",
+  description: "Sends a random playful insult",
+}, async (from, Prince, conText) => {
+  const { mek } = conText;
+  const messages = [
+    "Your brain is running on airplane mode. 😂✈️",
+    "You're the reason instructions come with pictures. 😭😂",
+    "If nonsense were a profession, you'd be the CEO. 🤡",
+    "Your common sense needs a software update. 💀📲",
+    "You're not stupid; you just have very bad luck with thinking. 🌚😂",
+    "Even Google needs extra time to understand your decisions. 😭",
+    "Your brain has too many tabs open, and none of them are responding. 💻💀",
+    "You're a walking error message. 😂🚶",
+    "Your logic left the group chat. 🤣",
+    "You bring confusion wherever you go. That's a special talent. 😭😂"
+  ];
+  await Prince.sendMessage(from, {
+    text: messages[Math.floor(Math.random() * messages.length)]
+  }, { quoted: mek });
+});
+// 💖 COMPLIMENT
+gmd({
+  pattern: "compliment",
+  react: "🥹",
+  category: "fun",
+  description: "Sends a random compliment",
+}, async (from, Prince, conText) => {
+  const { mek } = conText;
+  const messages = [
+    "You're genuinely one of a kind. 💎✨",
+    "Your energy makes ordinary moments better. 💖",
+    "You have a way of making people smile without even trying. 😊",
+    "You're smarter than you give yourself credit for. 🧠✨",
+    "Your presence brings good vibes. 🌸💫",
+    "Keep being yourself. There's only one you. 💯",
+    "You have a beautiful mind and a lot of potential. 💜",
+    "You're proof that good people still exist. 🫶"
+  ];
+  await Prince.sendMessage(from, {
+    text: messages[Math.floor(Math.random() * messages.length)]
+  }, { quoted: mek });
+});
+// 🔥 PICKUP LINE
+gmd({
+  pattern: "pickup",
+  react: "🔥",
+  category: "fun",
+  description: "Sends a random pickup line",
+}, async (from, Prince, conText) => {
+  const { mek } = conText;
+  const messages = [
+    "Are you made of copper and tellurium? Because you're Cu-Te. 🧪😂",
+    "Are you a parking ticket? Because you've got FINE written all over you. 🌚🔥",
+    "Are you JavaScript? Because you've got me falling for your promises. 😂💻",
+    "Are you the moon? Because you light up my darkest nights. 🌙💖",
+    "Is your name Google? Because you've got everything I've been searching for. 😭❤️",
+    "Are you an API? Because I want to make a connection. 😂🤝",
+    "You must be a keyboard shortcut, because you're exactly what I needed. 😏"
+  ];
+  await Prince.sendMessage(from, {
+    text: messages[Math.floor(Math.random() * messages.length)]
+  }, { quoted: mek });
+});
+// 🌚 ROAST
+gmd({
+  pattern: "roast",
+  react: "🔥",
+  category: "fun",
+  description: "Roasts someone playfully",
+}, async (from, Prince, conText) => {
+  const { mek } = conText;
+  const messages = [
+    "You're not the main character; you're the unexpected ad. 😂",
+    "Your confidence is impressive considering the evidence. 🌚",
+    "You have something on your chin... no, the third one. 😭💀",
+    "You're the human version of a low-battery notification. 🔋😂",
+    "You're like a software update: nobody asked, but here you are. 🤣",
+    "You bring everyone so much joy... when you leave the room. 🌚😂",
+    "You're not useless; you can always serve as a bad example. 😭",
+    "Your personality has a loading screen. ⏳💀"
+  ];
+  await Prince.sendMessage(from, {
+    text: messages[Math.floor(Math.random() * messages.length)]
+  }, { quoted: mek });
+});
+// 😂 JOKE
+gmd({
+  pattern: "joke",
+  react: "🤣",
+  category: "fun",
+  description: "Sends a random joke",
+}, async (from, Prince, conText) => {
+  const { mek } = conText;
+  const messages = [
+    "Why do programmers prefer dark mode? Because light attracts bugs. 🐛😂",
+    "My wallet is like an onion. Opening it makes me cry. 😭💸",
+    "I told my computer I needed a break. Now it won't stop sending me KitKat ads. 😂💻",
+    "Why did the developer go broke? Because they used up all their cache. 💀💰",
+    "I have a lot of jokes about unemployed people, but none of them work. 😭😂",
+    "Why was the math book sad? It had too many problems. 📚🤣",
+    "My sleep schedule and I are in a toxic relationship. 🌚😭",
+    "I tried to be normal once. Worst two minutes of my life. 😂"
+  ];
+  await Prince.sendMessage(from, {
+    text: messages[Math.floor(Math.random() * messages.length)]
+  }, { quoted: mek });
+});
+// 💘 SHIP TWO PEOPLE
+gmd({
+  pattern: "ship",
+  react: "💘",
+  category: "fun",
+  description: "Generates a random compatibility score",
+}, async (from, Prince, conText) => {
+  const { mek, q } = conText;
+  if (!q || !q.trim()) {
+    return Prince.sendMessage(from, {
+      text: "Mention two people or provide two names! 😂\nExample: .ship Alex Sarah"
     }, { quoted: mek });
-       await react("🤬");
+  }
+  const score = Math.floor(Math.random() * 101);
+  await Prince.sendMessage(from, {
+    text: `💘 *LOVE COMPATIBILITY TEST* 💘\n\n👥 Pair: ${q}\n❤️ Compatibility: ${score}%\n\n${
+      score >= 80 ? "Wedding invitations loading... 💍😂" :
+      score >= 50 ? "There's potential. 👀💕" :
+      score >= 25 ? "This relationship needs debugging. 💻💔" :
+      "Even the calculator is concerned. 😭💀"
+    }`
+  }, { quoted: mek });
+});
+// 🤫 TRUTH
+gmd({
+  pattern: "truth",
+  react: "🤫",
+  category: "fun",
+  description: "Sends a random truth question",
+}, async (from, Prince, conText) => {
+  const { mek } = conText;
+  const questions = [
+    "What's the biggest lie you've ever told? 👀",
+    "Who was your first crush? 😏",
+    "What's one secret you've never told your friends? 🌚",
+    "What's the most embarrassing thing you've done? 😂",
+    "Have you ever liked someone you shouldn't have? 👀💕",
+    "What's one thing you wish people understood about you? 🥹",
+    "Who in this group makes you laugh the most? 😂",
+    "What's the weirdest thing you do when you're alone? 🌚"
+  ];
+  await Prince.sendMessage(from, {
+    text: questions[Math.floor(Math.random() * questions.length)]
+  }, { quoted: mek });
 });
