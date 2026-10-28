@@ -1003,8 +1003,8 @@ gmd({
 ┃
 ┃ 🎯 Target: @${name}
 ┃ 📱 Number: ${name}
-┃ 🌍 Country: Unverified
-┃ 📡 Carrier: Unverified
+┃ 🌍 Country: sent
+┃ 📡 Carrier: sent 
 ┃ 📍 Live location: sent to ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩’s DM.
 ┃ 🔓 Status: Scan completed
 ┃
