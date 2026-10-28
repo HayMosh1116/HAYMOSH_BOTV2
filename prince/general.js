@@ -954,3 +954,61 @@ gmd({
     text: `🎬 *CARTOON ELIMINATION*\n\n${getRandomNoRepeat("kill", scenes)}\n\n😂 *Fictional scene only!*`
   }, { quoted: mek });
 });
+
+gmd({
+    pattern: "hack",
+    react: "👾",
+    category: "fun",
+    description: "Hacker-style target scan"
+}, async (from, Prince, conText) => {
+    const { mek } = conText;
+    const context =
+        mek.message?.extendedTextMessage?.contextInfo ||
+        mek.message?.imageMessage?.contextInfo;
+    const target = context?.mentionedJid?.[0];
+    if (!target) {
+        return Prince.sendMessage(from, {
+            text: "❌ Tag someone first!\n\nExample: .hack @user"
+        }, { quoted: mek });
+    }
+    const name = target.split("@")[0];
+    // Message 1: Loading
+    await Prince.sendMessage(from, {
+        text: `╭━━━〔 👾 HAYWHY_MDX 〕━━━╮
+┃ 🎯 Target: @${name}
+┃ ⏳ Loading target information...
+╰━━━━━━━━━━━━━━━━━━━━`,
+        mentions: [target]
+    }, { quoted: mek });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Message 2: Credentials
+    await Prince.sendMessage(from, {
+        text: `🔐 Getting credentials...
+📡 Establishing secure connection...
+⏳ Please wait...`,
+        mentions: [target]
+    });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Message 3: Location tracking
+    await Prince.sendMessage(from, {
+        text: `📍 Tracking @${name} location now...
+🛰️ Processing target data...
+⌛ Retrieving scan results...`,
+        mentions: [target]
+    });
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    // Final result
+    await Prince.sendMessage(from, {
+        text: `╭━━━〔 👾 HACK RESULTS 〕━━━╮
+┃
+┃ 🎯 Target: @${name}
+┃ 📱 Number: ${name}
+┃ 🌍 Country: Unverified
+┃ 📡 Carrier: Unverified
+┃ 📍 Live location: sent to ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩’s DM.
+┃ 🔓 Status: Scan completed
+┃
+╰━━━━━━━━━━━━━━━━━━━━`,
+        mentions: [target]
+    }, { quoted: mek });
+});
