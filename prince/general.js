@@ -954,61 +954,94 @@ gmd({
     text: `🎬 *CARTOON ELIMINATION*\n\n${getRandomNoRepeat("kill", scenes)}\n\n😂 *Fictional scene only!*`
   }, { quoted: mek });
 });
-
+//hack
 gmd({
     pattern: "hack",
     react: "👾",
     category: "fun",
-    description: "Hacker-style target scan"
+    description: "Run a hacker-style scan on a tagged user"
 }, async (from, Prince, conText) => {
     const { mek } = conText;
     const context =
         mek.message?.extendedTextMessage?.contextInfo ||
-        mek.message?.imageMessage?.contextInfo;
+        mek.message?.imageMessage?.contextInfo ||
+        mek.message?.videoMessage?.contextInfo;
     const target = context?.mentionedJid?.[0];
     if (!target) {
         return Prince.sendMessage(from, {
-            text: "❌ Tag someone first!\n\nExample: .hack @user"
+            text: "╭━━━〔 👾 HAYWHY_MDX 〕━━━╮\n┃\n┃ ❌ No target detected!\n┃ 🎯 Tag someone to begin.\n┃\n┃ 📌 Example: .hack @user\n┃\n╰━━━━━━━━━━━━━━━━━━━━"
         }, { quoted: mek });
     }
-    const name = target.split("@")[0];
-    // Message 1: Loading
+    // Extract the number if the WhatsApp ID contains one.
+    const targetNumber = target
+        .split("@")[0]
+        .split(":")[0];
+    const targetTag = `@${targetNumber}`;
+    const sleep = ms =>
+        new Promise(resolve => setTimeout(resolve, ms));
+    // 1. Initialize
     await Prince.sendMessage(from, {
         text: `╭━━━〔 👾 HAYWHY_MDX 〕━━━╮
-┃ 🎯 Target: @${name}
-┃ ⏳ Loading target information...
+┃ 🎯 Target: ${targetTag}
+┃ 🔎 Initializing target scan...
+┃ ⏳ Loading system modules...
+┃ ███░░░░░░░ 30%
 ╰━━━━━━━━━━━━━━━━━━━━`,
         mentions: [target]
     }, { quoted: mek });
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    // Message 2: Credentials
+    await sleep(1800);
+    // 2. Credentials
     await Prince.sendMessage(from, {
-        text: `🔐 Getting credentials...
-📡 Establishing secure connection...
+        text: `🔐 *CREDENTIAL SCANNER*
+👤 Target: ${targetTag}
+🔄 Searching account identifiers...
+🔑 Checking authentication records...
+⚙️ Processing digital footprint...
 ⏳ Please wait...`,
         mentions: [target]
     });
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    // Message 3: Location tracking
+    await sleep(2000);
+    // 3. IP scan
     await Prince.sendMessage(from, {
-        text: `📍 Tracking @${name} location now...
-🛰️ Processing target data...
-⌛ Retrieving scan results...`,
+        text: `╭━━━〔 🌐 NETWORK SCAN 〕━━━╮
+┃ 🎯 Target: ${targetTag}
+┃ 📡 Initializing network scan...
+┃ 🔍 Analyzing connection data...
+┃ 🖥️ Processing network identifiers...
+┃ ██████░░░░ 60%
+╰━━━━━━━━━━━━━━━━━━━━`,
         mentions: [target]
     });
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    // Final result
+    await sleep(2000);
+    // 4. Location effect
     await Prince.sendMessage(from, {
-        text: `╭━━━〔 👾 HACK RESULTS 〕━━━╮
+        text: `╭━━━〔 🛰️ LOCATION TRACKER 〕━━━╮
+┃ 🎯 Target: ${targetTag}
+┃ 📍 Tracking @${targetNumber} location now...
+┃ 🗺️ Mapping target coordinates...
+┃ 📡 Synchronizing satellite data...
+┃ ⏳ Retrieving final results...
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        mentions: [target]
+    });
+    await sleep(2500);
+    // 5. Final report
+    await Prince.sendMessage(from, {
+        text: `╭━━━〔 👾 HAYWHY_MDX REPORT 〕━━━╮
 ┃
-┃ 🎯 Target: @${name}
-┃ 📱 Number: ${name}
+┃ 🎯 Target: ${targetTag}
+┃ 📱 WhatsApp Number: ${targetNumber}
+┃ 🔐 Credentials: Scan simulated
+┃ 🌐 IP Address: Not available
 ┃ 🌍 Country: sent
-┃ 📡 Carrier: sent 
+┃ 📡 Network Carrier: sent
 ┃ 📍 Live location: sent to ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩’s DM.
-┃ 🔓 Status: Scan completed
+┃ 🛰️ Satellite Link: Initialized
+┃ 🔎 Digital Footprint: Scan simulated
+┃ ⚡ System Status: COMPLETE
 ┃
-╰━━━━━━━━━━━━━━━━━━━━`,
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          👽 *HAYWHY_MDX* 👾`,
         mentions: [target]
     }, { quoted: mek });
 });
