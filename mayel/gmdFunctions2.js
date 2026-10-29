@@ -6,6 +6,7 @@ const { createContext, toMentionJid, mentionTag } = require("./gmdHelpers");
 const { getSetting, addWarning, resetWarnings } = require("./gmdSudoUtil");
 const logger = require("prince-baileys/lib/Utils/logger").default.child({});
 const { isJidGroup, downloadMediaMessage, getContentType } = require("prince-baileys");
+const mediaCache = require("./mediaCache");
 
 const {
     CHATBOT: chatBot,
@@ -203,6 +204,14 @@ async function resendMediaFresh(Prince, jid, original, caption) {
     const found = unwrapMedia(original?.message);
     if (!found) return false;
     try {
+        // Media downloaded when the message first arrived (deleted messages
+        // can no longer be fetched from WhatsApp's servers).
+        const cached = await mediaCache.getOrWait(original?.key?.id);
+        if (cached) {
+            await Prince.sendMessage(jid, mediaCache.toSendContent(cached, caption));
+            return true;
+        }
+        if (!mediaCache.hasMediaKey(found.media)) return false;
         const buffer = await downloadMediaMessage(
             { key: original.key, message: { [found.type]: found.media } },
             "buffer", {},
@@ -228,12 +237,30 @@ async function resendMediaFresh(Prince, jid, original, caption) {
     }
 }
 
+// Returns the readable text of any message (text, captions, polls...).
+function extractText(message) {
+    const { message: m } = mediaCache.unwrapMessage(message);
+    return (
+        m.conversation ||
+        m.extendedTextMessage?.text ||
+        m.imageMessage?.caption ||
+        m.videoMessage?.caption ||
+        m.documentMessage?.caption ||
+        m.pollCreationMessage?.name ||
+        m.pollCreationMessageV3?.name ||
+        m.contactMessage?.displayName ||
+        (m.locationMessage ? `📍 ${m.locationMessage.degreesLatitude}, ${m.locationMessage.degreesLongitude}` : "") ||
+        ""
+    );
+}
+
 const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwnerJid, deleterPushName, senderPushName) => {
     try {
         const from = key.remoteJid;
         const isGroup = from.endsWith('@g.us');
-        const msgType = getContentType(deletedMsg.message);
-        
+        const { type: mediaType, viewOnce } = mediaCache.unwrapMessage(deletedMsg.message);
+        const body = extractText(deletedMsg.message);
+
         const senderJid = toMentionJid(sender);
         const deleterJid = toMentionJid(deleter);
         const mentions = [...new Set([senderJid, deleterJid].filter(Boolean))];
@@ -251,21 +278,25 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
             isForwarded: true
         };
 
-        if (msgType === 'conversation' || msgType === 'extendedTextMessage') {
-            const body = deletedMsg.message.conversation || deletedMsg.message.extendedTextMessage?.text;
-            text += `_${body}_`;
+        if (!mediaType) {
+            const fallbackType = (getContentType(deletedMsg.message) || 'message').replace('Message', '');
+            text += body ? `_${body}_` : `_Sent a ${fallbackType}_`;
             await Prince.sendMessage(botOwnerJid, { text, mentions, contextInfo });
-        } else {
-            text += `_Sent a ${msgType.replace('Message', '')}_`;
-            await Prince.sendMessage(botOwnerJid, { text, mentions, contextInfo });
-            
-            // Forwarding the original media (especially view-once) makes
-            // WhatsApp show "Waiting for this message" in DMs. Download the
-            // media and send it as a brand-new message instead.
-            const sentFresh = await resendMediaFresh(Prince, botOwnerJid, deletedMsg);
-            if (!sentFresh) {
-                await Prince.sendMessage(botOwnerJid, { forward: deletedMsg }, { contextInfo });
-            }
+            return;
+        }
+
+        const label = `${viewOnce ? 'view-once ' : ''}${mediaType.replace('Message', '')}`;
+        text += `_Sent a ${label}_`;
+        if (body) text += `\n\n📝 *Caption:* _${body}_`;
+        await Prince.sendMessage(botOwnerJid, { text, mentions, contextInfo });
+
+        // Send the recovered media as a brand-new message. Forwarding the
+        // original makes WhatsApp show "Waiting for this message".
+        const sentFresh = await resendMediaFresh(Prince, botOwnerJid, deletedMsg);
+        if (!sentFresh) {
+            await Prince.sendMessage(botOwnerJid, {
+                text: `⚠️ The ${label} could not be recovered (it was deleted before it finished downloading or is too large).`,
+            });
         }
     } catch (e) {
         console.error('Anti-delete forwarding error:', e);
@@ -283,202 +314,126 @@ const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwn
 const _voCache = new Map();
 const REACT_EMOJIS = new Set(["❤️", "😂", "😎", "..", "❤", "😍", "🔥"]);
 
+function cacheViewOnce(Prince, ms) {
+    const { type, media, viewOnce } = mediaCache.unwrapMessage(ms.message);
+    if (!viewOnce || !["imageMessage", "videoMessage", "audioMessage"].includes(type)) return;
+    // Keep only copies that still have a media key; a later copy without a
+    // key (e.g. a quoted/echoed copy) must not overwrite a good one.
+    if (!_voCache.has(ms.key.id) || mediaCache.hasMediaKey(media)) {
+        _voCache.set(ms.key.id, { type, media, from: ms.key.remoteJid, key: ms.key });
+        setTimeout(() => _voCache.delete(ms.key.id), 30 * 60 * 1000).unref?.();
+    }
+    // Download right away: view-once links expire quickly and quoted copies
+    // have their media key removed ("Cannot derive from empty media key").
+    mediaCache.prefetch(Prince, ms);
+}
+
+// Returns a ready-to-send payload for a view-once message id, or null.
+async function getViewOnceContent(Prince, id, fallback, caption) {
+    const cached = await mediaCache.getOrWait(id);
+    if (cached) return mediaCache.toSendContent(cached, caption);
+    const src = _voCache.get(id) || fallback;
+    if (!src?.media || !mediaCache.hasMediaKey(src.media)) return null;
+    const entry = await mediaCache.prefetch(Prince, {
+        key: { remoteJid: src.from, fromMe: false, id, participant: src.key?.participant },
+        message: { [src.type]: src.media },
+    });
+    return entry ? mediaCache.toSendContent(entry, caption) : null;
+}
+
 const PrinceViewOnce = (Prince) => {
-
-    // ── Step 1: Cache all incoming view-once messages ──────────────────────
+    // One listener handles caching, reactions and plain wow/lol replies.
     Prince.ev.on("messages.upsert", async ({ messages }) => {
-        for (const ms of messages) {
+        for (const ms of messages || []) {
             try {
-                if (!ms?.message) continue;
-                const voMsg =
-                    ms.message.viewOnceMessage?.message ||
-                    ms.message.viewOnceMessageV2?.message ||
-                    ms.message.viewOnceMessageV2Extension?.message;
-                if (!voMsg) continue;
-                if (!voMsg.imageMessage && !voMsg.videoMessage && !voMsg.audioMessage) continue;
-
-                _voCache.set(ms.key.id, {
-                    voMsg,
-                    from: ms.key.remoteJid,
-                    key: ms.key,
-                });
-                // Auto-expire after 30 min (view-once links expire quickly)
-                setTimeout(() => _voCache.delete(ms.key.id), 30 * 60 * 1000);
-            } catch (_) {}
-        }
-    });
-
-    // ── Step 2: Listen for reactions ────────────────────────────────────────
-    // When the BOT OWNER reacts to any cached view-once, fromMe === true.
-    Prince.ev.on("messages.upsert", async ({ messages }) => {
-        try {
-            const ms = messages[0];
-            if (!ms?.message) return;
-
-            const reaction = ms.message?.reactionMessage;
-            if (!reaction) return;
-
-            const emoji = reaction.text;
-            if (!REACT_EMOJIS.has(emoji)) return;
-
-            // OWNER CHECK: when you react, Baileys sets fromMe = true.
-            // We also accept reactions where the sender phone matches owner.
-            const isFromMe = ms.key.fromMe === true;
-            const rawSender = ms.key.participant || ms.key.remoteJid || "";
-            const senderNum = rawSender.split("@")[0].replace(/[^0-9]/g, "");
-            const ownerNum  = (config.OWNER_NUMBER || "").replace(/[^0-9]/g, "");
-            if (!isFromMe && senderNum !== ownerNum) return;
-
-            // Look up the reacted message in our cache
-            const reactedKeyId = reaction.key?.id;
-            if (!reactedKeyId) return;
-            const cached = _voCache.get(reactedKeyId);
-            if (!cached) return;
-
-            const { voMsg, from, key } = cached;
-            const isImage = !!voMsg.imageMessage;
-            const isVideo = !!voMsg.videoMessage;
-            const isAudio = !!voMsg.audioMessage;
-            if (!isImage && !isVideo && !isAudio) return;
-
-            // Always send to the bot owner's DM
-            const ownerDM = ownerNum + "@s.whatsapp.net";
-
-            // Acknowledge with eye emoji in the source chat
-            try {
-                await Prince.sendMessage(from, { react: { key: ms.key, text: "👀" } });
-            } catch (_) {}
-
-            // Build a fake message object for downloadMediaMessage
-            const voType = isImage ? "imageMessage" : isVideo ? "videoMessage" : "audioMessage";
-            const fakeMsg = {
-                key: { remoteJid: from, fromMe: false, id: reactedKeyId, participant: key.participant },
-                message: { [voType]: voMsg[voType] },
-            };
-
-            let buffer;
-            try {
-                buffer = await downloadMediaMessage(
-                    fakeMsg, "buffer", {},
-                    { logger, reuploadRequest: Prince.updateMediaMessage }
-                );
-            } catch (dlErr) {
-                console.error("ViewOnce download error:", dlErr.message);
-                return;
+                if (!ms?.message || !ms.key?.id) continue;
+                cacheViewOnce(Prince, ms);
+                if (ms.message.reactionMessage) await handleReaction(Prince, ms);
+                else await handlePlainReveal(Prince, ms);
+            } catch (err) {
+                console.error("PrinceViewOnce error:", err.message);
             }
-
-            if (!Buffer.isBuffer(buffer) || buffer.length === 0) return;
-
-            const mediaLabel = isImage ? "Image" : isVideo ? "Video" : "Audio";
-            const caption =
-                `🔓 *View Once ${mediaLabel} Revealed*\n` +
-                `_Forwarded by ${config.BOT_NAME}_`;
-
-            const mime = voMsg[voType]?.mimetype;
-            if (isImage) {
-                await Prince.sendMessage(ownerDM, { image: buffer, caption, mimetype: mime });
-            } else if (isVideo) {
-                await Prince.sendMessage(ownerDM, { video: buffer, caption, mimetype: mime || "video/mp4" });
-            } else {
-                await Prince.sendMessage(ownerDM, { audio: buffer, mimetype: mime || "audio/mp4", ptt: !!voMsg.audioMessage?.ptt });
-            }
-
-        } catch (err) {
-            console.error("PrinceViewOnce reaction error:", err.message);
-        }
-    });
-
-    // The owner can also reply with plain "wow" or "lol" in a group or DM.
-    // Keep this owner-only and require a direct reply to cached media.
-    Prince.ev.on("messages.upsert", async ({ messages }) => {
-        try {
-            const ms = messages[0];
-            if (!ms?.message) return;
-
-            // Messages typed on the linked phone are not consistently marked
-            // fromMe by every WhatsApp multi-device session. Check the
-            // connected account and configured owner number as a fallback.
-            const normalize = (jid) => String(jid || "").split("@")[0].replace(/\D/g, "");
-            const ownerNumber = normalize(config.OWNER_NUMBER);
-            const connectedNumber = normalize(Prince.user?.id);
-            const messageSender = normalize(
-                ms.key.participantPn || ms.key.participant || ms.key.remoteJid,
-            );
-            const isOwner = ms.key.fromMe === true ||
-                (ownerNumber && messageSender === ownerNumber) ||
-                (connectedNumber && messageSender === connectedNumber);
-            if (!isOwner) return;
-
-            const text = (
-                ms.message.conversation ||
-                ms.message.extendedTextMessage?.text ||
-                ""
-            ).trim().toLowerCase();
-            if (text !== "wow" && text !== "lol" && text !== "wow2" && text !== "lol2") return;
-
-            const quotedContext = ms.message.extendedTextMessage?.contextInfo;
-            const quotedKey = quotedContext?.stanzaId;
-            if (!quotedKey) return;
-            const cached = _voCache.get(quotedKey) || (
-                quotedContext.quotedMessage
-                    ? {
-                        voMsg: quotedContext.quotedMessage.viewOnceMessage?.message ||
-                            quotedContext.quotedMessage.viewOnceMessageV2?.message ||
-                            quotedContext.quotedMessage.viewOnceMessageV2Extension?.message ||
-                            quotedContext.quotedMessage,
-                        from: ms.key.remoteJid,
-                        key: { participant: quotedContext.participant },
-                    }
-                    : null
-            );
-            if (!cached) return;
-
-            const { voMsg, from, key } = cached;
-            const mediaType = voMsg.imageMessage
-                ? "image"
-                : voMsg.videoMessage
-                    ? "video"
-                    : null;
-            if (!mediaType) return;
-
-            const buffer = await downloadMediaMessage(
-                {
-                    key: {
-                        remoteJid: from,
-                        fromMe: false,
-                        id: quotedKey,
-                        participant: key.participant,
-                    },
-                    message: voMsg,
-                },
-                "buffer",
-                {},
-                { logger, reuploadRequest: Prince.updateMediaMessage },
-            );
-            if (!Buffer.isBuffer(buffer) || buffer.length === 0) return;
-
-            const revealed = {
-                [mediaType]: buffer,
-                caption: `🔓 *View Once ${mediaType === "image" ? "Image" : "Video"} Revealed*\n\n_Requested with ${text}_`,
-            };
-            const ownerDM = Prince.user?.id;
-            if (text === "wow2" || text === "lol2") {
-                if (ownerDM) await Prince.sendMessage(ownerDM, revealed);
-            } else {
-                await Prince.sendMessage(from, revealed);
-                if (ownerDM && ownerDM !== from) {
-                    await Prince.sendMessage(ownerDM, revealed);
-                }
-            }
-            _voCache.delete(quotedKey);
-        } catch (err) {
-            console.error("Plain wow/lol view-once reveal error:", err.message);
         }
     });
 };
 
+function normalizeNum(jid) {
+    return String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+}
+
+function isOwnerMsg(Prince, ms) {
+    const ownerNumber = normalizeNum(config.OWNER_NUMBER);
+    const connectedNumber = normalizeNum(Prince.user?.id);
+    const sender = normalizeNum(ms.key.participantPn || ms.key.participant || ms.key.remoteJid);
+    return ms.key.fromMe === true ||
+        (ownerNumber && sender === ownerNumber) ||
+        (connectedNumber && sender === connectedNumber);
+}
+
+// React with ❤️ 😂 😎 etc. on a cached view-once -> sent to owner's DM.
+async function handleReaction(Prince, ms) {
+    const reaction = ms.message.reactionMessage;
+    if (!REACT_EMOJIS.has(reaction.text)) return;
+    if (!isOwnerMsg(Prince, ms)) return;
+    const reactedKeyId = reaction.key?.id;
+    const cached = reactedKeyId && _voCache.get(reactedKeyId);
+    if (!cached) return;
+
+    const ownerNum = normalizeNum(config.OWNER_NUMBER) || normalizeNum(Prince.user?.id);
+    const ownerDM = ownerNum + "@s.whatsapp.net";
+    try {
+        await Prince.sendMessage(cached.from, { react: { key: ms.key, text: "👀" } });
+    } catch (_) {}
+
+    const mediaLabel = cached.type === "imageMessage" ? "Image" : cached.type === "videoMessage" ? "Video" : "Audio";
+    const caption = `🔓 *View Once ${mediaLabel} Revealed*\n_Forwarded by ${config.BOT_NAME}_`;
+    const content = await getViewOnceContent(Prince, reactedKeyId, null, caption);
+    if (!content) {
+        console.error("ViewOnce: media unavailable for", reactedKeyId);
+        return;
+    }
+    await Prince.sendMessage(ownerDM, content);
+}
+
+// Owner replies "wow"/"lol" (or wow2/lol2 for DM only) to a view-once.
+async function handlePlainReveal(Prince, ms) {
+    const text = (ms.message.conversation || ms.message.extendedTextMessage?.text || "").trim().toLowerCase();
+    if (!["wow", "lol", "wow2", "lol2"].includes(text)) return;
+    if (!isOwnerMsg(Prince, ms)) return;
+
+    const ctx = ms.message.extendedTextMessage?.contextInfo;
+    const quotedKey = ctx?.stanzaId;
+    if (!quotedKey) return;
+
+    let fallback = null;
+    if (ctx.quotedMessage) {
+        const q = mediaCache.unwrapMessage(ctx.quotedMessage);
+        if (q.type) fallback = { type: q.type, media: q.media, from: ms.key.remoteJid, key: { participant: ctx.participant } };
+    }
+    if (!_voCache.has(quotedKey) && !fallback) return;
+    const type = (_voCache.get(quotedKey) || fallback).type;
+    if (type !== "imageMessage" && type !== "videoMessage") return;
+
+    const label = type === "imageMessage" ? "Image" : "Video";
+    const content = await getViewOnceContent(
+        Prince, quotedKey, fallback,
+        `🔓 *View Once ${label} Revealed*\n\n_Requested with ${text}_`,
+    );
+    const ownerDM = Prince.user?.id ? normalizeNum(Prince.user.id) + "@s.whatsapp.net" : null;
+    if (!content) {
+        if (ownerDM) await Prince.sendMessage(ownerDM, { text: "⚠️ That view-once media is no longer available to download." });
+        return;
+    }
+    if (text === "wow2" || text === "lol2") {
+        if (ownerDM) await Prince.sendMessage(ownerDM, content);
+    } else {
+        await Prince.sendMessage(ms.key.remoteJid, content);
+        if (ownerDM && ownerDM !== ms.key.remoteJid) await Prince.sendMessage(ownerDM, content);
+    }
+}
+
 module.exports = {
     logger, emojis, PrinceAutoReact, PrinceTechApi, PrinceApiKey, PrinceAntiLink,
     PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrincePresence, PrinceAntiDelete,
-    PrinceAnticall, PrinceViewOnce,
+    PrinceAnticall, PrinceViewOnce, getViewOnceContent,
 };
