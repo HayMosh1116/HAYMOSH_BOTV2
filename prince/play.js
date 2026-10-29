@@ -20,6 +20,8 @@ function getDownloadUrl(payload) {
 }
 
 const yts = require("yt-search");
+const { downloadYouTubeAudio, prepareYtDlp } = require("../mayel/ytAudio");
+prepareYtDlp();
 
 function normalizeVideo(v) {
   if (!v || !v.url) return null;
@@ -216,22 +218,30 @@ gmd({
       // Prepare the audio in the background so the song card is sent
       // immediately instead of after the whole download + conversion.
       const audioPromise = (async () => {
-        // Try each source until one returns a real audio file (some mirrors
-        // return an HTML page instead of the MP3).
-        for (const api of audioApis) {
-          try {
-            const downloadUrl = getDownloadUrl(await gmdJson(api));
-            if (!downloadUrl) continue;
-            const buffer = await gmdBuffer(downloadUrl);
-            if (!Buffer.isBuffer(buffer) || buffer.length < 10000) continue;
-            const head = buffer.slice(0, 64).toString("utf8").trimStart().toLowerCase();
-            if (head.startsWith("<!doctype") || head.startsWith("<html") || head.startsWith("{")) continue;
-            return await formatAudio(buffer);
-          } catch (e) {
-            console.log(`API ${api} failed: ${e.message}`);
-          }
+        // 1) Local yt-dlp download: no third-party API, most reliable.
+        try {
+          const { buffer } = await downloadYouTubeAudio(videoUrl);
+          return await formatAudio(buffer);
+        } catch (e) {
+          console.log(`yt-dlp audio failed: ${e.message}`);
         }
-        throw new Error("Failed to get download URL for the audio.");
+        // 2) Fallback: query all mirror APIs at once and use the first one
+        // that returns a real audio file (some return HTML instead of MP3).
+        const tryApi = async (api) => {
+          const downloadUrl = getDownloadUrl(await gmdJson(api, { timeout: 15000 }));
+          if (!downloadUrl) throw new Error("no download url");
+          const buffer = await gmdBuffer(downloadUrl, { timeout: 120000 });
+          if (!Buffer.isBuffer(buffer) || buffer.length < 10000) throw new Error("invalid audio");
+          const head = buffer.slice(0, 64).toString("utf8").trimStart().toLowerCase();
+          if (head.startsWith("<!doctype") || head.startsWith("<html") || head.startsWith("{")) throw new Error("not audio");
+          return buffer;
+        };
+        try {
+          const buffer = await Promise.any(audioApis.map(tryApi));
+          return await formatAudio(buffer);
+        } catch (_) {
+          throw new Error("Failed to download this song right now. Please try again in a moment.");
+        }
       })();
       audioPromise.catch(() => {});
 
