@@ -220,8 +220,9 @@ async function toPtt(buffer) {
 
 async function formatAudio(buffer) {
   return new Promise((resolve, reject) => {
-    const tempInput = `temp_${Date.now()}.input`;
-    const tempOutput = `temp_${Date.now()}.mp3`;
+    const tempId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const tempInput = `temp_${tempId}.input`;
+    const tempOutput = `temp_${tempId}.mp3`;
     
     fs.writeFileSync(tempInput, buffer);
     
