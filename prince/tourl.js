@@ -21,7 +21,16 @@ gmd({
     category: "uploader",
     description: "Get a direct URL for an image",
 }, async (from, Prince, conText) => {
-    const { mek, reply, react, getMediaBuffer, uploadToPrinceCdn, uploadToImgBB } = conText;
+    const {
+        mek,
+        reply,
+        react,
+        getMediaBuffer,
+        uploadToCatbox,
+        uploadToPixhost,
+        uploadToPrinceCdn,
+        uploadToImgBB,
+    } = conText;
     const quoted = mek?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
     const image = findImageMessage(quoted) || findImageMessage(mek?.message);
     if (!image) return reply("Reply to an image with .url, or send .url in the image caption.");
@@ -29,14 +38,28 @@ gmd({
     try {
         const buffer = await getMediaBuffer(image, "image");
         if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("empty image");
+        const providers = [
+            ["Catbox", uploadToCatbox],
+            ["Pixhost", uploadToPixhost],
+            ["PrinceCDN", uploadToPrinceCdn],
+            ["ImgBB", uploadToImgBB],
+        ];
         let result;
-        try {
-            result = await uploadToPrinceCdn(buffer, "image.jpg");
-        } catch (primaryError) {
-            console.error("PrinceCDN image URL failed:", primaryError.message);
-            result = await uploadToImgBB(buffer, "image.jpg");
+        const providerErrors = [];
+        for (const [name, upload] of providers) {
+            if (typeof upload !== "function") continue;
+            try {
+                result = await upload(buffer, "image.png");
+                if (result?.url && /^https?:\/\//i.test(result.url)) break;
+                providerErrors.push(`${name}: no URL returned`);
+            } catch (providerError) {
+                providerErrors.push(`${name}: ${providerError.message}`);
+                console.error(`${name} image URL failed:`, providerError.message);
+            }
         }
-        if (!result?.url || !/^https?:\/\//i.test(result.url)) throw new Error("upload returned no URL");
+        if (!result?.url || !/^https?:\/\//i.test(result.url)) {
+            throw new Error(`all image URL providers failed (${providerErrors.join("; ")})`);
+        }
         await reply(`🔗 *Image URL:*\n${result.url}`);
         await react("✅");
     } catch (error) {
