@@ -177,6 +177,74 @@ ${allParticipants}
   },
 );
 
+function escapeVCard(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/([,;])/g, "\\$1")
+    .replace(/\r?\n/g, "\\n");
+}
+
+function participantPhone(participant) {
+  const candidates = [participant?.pn, participant?.phoneNumber, participant?.jid, participant?.id];
+  for (const candidate of candidates) {
+    const raw = String(candidate || "");
+    if (raw.endsWith("@lid")) continue;
+    const number = raw.split("@")[0].split(":")[0].replace(/\D/g, "");
+    if (number.length >= 5) return number;
+  }
+  return null;
+}
+
+gmd(
+  {
+    pattern: "vcf",
+    aliases: ["groupvcf", "gcvcf", "groupcontacts"],
+    react: "📇",
+    category: "group",
+    description: "Download group contacts as a VCF file",
+  },
+  async (from, Prince, conText) => {
+    const { reply, react, mek, isGroup, groupInfo } = conText;
+    if (!isGroup) return reply("This command can only be used inside a group.");
+
+    try {
+      const meta = groupInfo || await Prince.groupMetadata(from);
+      const seen = new Set();
+      const cards = [];
+      for (const participant of meta?.participants || []) {
+        const number = participantPhone(participant);
+        if (!number || seen.has(number)) continue;
+        seen.add(number);
+        const name = participant.notify || participant.name || participant.verifiedName || number;
+        const safeName = escapeVCard(name);
+        cards.push([
+          "BEGIN:VCARD",
+          "VERSION:3.0",
+          `FN:${safeName}`,
+          `N:${safeName};;;;`,
+          `TEL;TYPE=CELL;TYPE=VOICE;waid=${number}:${number}`,
+          "END:VCARD",
+        ].join("\r\n"));
+      }
+
+      if (!cards.length) return reply("I couldn't find phone-number contacts in this group.");
+      const subject = String(meta.subject || "group").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 80) || "group";
+      const vcf = Buffer.from(`${cards.join("\r\n")}\r\n`, "utf8");
+      await Prince.sendMessage(from, {
+        document: vcf,
+        mimetype: "text/vcard",
+        fileName: `${subject}.vcf`,
+        caption: `📇 ${cards.length} group contacts`,
+      }, { quoted: mek });
+      await react("✅");
+    } catch (error) {
+      console.error("VCF export error:", error);
+      await react("❌");
+      await reply("Failed to create the group contact file. Please try again.");
+    }
+  },
+);
+
 gmd(
   {
     pattern: "demote",

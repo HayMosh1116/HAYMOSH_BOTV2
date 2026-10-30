@@ -11,6 +11,7 @@ const logger = require("prince-baileys/lib/Utils/logger").default.child({});
 const TTL_MS = 60 * 60 * 1000; // keep for 1 hour
 const MAX_ITEM = 16 * 1024 * 1024; // skip files above 16 MB
 const MAX_TOTAL = 150 * 1024 * 1024; // total memory cap
+const DOWNLOAD_TIMEOUT_MS = 30 * 1000; // never leave recovery waiting forever
 
 const MEDIA_TYPES = ["imageMessage", "videoMessage", "audioMessage", "stickerMessage", "documentMessage"];
 
@@ -86,12 +87,23 @@ function prefetch(Prince, ms) {
         const size = Number(media.fileLength || 0);
         if (size && size > MAX_ITEM) return Promise.resolve(null);
 
-        const p = downloadMediaMessage(
+        const download = downloadMediaMessage(
             { key: ms.key, message: { [type]: media } },
             "buffer",
             {},
             { logger, reuploadRequest: Prince.updateMediaMessage },
-        )
+        );
+        let timer;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                const err = new Error(`media download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000}s`);
+                err.code = "media_download_timeout";
+                reject(err);
+            }, DOWNLOAD_TIMEOUT_MS);
+            timer.unref?.();
+        });
+        const p = Promise.race([download, timeout])
+            .finally(() => clearTimeout(timer))
             .then((buffer) => {
                 if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > MAX_ITEM) return null;
                 const entry = { buffer, type, media, ts: Date.now() };
