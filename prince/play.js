@@ -20,7 +20,7 @@ function getDownloadUrl(payload) {
 }
 
 const yts = require("yt-search");
-const { downloadSongAudio, prepareYtDlp } = require("../mayel/ytAudio");
+const { downloadSongAudio, prepareYtDlp, scoreMatch, MATCH_THRESHOLD } = require("../mayel/ytAudio");
 prepareYtDlp();
 
 function normalizeVideo(v) {
@@ -39,6 +39,17 @@ function extractVideoId(text) {
   return m ? m[1] : null;
 }
 
+function rankVideoResults(videos, query) {
+  return (videos || [])
+    .map(normalizeVideo)
+    .filter(Boolean)
+    .map((video) => ({
+      ...video,
+      matchScore: scoreMatch(query, `${video.title || ""} ${video.author?.name || video.author || ""}`),
+    }))
+    .sort((a, b) => b.matchScore - a.matchScore);
+}
+
 // Searches YouTube directly (yt-search) first; the old third-party search
 // endpoints are kept only as a fallback because they are frequently offline.
 async function searchYouTube(gmdJson, query) {
@@ -50,7 +61,8 @@ async function searchYouTube(gmdJson, query) {
       if (found) return found;
     } else {
       const r = await yts(query);
-      const found = normalizeVideo((r?.videos || [])[0]);
+      const found = rankVideoResults(r?.videos, query)[0];
+      if (found && found.matchScore < MATCH_THRESHOLD) return null;
       if (found) return found;
     }
   } catch (e) {
@@ -61,7 +73,8 @@ async function searchYouTube(gmdJson, query) {
     try {
       const response = await gmdJson(`${endpoint}?q=${encodeURIComponent(query)}`);
       if (response && !(response instanceof Error) && Array.isArray(response.videos)) {
-        const video = normalizeVideo(response.videos[0]);
+        const video = rankVideoResults(response.videos, query)[0];
+        if (video && video.matchScore < MATCH_THRESHOLD) continue;
         if (video) return video;
       }
     } catch (_) {}
@@ -93,7 +106,7 @@ gmd({
         return reply("Failed to download the image file.");
       }
       await Prince.sendMessage(from, {
-        image: imageBuffer,
+        image: buffer,
         mimetype: "image/jpg",
         caption: `> *${botFooter}*`,
       }, { quoted: mek });
@@ -212,15 +225,13 @@ gmd({
         // yt-dlp verifies the source title before downloading. If YouTube
         // blocks the host, it searches SoundCloud and applies the same check.
         try {
-          const searchTitle = /^https?:\/\//i.test(q)
-            ? String(firstVideo.title || "").trim()
-            : q;
+          const isDirectUrl = /^https?:\/\//i.test(q);
+          const searchTitle = isDirectUrl ? String(firstVideo.title || "").trim() : q;
           const bannerTitle = String(firstVideo.title || firstVideo.name || "").trim();
-          const artist = firstVideo.author?.name || firstVideo.author || firstVideo.artist || "";
-          const expectedTitles = [
-            artist ? `${bannerTitle} ${artist}` : bannerTitle,
-            q,
-          ].filter(Boolean);
+          // For a text search, validate only against what the user requested.
+          // Never add the selected banner title here: doing that lets a remix
+          // or cover selected by search validate itself.
+          const expectedTitles = isDirectUrl ? [bannerTitle] : [q];
           const { buffer, source } = await downloadSongAudio(videoUrl, searchTitle, expectedTitles);
           console.log(`.play: audio from ${source}`);
           return await formatAudio(buffer);

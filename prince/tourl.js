@@ -2,6 +2,50 @@ const { gmd } = require("../mayel");
 const path = require("path");
 const fs = require('fs').promises;
 
+function findImageMessage(message) {
+    let current = message;
+    for (let i = 0; i < 5 && current; i += 1) {
+        if (current.imageMessage) return current.imageMessage;
+        current = current.ephemeralMessage?.message
+            || current.viewOnceMessage?.message
+            || current.viewOnceMessageV2?.message
+            || current.documentWithCaptionMessage?.message;
+    }
+    return null;
+}
+
+gmd({
+    pattern: "url",
+    aliases: ["imgurl", "imageurl"],
+    react: "🔗",
+    category: "uploader",
+    description: "Get a direct URL for an image",
+}, async (from, Prince, conText) => {
+    const { mek, reply, react, getMediaBuffer, uploadToPrinceCdn, uploadToImgBB } = conText;
+    const quoted = mek?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    const image = findImageMessage(quoted) || findImageMessage(mek?.message);
+    if (!image) return reply("Reply to an image with .url, or send .url in the image caption.");
+
+    try {
+        const buffer = await getMediaBuffer(image, "image");
+        if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("empty image");
+        let result;
+        try {
+            result = await uploadToPrinceCdn(buffer, "image.jpg");
+        } catch (primaryError) {
+            console.error("PrinceCDN image URL failed:", primaryError.message);
+            result = await uploadToImgBB(buffer, "image.jpg");
+        }
+        if (!result?.url || !/^https?:\/\//i.test(result.url)) throw new Error("upload returned no URL");
+        await reply(`🔗 *Image URL:*\n${result.url}`);
+        await react("✅");
+    } catch (error) {
+        console.error("Image URL error:", error);
+        await react("❌");
+        await reply("❌ Failed to create an image URL. Please try again.");
+    }
+});
+
 gmd({
     pattern: "princecdn",
     react: "⬆️",
