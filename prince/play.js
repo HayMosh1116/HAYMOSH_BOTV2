@@ -20,7 +20,7 @@ function getDownloadUrl(payload) {
 }
 
 const yts = require("yt-search");
-const { downloadYouTubeAudio, prepareYtDlp } = require("../mayel/ytAudio");
+const { downloadSongAudio, prepareYtDlp } = require("../mayel/ytAudio");
 prepareYtDlp();
 
 function normalizeVideo(v) {
@@ -219,11 +219,16 @@ gmd({
       // immediately instead of after the whole download + conversion.
       const audioPromise = (async () => {
         // 1) Local yt-dlp download: no third-party API, most reliable.
+        // YouTube first, then SoundCloud (YouTube blocks many server IPs).
         try {
-          const { buffer } = await downloadYouTubeAudio(videoUrl);
+          const searchTitle = extractVideoId(q) || /^https?:\/\//i.test(q)
+            ? String(firstVideo.title || "").replace(/[\(\[][^\)\]]*[\)\]]/g, " ").trim()
+            : q;
+          const { buffer, source } = await downloadSongAudio(videoUrl, searchTitle);
+          console.log(`.play: audio from ${source}`);
           return await formatAudio(buffer);
         } catch (e) {
-          console.log(`yt-dlp audio failed: ${e.message}`);
+          console.log(`.play local download failed: ${e.message}`);
         }
         // 2) Fallback: query all mirror APIs at once and use the first one
         // that returns a real audio file (some return HTML instead of MP3).
