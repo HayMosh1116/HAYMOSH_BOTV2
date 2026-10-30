@@ -25,7 +25,9 @@ const RELEASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
 
 // How strict the title/artist check is. 1.00 = identical after cleaning,
 // 0 = nothing in common. A candidate needs at least this much to be sent.
-const MATCH_THRESHOLD = 0.60;
+// 0.75 rejects a result that only matches the song title while dropping the
+// artist supplied by the user.
+const MATCH_THRESHOLD = 0.75;
 
 let _binPromise = null;
 
@@ -201,8 +203,13 @@ function rawWords(text) {
 // Words that identify the song itself: tags like "(Official Video)" and
 // filler words are dropped.
 function normalizeText(text) {
-  return rawWords(text)
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
     .split(" ")
     .filter((w) => w && !NOISE.has(w))
     .join(" ");
@@ -259,8 +266,36 @@ function bestScore(titles, candidateTitle) {
 
 /* ===================== sources ===================== */
 
-/** Downloads the best audio stream for a YouTube URL. Resolves to { buffer, ext }. */
-async function downloadYouTubeAudio(url) {
+/** Read the source title without downloading audio. */
+async function getYouTubeTitle(url) {
+  const { cmd, pre } = await getBinary();
+  const out = await run(cmd, [
+    ...pre,
+    "--dump-single-json",
+    "--skip-download",
+    "--no-playlist",
+    "--no-warnings",
+    "--no-progress",
+    "--no-cache-dir",
+    "--socket-timeout", "20",
+    "--retries", "2",
+    ...cookieArgs(),
+    url,
+  ], 60000);
+  const info = JSON.parse(out);
+  return info.title || info.fulltitle || "";
+}
+
+/** Downloads the best audio stream for a verified YouTube URL. */
+async function downloadYouTubeAudio(url, expectedTitles = []) {
+  const actualTitle = await getYouTubeTitle(url);
+  const score = bestScore(expectedTitles, actualTitle);
+  if (!actualTitle || score < MATCH_THRESHOLD) {
+    const err = new Error(`YouTube title did not match the requested song (got "${actualTitle || "unknown"}", score ${score.toFixed(2)})`);
+    err.code = "no_verified_match";
+    throw err;
+  }
+  console.log(`YouTube match: "${actualTitle}" (score ${score.toFixed(2)})`);
   return ytdlpDownload(url, ["-f", "bestaudio[filesize<60M]/bestaudio/best", ...cookieArgs()], 120000);
 }
 
@@ -327,14 +362,15 @@ async function downloadSoundCloudAudio(query, altTitles = []) {
 /**
  * Tries YouTube first, then a verified SoundCloud match.
  * Resolves to { buffer, ext, source }.
- * `title` is the song the user asked for; `altTitles` are other ways the same
- * song was described (e.g. the YouTube result title) used for the check.
+ * `title` is the song the user asked for; `altTitles` are other verified ways
+ * the same song was described (e.g. the YouTube result title) used for checks.
  */
 async function downloadSongAudio(url, title, altTitles = []) {
   const errors = [];
+  const expectedTitles = [title, ...altTitles].filter(Boolean);
   if (url) {
     try {
-      return { ...(await downloadYouTubeAudio(url)), source: "youtube" };
+      return { ...(await downloadYouTubeAudio(url, expectedTitles)), source: "youtube" };
     } catch (e) {
       errors.push(`YouTube: ${e.message}`);
     }
@@ -361,6 +397,7 @@ module.exports = {
   downloadSoundCloudAudio,
   downloadSongAudio,
   listSoundCloudMatches,
+  getYouTubeTitle,
   scoreMatch,
   prepareYtDlp,
   MATCH_THRESHOLD,

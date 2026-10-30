@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
+    "test": "node test/ytAudio.test.js",
     "stop": "pm2 stop princemd",
     "restart": "pm2 restart princemd"
   },

@@ -206,46 +206,29 @@ gmd({
 
       const videoUrl = firstVideo.url;
       
-      const audioApis = [
-        `${PrinceTechApi}/api/download/ytmp3?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`,
-        `${PrinceTechApi}/api/download/yta?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`,
-        `${PrinceTechApi}/api/download/dlmp3?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`,
-        `${PrinceTechApi}/api/download/mp3?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`,
-        `${PrinceTechApi}/api/download/ytaudio?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`,
-        `${PrinceTechApi}/api/download/ytmusic?apikey=${PrinceApiKey}&url=${encodeURIComponent(videoUrl)}`
-      ];
-
       // Prepare the audio in the background so the song card is sent
       // immediately instead of after the whole download + conversion.
       const audioPromise = (async () => {
-        // 1) Local yt-dlp download: no third-party API, most reliable.
-        // YouTube first, then SoundCloud (YouTube blocks many server IPs).
+        // yt-dlp verifies the source title before downloading. If YouTube
+        // blocks the host, it searches SoundCloud and applies the same check.
         try {
-          const searchTitle = extractVideoId(q) || /^https?:\/\//i.test(q)
-            ? String(firstVideo.title || "").replace(/[\(\[][^\)\]]*[\)\]]/g, " ").trim()
+          const searchTitle = /^https?:\/\//i.test(q)
+            ? String(firstVideo.title || "").trim()
             : q;
-          const { buffer, source } = await downloadSongAudio(videoUrl, searchTitle);
+          const bannerTitle = String(firstVideo.title || firstVideo.name || "").trim();
+          const artist = firstVideo.author?.name || firstVideo.author || firstVideo.artist || "";
+          const expectedTitles = [
+            artist ? `${bannerTitle} ${artist}` : bannerTitle,
+            q,
+          ].filter(Boolean);
+          const { buffer, source } = await downloadSongAudio(videoUrl, searchTitle, expectedTitles);
           console.log(`.play: audio from ${source}`);
           return await formatAudio(buffer);
         } catch (e) {
-          console.log(`.play local download failed: ${e.message}`);
-        }
-        // 2) Fallback: query all mirror APIs at once and use the first one
-        // that returns a real audio file (some return HTML instead of MP3).
-        const tryApi = async (api) => {
-          const downloadUrl = getDownloadUrl(await gmdJson(api, { timeout: 15000 }));
-          if (!downloadUrl) throw new Error("no download url");
-          const buffer = await gmdBuffer(downloadUrl, { timeout: 120000 });
-          if (!Buffer.isBuffer(buffer) || buffer.length < 10000) throw new Error("invalid audio");
-          const head = buffer.slice(0, 64).toString("utf8").trimStart().toLowerCase();
-          if (head.startsWith("<!doctype") || head.startsWith("<html") || head.startsWith("{")) throw new Error("not audio");
-          return buffer;
-        };
-        try {
-          const buffer = await Promise.any(audioApis.map(tryApi));
-          return await formatAudio(buffer);
-        } catch (_) {
-          throw new Error("Failed to download this song right now. Please try again in a moment.");
+          console.log(`.play verified download failed: ${e.message}`);
+          throw new Error(e.code === "no_verified_match" || /no_verified_match/i.test(e.message)
+            ? "I couldn't verify a matching audio source for this song, so I did not send audio. Try adding the artist name."
+            : "Failed to download this song right now. Please try again in a moment.");
         }
       })();
       audioPromise.catch(() => {});
@@ -302,6 +285,7 @@ gmd({
                   showAdAttribution: true,
                 },
               }, { quoted: messageData });
+              Prince.ev.off("messages.upsert", handleResponse);
               break;
               
             case "2":
@@ -311,6 +295,7 @@ gmd({
                  fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
                  caption: `${firstVideo.name || firstVideo.title || "Audio"}`,
               }, { quoted: messageData });
+              Prince.ev.off("messages.upsert", handleResponse);
               break;
               
             default:
