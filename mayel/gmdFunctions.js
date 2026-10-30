@@ -14,8 +14,24 @@ const FormData = require('form-data');
 const { fromBuffer } = require('file-type');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
 const { Readable } = require('stream');
+
+// Prefer packaged ffmpeg binaries, but deployments that skip optional install
+// scripts often leave ffmpeg-static without its executable. Fall back to the
+// system binary so a valid .play download can still be converted and sent.
+function resolveFfmpegPath() {
+    const candidates = [process.env.FFMPEG_PATH];
+    try { candidates.push(require('ffmpeg-static')); } catch (_) {}
+    try { candidates.push(require('@ffmpeg-installer/ffmpeg').path); } catch (_) {}
+    candidates.push('ffmpeg');
+    return candidates.find((candidate) => {
+        if (!candidate) return false;
+        if (candidate === 'ffmpeg') return true;
+        try { return fs.existsSync(candidate); } catch (_) { return false; }
+    });
+}
+
+const ffmpegPath = resolveFfmpegPath();
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const sessionDir = path.join(__dirname, "session");
@@ -604,4 +620,3 @@ class gmdStore {
 }
 
 module.exports = { dBinary, eBinary, dBase, eBase, runtime, sleep, gmdFancy, stickerToImage, toAudio, toVideo, toPtt, formatVideo, formatAudio, monospace, formatBytes, sleep, gmdBuffer, gmdJson, latestWaVersion, gmdRandom, isUrl,gmdStore, isNumber, loadSession, verifyJidState };
-

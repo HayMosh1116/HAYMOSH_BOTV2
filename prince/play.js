@@ -226,6 +226,9 @@ gmd({
           return await formatAudio(buffer);
         } catch (e) {
           console.log(`.play verified download failed: ${e.message}`);
+          if (/ffmpeg|spawn .*ENOENT|audio converter/i.test(e.message || "")) {
+            throw new Error("The song was found, but the bot's audio converter is unavailable. Please contact the bot owner to install FFmpeg.");
+          }
           throw new Error(e.code === "no_verified_match" || /no_verified_match/i.test(e.message)
             ? "I couldn't verify a matching audio source for this song, so I did not send audio. Try adding the artist name."
             : "Failed to download this song right now. Please try again in a moment.");
