@@ -8,6 +8,11 @@
 //   1. try YouTube (with cookies when YT_COOKIES / YT_COOKIES_FILE is set),
 //   2. fall back to SoundCloud search for the same song title, which is not
 //      blocked on server IPs.
+//
+// IMPORTANT: the SoundCloud fallback NEVER downloads "the first result".
+// Every candidate title is checked against the requested song (title +
+// artist) and only a verified match is downloaded, so the audio that is
+// sent is always the song shown on the banner.
 
 const fs = require("fs");
 const os = require("os");
@@ -17,6 +22,10 @@ const axios = require("axios");
 
 const BIN_DIR = path.join(__dirname, "temp", "bin");
 const RELEASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
+
+// How strict the title/artist check is. 1.00 = identical after cleaning,
+// 0 = nothing in common. A candidate needs at least this much to be sent.
+const MATCH_THRESHOLD = 0.60;
 
 let _binPromise = null;
 
@@ -159,31 +168,169 @@ async function ytdlpDownload(target, extraArgs = [], timeout = 120000) {
   }
 }
 
+/* ===================== song matching ===================== */
+
+// Words that carry no information about which song is meant.
+const NOISE = new Set([
+  "official", "video", "audio", "music", "lyrics", "lyric", "mv", "hd", "hq",
+  "4k", "full", "song", "track", "version", "explicit", "clean", "download",
+  "mp3", "mp4", "the", "a", "an", "of", "ft", "feat", "featuring", "with",
+  "and", "x", "vs", "new", "hot", "by",
+]);
+
+// Things that make it NOT the song the user asked for.
+const MODIFIERS = [
+  "remix", "cover", "instrumental", "inst", "mashup", "slowed", "reverb",
+  "sped", "nightcore", "8d", "3d", "typebeat", "karaoke", "bootleg", "flip",
+  "freestyle", "loop", "accelerated", "lofi", "chopped", "screwed", "acoustic",
+  "parody", "trumpet", "piano", "drums", "sample", "beat", "djmix", "mixtape",
+  "live", "concert", "behind", "scenes", "trailer", "preview", "snippet",
+  "a cappella", "acapella", "type beat", "string", "brass", "orchestral",
+];
+
+// Raw lowercased words, brackets kept, so "(Instrumental)" is still visible.
+function rawWords(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// Words that identify the song itself: tags like "(Official Video)" and
+// filler words are dropped.
+function normalizeText(text) {
+  return rawWords(text)
+    .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, " ")
+    .split(" ")
+    .filter((w) => w && !NOISE.has(w))
+    .join(" ");
+}
+
+function tokenList(text) {
+  return normalizeText(text).split(" ").filter(Boolean);
+}
+
+// A remix / cover / slowed version of the right song is still the wrong file.
+function hasModifier(text, query) {
+  const t = rawWords(text);
+  const q = rawWords(query);
+  return MODIFIERS.some((m) => {
+    const re = new RegExp(`\\b${m}\\b`);
+    return re.test(t) && !re.test(q);
+  });
+}
+
+/**
+ * Score how well a candidate title matches what the user asked for.
+ * Returns 0..1. 1.00 means the candidate is exactly the requested song.
+ */
+function scoreMatch(query, candidateTitle) {
+  const q = [...new Set(tokenList(query))];
+  const c = [...new Set(tokenList(candidateTitle))];
+  if (!q.length || !c.length) return 0;
+
+  const qSet = new Set(q);
+  const cSet = new Set(c);
+  const hits = q.filter((w) => cSet.has(w)).length;
+  const recall = hits / q.length;       // did we find everything the user asked for?
+  const precision = hits / c.length;    // does the candidate add nothing unexpected?
+  const addsNewWords = c.some((w) => !qSet.has(w));
+
+  let score;
+  if (recall < 1 && addsNewWords) {
+    // Missing a word the user asked for AND adding one they didn't: that is a
+    // different song, not just a longer title.
+    score = 0.5 * recall;
+  } else {
+    score = 0.7 * recall + 0.3 * precision;
+  }
+
+  if (hasModifier(candidateTitle, query)) score *= 0.45;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+// Best score across the possible ways the user described the song.
+function bestScore(titles, candidateTitle) {
+  return Math.max(...titles.filter(Boolean).map((t) => scoreMatch(t, candidateTitle)), 0);
+}
+
+/* ===================== sources ===================== */
+
 /** Downloads the best audio stream for a YouTube URL. Resolves to { buffer, ext }. */
 async function downloadYouTubeAudio(url) {
   return ytdlpDownload(url, ["-f", "bestaudio[filesize<60M]/bestaudio/best", ...cookieArgs()], 120000);
 }
 
 /**
- * Searches SoundCloud for the song and downloads the first playable match
- * (skips DRM-protected and very short/long tracks).
+ * Lists SoundCloud search results (title + url) without downloading audio.
+ * Resolves to [{ title, url, duration }] sorted by how well the title matches.
  */
-async function downloadSoundCloudAudio(query) {
+async function listSoundCloudMatches(query, limit = 10) {
   const q = String(query || "").replace(/\s+/g, " ").trim().slice(0, 120);
   if (!q) throw new Error("empty search");
-  return ytdlpDownload(`scsearch8:${q}`, [
-    "-f", "bestaudio/best",
-    "-i",
-    "--max-downloads", "1",
-    "--match-filter", "duration>45 & duration<1200",
-  ], 120000);
+  const { cmd, pre } = await getBinary();
+  const out = await run(cmd, [
+    ...pre,
+    "--flat-playlist",
+    "--no-playlist",
+    "--no-warnings",
+    "--no-progress",
+    "--no-cache-dir",
+    "-J",
+    `scsearch${limit}:${q}`,
+  ], 60000);
+
+  const data = JSON.parse(out);
+  const entries = Array.isArray(data.entries) ? data.entries : [];
+  const seen = new Set();
+  const results = [];
+  for (const e of entries) {
+    const url = e && (e.url || e.webpage_url);
+    const title = e && (e.title || e.fulltitle);
+    if (!url || !title || !/^https?:\/\//i.test(url)) continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    results.push({ title, url, duration: Number(e.duration) || 0 });
+  }
+  return results;
 }
 
 /**
- * Tries YouTube first, then SoundCloud. Resolves to { buffer, ext, source }.
- * `title` is used for the SoundCloud search.
+ * Searches SoundCloud and downloads ONLY a result whose title is verified to
+ * be the requested song. Throws if no candidate matches well enough, so the
+ * caller can fall back to another source instead of sending the wrong song.
  */
-async function downloadSongAudio(url, title) {
+async function downloadSoundCloudAudio(query, altTitles = []) {
+  const titles = [query, ...altTitles].filter(Boolean);
+  const candidates = await listSoundCloudMatches(query, 10);
+  if (!candidates.length) throw new Error("SoundCloud found no results");
+
+  const ranked = candidates
+    .map((c) => ({ ...c, score: bestScore(titles, c.title) }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  if (!best || best.score < MATCH_THRESHOLD) {
+    const err = new Error(`SoundCloud has no verified copy of "${titles[0]}" (closest match scored ${best ? best.score.toFixed(2) : "0"})`);
+    err.code = "no_verified_match";
+    throw err;
+  }
+
+  console.log(`SoundCloud match: "${best.title}" (score ${best.score.toFixed(2)})`);
+  const { buffer, ext } = await ytdlpDownload(best.url, ["-f", "bestaudio/best"], 120000);
+  return { buffer, ext, source: "soundcloud", title: best.title, score: best.score };
+}
+
+/**
+ * Tries YouTube first, then a verified SoundCloud match.
+ * Resolves to { buffer, ext, source }.
+ * `title` is the song the user asked for; `altTitles` are other ways the same
+ * song was described (e.g. the YouTube result title) used for the check.
+ */
+async function downloadSongAudio(url, title, altTitles = []) {
   const errors = [];
   if (url) {
     try {
@@ -194,12 +341,13 @@ async function downloadSongAudio(url, title) {
   }
   if (title) {
     try {
-      return { ...(await downloadSoundCloudAudio(title)), source: "soundcloud" };
+      return await downloadSoundCloudAudio(title, altTitles);
     } catch (e) {
       errors.push(`SoundCloud: ${e.message}`);
     }
   }
   const err = new Error(errors.join(" || ") || "no source available");
+  err.noVerifiedMatch = errors.some((m) => /no verified copy/i.test(m));
   throw err;
 }
 
@@ -208,4 +356,12 @@ function prepareYtDlp() {
   getBinary().catch((e) => console.log("yt-dlp prepare failed:", e.message));
 }
 
-module.exports = { downloadYouTubeAudio, downloadSoundCloudAudio, downloadSongAudio, prepareYtDlp };
+module.exports = {
+  downloadYouTubeAudio,
+  downloadSoundCloudAudio,
+  downloadSongAudio,
+  listSoundCloudMatches,
+  scoreMatch,
+  prepareYtDlp,
+  MATCH_THRESHOLD,
+};
