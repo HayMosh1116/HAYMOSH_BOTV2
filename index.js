@@ -142,10 +142,27 @@ const RECONNECT_DELAY = 5000;
 let isShuttingDown = false;
 
 // Group metadata cache: fetching it from WhatsApp on every group message was
-// a major source of slow replies. Entries expire after 5 minutes and are
+// a major source of slow replies. Entries expire after 15 minutes and are
 // dropped immediately when the group or its participants change.
 const groupMetaCache = new Map();
-const GROUP_META_TTL = 5 * 60 * 1000;
+const GROUP_META_TTL = 15 * 60 * 1000;
+// LID resolution is also a network lookup. WhatsApp can emit LID-based
+// participant IDs repeatedly, so keep the resolved JID briefly as well.
+const lidJidCache = new Map();
+const LID_JID_TTL = 15 * 60 * 1000;
+
+async function resolveJidFromLid(jid) {
+    if (!jid || typeof Prince?.getJidFromLid !== "function") return null;
+    const hit = lidJidCache.get(jid);
+    if (hit && Date.now() - hit.at < LID_JID_TTL) return hit.value;
+    try {
+        const value = await Prince.getJidFromLid(jid);
+        if (value) lidJidCache.set(jid, { value, at: Date.now() });
+        return value || null;
+    } catch (_) {
+        return null;
+    }
+}
 
 async function startPrince() {
     try {
@@ -737,10 +754,8 @@ async function startPrince() {
                         quotedUser = qFound.phoneNumber + "@s.whatsapp.net";
                 }
                 if (quotedUser.includes("@lid")) {
-                    try {
-                        const resolved = await Prince.getJidFromLid(quotedUser);
-                        if (resolved) quotedUser = resolved;
-                    } catch (e) {}
+                    const resolved = await resolveJidFromLid(quotedUser);
+                    if (resolved) quotedUser = resolved;
                 }
             }
             const repliedMessageAuthor = standardizeJid(
@@ -801,9 +816,8 @@ async function startPrince() {
                 if (me) [me.id, me.pn, me.lid, me.phoneNumber].map(digitsOf).filter(Boolean).forEach((d) => senderIds.add(d));
             }
             const lidCandidate = [sendr, ms.key.participant, ms.key.remoteJid].find((j) => String(j || "").endsWith("@lid"));
-            if (lidCandidate && typeof Prince.getJidFromLid === "function") {
-                try { const r = await Prince.getJidFromLid(lidCandidate); if (r) senderIds.add(digitsOf(r)); } catch (e) {}
-            }
+            const resolvedLid = await resolveJidFromLid(lidCandidate);
+            if (resolvedLid) senderIds.add(digitsOf(resolvedLid));
             const superDigits = new Set(finalSuperUsers.map(digitsOf).filter(Boolean));
             const isSuperUser = [...senderIds].some((d) => superDigits.has(d));
 
