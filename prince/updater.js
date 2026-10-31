@@ -71,8 +71,15 @@ gmd(
       );
 
       const latestSha    = commitData.sha;
-      const commitDate   = new Date(commitData.commit.author.date).toLocaleString();
-      const commitMsg    = commitData.commit.message.split("\n")[0].trim();
+      const changedPaths = Array.isArray(commitData.files)
+        ? commitData.files.map((file) => file.filename).filter(Boolean)
+        : [];
+      const changedNames = [...new Set(changedPaths.flatMap((file) => {
+        const parts = file.split("/");
+        return parts.length > 1
+          ? [file, ...parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/") + "/")]
+          : [file];
+      }))].sort();
 
       // ── Already up to date? ───────────────────────────────────────────────
       if (!ON_HEROKU) {
