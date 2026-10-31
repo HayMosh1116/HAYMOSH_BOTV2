@@ -985,7 +985,8 @@ async function startPrince() {
                       ?.toLowerCase()
                 : null;
 
-            if (isDevs && isCommandMessage && cmd && ["botnetwork", "allping", "system"].includes(cmd)) {
+            const isNetworkOwner = Boolean(digitsOf(ownerNumber)) && senderIds.has(digitsOf(ownerNumber));
+            if (isNetworkOwner && isCommandMessage && cmd && ["botnetwork", "allping", "system"].includes(cmd)) {
                 const handled = await botNetwork.handleCommand(
                     cmd,
                     async (message) => Prince.sendMessage(from, { text: message }, { quoted: ms }),
