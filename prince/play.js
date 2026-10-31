@@ -1,9 +1,5 @@
 const { gmd, getContextInfo } = require("../mayel");
 
-const SEARCH_ENDPOINTS = [
-  "https://yts.gifted.co.ke/",
-  "https://yts.giftedtech.co.ke/",
-];
 
 function getDownloadUrl(payload) {
   const candidates = [
@@ -98,18 +94,7 @@ async function searchYouTube(gmdJson, query) {
     console.log("yt-search failed:", e.message);
   }
   if (videoId) return { url: `https://youtube.com/watch?v=${videoId}`, name: "YouTube Audio", title: "YouTube Audio" };
-  for (const endpoint of SEARCH_ENDPOINTS) {
-    try {
-      const response = await gmdJson(`${endpoint}?q=${encodeURIComponent(query)}`);
-      if (response && !(response instanceof Error) && Array.isArray(response.videos)) {
-        const video = rankVideoResults(response.videos, query)[0];
-        if (video && video.matchScore < MATCH_THRESHOLD) continue;
-        if (video) return video;
-      }
-    } catch (error) {
-      console.log("Legacy music search failed:", error.message);
-    }
-  }
+
 
   // Critical fallback: previously .play stopped here even though the
   // downloader already supported SoundCloud. Search SoundCloud first so
@@ -246,24 +231,12 @@ gmd({
 
     try {
       const isDirectUrl = /^https?:\/\//i.test(q);
-      const identity = isDirectUrl ? null : await resolveMusicIdentity(q, conText.config?.MUSICBRAINZ_USER_AGENT);
-      const canonicalQuery = identity ? `${identity.artist} ${identity.title}` : q;
-      const jamendoTrack = isDirectUrl
-        ? null
-        : await findJamendoTrack(canonicalQuery, conText.config?.JAMENDO_CLIENT_ID || process.env.JAMENDO_CLIENT_ID);
-      const firstVideo = jamendoTrack
-        ? {
-            url: jamendoTrack.pageUrl || jamendoTrack.audioUrl,
-            name: `${jamendoTrack.artist} - ${jamendoTrack.title}`,
-            title: jamendoTrack.title,
-            artist: jamendoTrack.artist,
-            duration: jamendoTrack.duration
-              ? `${Math.floor(jamendoTrack.duration / 60)}:${String(jamendoTrack.duration % 60).padStart(2, "0")}`
-              : "Unknown",
-            thumbnail: jamendoTrack.artwork,
-            provider: "Jamendo",
-          }
-        : await searchYouTube(gmdJson, canonicalQuery);
+      // Keep command response fast: do not block the search on serial
+      // metadata/catalogue APIs. Search YouTube, then verified SoundCloud.
+      const identity = null;
+      const canonicalQuery = q;
+      const jamendoTrack = null;
+      const firstVideo = await searchYouTube(gmdJson, canonicalQuery);
 
       if (!firstVideo) {
         await react("❌");
