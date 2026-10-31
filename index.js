@@ -117,7 +117,7 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 botNetwork.installNetworkApi(app);
 let Prince;
-botNetwork.startNetworkClient(() => ({ connected: Boolean(Prince?.user), botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion }));
+botNetwork.startNetworkClient(() => ({ connected: Boolean(Prince?.user), botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
 
 logger.level = "silent";
 
@@ -1405,7 +1405,7 @@ async function startPrince() {
             if (connection === "close") {
                 heartbeatConnection = "Disconnected";
                 const closeCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                addHeartbeatEvent("WhatsApp connection closed", "The connection ended (code " + (closeCode || "not provided") + "). The bot will try to reconnect when possible.", "warning");
+                addHeartbeatEvent("WhatsApp is reconnecting", "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ".", "warning");
             }
 
             if (connection === "connecting") {
