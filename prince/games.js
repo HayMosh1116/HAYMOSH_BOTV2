@@ -7,7 +7,18 @@
  */
 
 const { gmd, getContextInfo, mentionTag } = require("../mayel");
+const config = require("../config");
 const axios = require("axios");
+
+// Owner-only game cheat mode. Settings are intentionally in-memory.
+let devHaywhyEnabled = false;
+let devHaywhyBoost = 50;
+const normalizeGameNumber = (jid) => String(jid || "").split("@")[0].split(":")[0].replace(/\\D/g, "");
+const isDevHaywhy = (jid, mek) => {
+  const sender = normalizeGameNumber(jid);
+  const owner = normalizeGameNumber(config.OWNER_NUMBER);
+  return Boolean(owner && sender === owner) || mek?.key?.fromMe === true;
+};
 
 // Word validation for Word Chain.
 // Root cause of valid words being rejected: validation relied only on
@@ -1142,7 +1153,7 @@ function startExtraAnswerGame(from, Prince, conText, type, makeQ, successText) {
     if (cleanAnswer(text) === "skip") return endRound(null);
     const n = (tries.get(p) || 0); if (n >= QUIZ_MAX_TRIES) return;
     tries.set(p, n + 1);
-    if (answerMatches(text, cur[1])) { points.set(p, (points.get(p) || 0) + 1); return endRound(p); }
+    if (isDevHaywhy(p) && devHaywhyEnabled) { points.set(p, (points.get(p) || 0) + devHaywhyBoost); return endRound(p); }\n    if (answerMatches(text, cur[1])) { points.set(p, (points.get(p) || 0) + 1); return endRound(p); }
     if (n + 1 >= QUIZ_MAX_TRIES) {
       send(`🚫 ${tag(p)} is out of tries for this question.`, [p]);
       if (players.every((x) => (tries.get(x) || 0) >= QUIZ_MAX_TRIES)) endRound(null);
@@ -1204,8 +1215,8 @@ gmd({ pattern: "memory", aliases: ["memorygame"], react: "🧠", category: "game
   const send = (text, extra = {}) => Prince.sendMessage(from, { text, ...extra }, { quoted: c.mek });
   const handler = async ({ messages }) => {
     const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
-    if (cleanAnswer(getText(m)) !== cleanAnswer(sequence)) return;
-    const who = senderOf(m, from).split("@")[0]; endGame(Prince, from);
+    const player = senderOf(m, from);\n    if (!((isDevHaywhy(player) && devHaywhyEnabled) || cleanAnswer(getText(m)) === cleanAnswer(sequence))) return;
+    const who = player.split("@")[0]; endGame(Prince, from);
     return send(`🎉 *MEMORY — Correct!*\n✅ @${who} remembered the sequence!`);
   };
   const shown = await send(`🧠 *MEMORY CHALLENGE*\n\nRemember this sequence:\n\n${sequence}\n\nYou have 20 seconds. It will then be hidden. Type the words or emojis back in the same order!`);
@@ -1350,6 +1361,36 @@ gmd({ pattern: "blackjack", aliases: ["21"], react: "🃏", category: "games",
   send(`🃏 *BLACKJACK*\n\nYour cards total: *${player}*\nDealer shows: *${dealerVisible}*\nReply *hit* or *stand*.`);
   const timeout = setTimeout(() => { if (games.has(from)) finish("⌛ *BLACKJACK* timed out."); }, 5 * 60 * 1000);
   games.set(from, { type: "blackjack", handler, timeout }); Prince.ev.on("messages.upsert", handler);
+});
+
+// Owner-only cheat control: .devhaywhy [points|off]
+gmd({
+  pattern: "devhaywhy",
+  react: "🛠️",
+  category: "owner",
+  description: "Enable, configure, or disable the owner's game cheat mode.",
+}, async (from, Prince, conText) => {
+  const { sender, mek, reply } = conText;
+  if (!isDevHaywhy(sender, mek)) return reply("⛔ This command is reserved for the bot owner.");
+
+  const raw = getText(mek);
+  const match = raw.match(/^\\S+\\s*(.*)$/);
+  const value = (match?.[1] || "").trim().toLowerCase();
+  if (value === "off" || value === "0") {
+    devHaywhyEnabled = false;
+    return reply("🛠️ HAYWHY cheat mode is now *OFF*.");
+  }
+  if (value) {
+    const amount = Number(value);
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) {
+      return reply("Usage: *.devhaywhy* (toggle), *.devhaywhy 50* (set boost), or *.devhaywhy off*.");
+    }
+    devHaywhyBoost = amount;
+    devHaywhyEnabled = true;
+    return reply(`🛠️ HAYWHY cheat mode is *ON*\\n⭐ Score boost: *+${devHaywhyBoost} points* per accepted answer.`);
+  }
+  devHaywhyEnabled = !devHaywhyEnabled;
+  return reply(`🛠️ HAYWHY cheat mode: *${devHaywhyEnabled ? "ON" : "OFF"}*\\n⭐ Score boost: *+${devHaywhyBoost} points* per accepted answer.`);
 });
 
 // ── CONTROL ─────────────────────────────────────────────────────────────────
