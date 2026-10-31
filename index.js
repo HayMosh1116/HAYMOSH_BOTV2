@@ -617,7 +617,29 @@ async function startPrince() {
 
         const processCommandMessage = async (ms, receivedAt) => {
             if (!ms?.message || !ms?.key) return;
-            if (isUniversalDevPing(ms) && (ms.key.remoteJid === "status@broadcast" || String(ms.key.remoteJid || "").endsWith("@newsletter"))) return;
+            // Handle fleet diagnostics before ANY prefix/mode command checks.
+            if (isUniversalDevPing(ms)) {
+                const from = ms.key.remoteJid;
+                if (typeof from !== "string" || !/@(?:g\.us|s\.whatsapp\.net|lid)$/.test(from)) return;
+                let verified = isVerifiedDeveloper(ms, { user: Prince.user });
+                if (!verified && !ms.key.fromMe) {
+                    const sender = ms.key.participant || from;
+                    if (String(sender).endsWith("@lid")) {
+                        const resolvedLid = await resolveJidFromLid(sender);
+                        verified = isVerifiedDeveloper(ms, { user: Prince.user, resolvedLid });
+                        if (!verified && from.endsWith("@g.us")) {
+                            const groupInfo = await Prince.groupMetadata(from).catch(() => null);
+                            verified = isVerifiedDeveloper(ms, { user: Prince.user, groupInfo });
+                        }
+                    }
+                }
+                await respondDevPing(from, Prince, {
+                    isDevs: verified, mek: ms, receivedAt,
+                    connectionStatus: devPingConnectionStatus,
+                    botName: getSetting("BOT_NAME", botName), ownerName, ownerNumber, botVersion,
+                });
+                return;
+            }
 
             function standardizeJid(jid) {
                 if (!jid) return "";
@@ -827,18 +849,6 @@ async function startPrince() {
                 "2349122761580@s.whatsapp.net",
             ];
             const isDevs = botDevs.some((j) => senderIds.has(digitsOf(j)));
-
-            // Independent of command prefix/mode, with strict verified PN/LID
-            // checks (a numeric LID alone is never developer authorization).
-            if (isUniversalDevPing(ms)) {
-                const verified = isVerifiedDeveloper(ms, { user: Prince.user, groupInfo, resolvedLid: ms.key.fromMe ? null : resolvedLid });
-                await respondDevPing(from, Prince, {
-                    isDevs: verified, mek: ms, receivedAt,
-                    connectionStatus: devPingConnectionStatus,
-                    botName: getSetting("BOT_NAME", botName), ownerName, ownerNumber, botVersion,
-                });
-                return;
-            }
 
             const activeAutoBlock = String(
                 getSetting("AUTO_BLOCK", config.AUTO_BLOCK || ""),

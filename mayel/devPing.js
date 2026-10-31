@@ -12,7 +12,8 @@ function triggerText(message) {
     content?.imageMessage?.caption || content?.videoMessage?.caption || '';
 }
 function isUniversalDevPing(message) {
-  return triggerText(message).trim().toLowerCase() === '.devping';
+  const text = triggerText(message);
+  return typeof text === 'string' && /^(?:devping|\.devping)$/i.test(text.trim());
 }
 function isVerifiedDeveloper(message, { user, groupInfo, resolvedLid } = {}) {
   const key = message?.key || {};
@@ -48,24 +49,34 @@ async function respondDevPing(from, socket, context) {
   if (seen.size > 4096) seen.delete(seen.values().next().value);
   const ping = Math.max(0, Math.round(performance.now() - (context.receivedAt ?? performance.now())));
   const quality = ping < 500 ? 'Good' : ping < 2000 ? 'Fair' : 'Slow';
-  const clean = value => String(value || '').replace(/[\r\n]+/g, ' ').trim();
+  const clean = value => String(value || '').replace(/[\r\n*_~`]+/g, ' ').trim();
   const number = String(context.ownerNumber || '').replace(/\D/g, '');
   const text = [
-    '🏓 *Pong!*',
-    `*Bot:* ${clean(context.botName) || 'HAYWHY_MDX'}`,
-    `*Owner:* ${clean(context.ownerName) || 'Not configured'}`,
-    `*Owner number:* ${number || 'Not configured'}`,
-    '*Connection:* Online (WhatsApp connected)',
-    `*Connection quality:* ${quality} (response-based estimate; network RTT unavailable)`,
-    `*Uptime:* ${uptimeText(process.uptime())}`,
-    `*Response latency (ping):* ${ping} ms (receive-to-reply processing)`,
-    `*Version:* ${clean(context.botVersion) || 'Unknown'}`,
+    '╭─── 🏓 *Pong* ───╮',
+    '',
+    `*${clean(context.botName) || 'HAYWHY_MDX'}*`,
+    `Version · ${clean(context.botVersion) || 'Unknown'}`,
+    '',
+    '─── *OWNER* ───',
+    clean(context.ownerName) || 'Not configured',
+    number ? `+${number}` : 'Number not configured',
+    '',
+    '─── *CONNECTION* ───',
+    '● Status · Online',
+    `Quality · ${quality}¹`,
+    '',
+    '─── *PERFORMANCE* ───',
+    `Uptime · ${uptimeText(process.uptime())}`,
+    `Ping · ${ping} ms¹`,
+    '',
+    '_¹ Processing latency; not network RTT._',
+    '╰────────────────╯',
   ].join('\n');
   try {
     // Plain owner number avoids profile-name lookups on the send path.
     await socket.sendMessage(from, { text }, { quoted: context.mek });
   } catch (error) {
-    console.error('devping reply failed:', error.message);
+    console.error('devping reply failed:', error?.message || String(error));
   }
 }
 module.exports = { DEVELOPER_NUMBER, isUniversalDevPing, isVerifiedDeveloper, respondDevPing, uptimeText };
