@@ -20,7 +20,7 @@ function getDownloadUrl(payload) {
 }
 
 const yts = require("yt-search");
-const { downloadSongAudio, prepareYtDlp, scoreMatch, MATCH_THRESHOLD } = require("../mayel/ytAudio");
+const { downloadSongAudio, listSoundCloudMatches, prepareYtDlp, scoreMatch, MATCH_THRESHOLD } = require("../mayel/ytAudio");
 const { resolveMusicIdentity, findJamendoTrack, downloadJamendoAudio } = require("../mayel/musicProviders");
 prepareYtDlp();
 
@@ -51,8 +51,36 @@ function rankVideoResults(videos, query) {
     .sort((a, b) => b.matchScore - a.matchScore);
 }
 
-// Searches YouTube directly (yt-search) first; the old third-party search
-// endpoints are kept only as a fallback because they are frequently offline.
+// Searches SoundCloud as a real fallback when YouTube search and the legacy
+// search APIs are unavailable on datacenter hosts.
+async function searchSoundCloud(query) {
+  try {
+    const results = await listSoundCloudMatches(query, 10);
+    const best = results
+      .map((track) => ({
+        ...track,
+        matchScore: scoreMatch(query, track.title),
+      }))
+      .sort((a, b) => b.matchScore - a.matchScore)[0];
+
+    if (!best || best.matchScore < MATCH_THRESHOLD) return null;
+    return {
+      url: best.url,
+      name: best.title,
+      title: best.title,
+      duration: best.duration
+        ? `${Math.floor(best.duration / 60)}:${String(best.duration % 60).padStart(2, "0")}`
+        : "Unknown",
+      provider: "SoundCloud",
+    };
+  } catch (error) {
+    console.log("SoundCloud search failed:", error.message);
+    return null;
+  }
+}
+
+// Searches YouTube first, then SoundCloud. The old third-party endpoints
+// remain as a final fallback because they are frequently offline.
 async function searchYouTube(gmdJson, query) {
   const videoId = extractVideoId(query);
   try {
@@ -78,9 +106,15 @@ async function searchYouTube(gmdJson, query) {
         if (video && video.matchScore < MATCH_THRESHOLD) continue;
         if (video) return video;
       }
-    } catch (_) {}
+    } catch (error) {
+      console.log("Legacy music search failed:", error.message);
+    }
   }
-  return null;
+
+  // Critical fallback: previously .play stopped here even though the
+  // downloader already supported SoundCloud. Search SoundCloud first so
+  // the user still gets a result when YouTube blocks the server.
+  return await searchSoundCloud(query);
 }
 
 
