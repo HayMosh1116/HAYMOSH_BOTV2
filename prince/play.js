@@ -21,6 +21,7 @@ function getDownloadUrl(payload) {
 
 const yts = require("yt-search");
 const { downloadSongAudio, prepareYtDlp, scoreMatch, MATCH_THRESHOLD } = require("../mayel/ytAudio");
+const { resolveMusicIdentity, findJamendoTrack, downloadJamendoAudio } = require("../mayel/musicProviders");
 prepareYtDlp();
 
 function normalizeVideo(v) {
@@ -210,7 +211,25 @@ gmd({
     }
 
     try {
-      const firstVideo = await searchYouTube(gmdJson, q);
+      const isDirectUrl = /^https?:\/\//i.test(q);
+      const identity = isDirectUrl ? null : await resolveMusicIdentity(q, conText.config?.MUSICBRAINZ_USER_AGENT);
+      const canonicalQuery = identity ? `${identity.artist} ${identity.title}` : q;
+      const jamendoTrack = isDirectUrl
+        ? null
+        : await findJamendoTrack(canonicalQuery, conText.config?.JAMENDO_CLIENT_ID || process.env.JAMENDO_CLIENT_ID);
+      const firstVideo = jamendoTrack
+        ? {
+            url: jamendoTrack.pageUrl || jamendoTrack.audioUrl,
+            name: `${jamendoTrack.artist} - ${jamendoTrack.title}`,
+            title: jamendoTrack.title,
+            artist: jamendoTrack.artist,
+            duration: jamendoTrack.duration
+              ? `${Math.floor(jamendoTrack.duration / 60)}:${String(jamendoTrack.duration % 60).padStart(2, "0")}`
+              : "Unknown",
+            thumbnail: jamendoTrack.artwork,
+            provider: "Jamendo",
+          }
+        : await searchYouTube(gmdJson, canonicalQuery);
 
       if (!firstVideo) {
         await react("❌");
@@ -225,13 +244,21 @@ gmd({
         // yt-dlp verifies the source title before downloading. If YouTube
         // blocks the host, it searches SoundCloud and applies the same check.
         try {
-          const isDirectUrl = /^https?:\/\//i.test(q);
-          const searchTitle = isDirectUrl ? String(firstVideo.title || "").trim() : q;
+          const searchTitle = isDirectUrl ? String(firstVideo.title || "").trim() : canonicalQuery;
           const bannerTitle = String(firstVideo.title || firstVideo.name || "").trim();
           // For a text search, validate only against what the user requested.
           // Never add the selected banner title here: doing that lets a remix
           // or cover selected by search validate itself.
-          const expectedTitles = isDirectUrl ? [bannerTitle] : [q];
+          if (jamendoTrack) {
+            const buffer = await downloadJamendoAudio(jamendoTrack);
+            console.log(".play: audio from Jamendo", {
+              title: jamendoTrack.title,
+              artist: jamendoTrack.artist,
+              license: jamendoTrack.licenseUrl || "not provided",
+            });
+            return await formatAudio(buffer);
+          }
+          const expectedTitles = isDirectUrl ? [bannerTitle] : [canonicalQuery, q];
           const { buffer, source } = await downloadSongAudio(videoUrl, searchTitle, expectedTitles);
           console.log(`.play: audio from ${source}`);
           return await formatAudio(buffer);
@@ -247,12 +274,16 @@ gmd({
       })();
       audioPromise.catch(() => {});
 
+      const providerLine = jamendoTrack
+        ? `│⿻ *Source:* Jamendo (download permitted)\n│⿻ *License:* ${jamendoTrack.licenseUrl || "See track terms"}`
+        : `│⿻ *Source:* Verified ${identity ? "MusicBrainz-normalized YouTube/SoundCloud" : "YouTube/SoundCloud"}`;
       const infoMess = {
         image: { url: firstVideo.thumbnail || botPic },
         caption: `> *${botName} 𝐒𝐎𝐍𝐆 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*  
 ╭───────────────◆  
 │⿻ *Title:* ${firstVideo.name || firstVideo.title || "Unknown"}
 │⿻ *Duration:* ${firstVideo.duration || "Unknown"}
+${providerLine}
 ╰────────────────◆
 ⏱ *Session expires in 2 minutes*
 ╭───────────────◆
@@ -288,10 +319,10 @@ gmd({
                 audio: convertedBuffer,
                 mimetype: "audio/mpeg",
                 fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
-                caption: `${firstVideo.name}`,
+                caption: `${firstVideo.name}${jamendoTrack?.licenseUrl ? `\nLicense: ${jamendoTrack.licenseUrl}` : ""}`,
                 externalAdReply: {
                    title: `${firstVideo.name || firstVideo.title || "audio"}.mp3`,
-                  body: 'Youtube Downloader',
+                  body: `${firstVideo.provider || "Verified music source"} Downloader`,
                   mediaType: 1,
                   thumbnailUrl: firstVideo.thumbnail || botPic,
                   sourceUrl: newsletterUrl,
@@ -307,7 +338,7 @@ gmd({
                 document: convertedBuffer,
                 mimetype: "audio/mpeg",
                  fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
-                 caption: `${firstVideo.name || firstVideo.title || "Audio"}`,
+                 caption: `${firstVideo.name || firstVideo.title || "Audio"}${jamendoTrack?.licenseUrl ? `\nLicense: ${jamendoTrack.licenseUrl}` : ""}`,
               }, { quoted: messageData });
               Prince.ev.off("messages.upsert", handleResponse);
               break;

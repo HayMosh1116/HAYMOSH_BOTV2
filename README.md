@@ -133,7 +133,12 @@ OWNER_NUMBER = "2349122761580"   // Your WhatsApp number (with country code)
 BOT_NAME = "HAYMOSH_BOT"        // Bot display name
 PREFIX = "."                     // Command prefix
 MODE = "public"                  // public / private
+# Optional hybrid .play provider settings:
+JAMENDO_CLIENT_ID = ""            // Jamendo developer client ID; enables rights-gated Jamendo audio
+MUSICBRAINZ_USER_AGENT = "HAYMOSH_BOT/1.0 (contact@example.com)" // identify metadata requests
 ```
+
+The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata. If `JAMENDO_CLIENT_ID` is configured, Jamendo is used only when its API marks a matching track as downloadable. Otherwise the bot falls back to the existing strict YouTube/SoundCloud verification path and will not send low-confidence, remix, or cover matches.
 
 ---
 

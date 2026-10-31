@@ -50,7 +50,10 @@ module.exports = {
     NEWSLETTER_URL: process.env.NEWSLETTER_URL || 'https://whatsapp.com/channel/0029Vb7wmowCxoAtmEmCe11x',
     BOT_REPO: process.env.BOT_REPO || 'DevHaywhy/HAYWHY_MDX',
     PACK_NAME: process.env.PACK_NAME || 'HAYWHY_MDX',
-    PACK_AUTHOR: process.env.PACK_AUTHOR || '‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩'
+    PACK_AUTHOR: process.env.PACK_AUTHOR || '‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩',
+    // Optional rights-aware music provider settings. Never commit credentials.
+    JAMENDO_CLIENT_ID: process.env.JAMENDO_CLIENT_ID || '',
+    MUSICBRAINZ_USER_AGENT: process.env.MUSICBRAINZ_USER_AGENT || 'HAYMOSH_BOT/1.0 (music metadata integration)'
 };
 
 let fileName = require.resolve(__filename);
