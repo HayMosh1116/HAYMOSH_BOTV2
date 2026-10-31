@@ -391,7 +391,14 @@ gmd(
         if (guessed.has(txt)) return sendCtx(`⚠️ "${txt.toUpperCase()}" already tried.`);
         guessed.add(txt);
 
-        if (word.includes(txt) || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled)) {
+        if (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled) {
+          endGame(Prince, from);
+          return sendCtx(`🎉 *HANGMAN — Solved!*
+The word was *${word.toUpperCase()}*.
+✅ Nailed it, @${who}!`);
+        }
+
+        if (word.includes(txt)) {
           const mask = hangmanMask(word, guessed);
           if (!mask.includes("_")) {
             endGame(Prince, from);
