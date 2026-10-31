@@ -411,75 +411,72 @@ gmd({
   pattern: "del",
   aliases: ["delete", "dlt", "remove"],
   react: "🗑️",
-  category: "group",
-  description: "Delete a quoted message",
+  category: "owner",
+  description: "Delete a quoted message in groups or private chats",
 }, async (from, Prince, conText) => {
-  const {
-    reply,
-    react,
-    isSuperUser,
-    isAdmin,
-    isGroup,
-    isBotAdmin,
-    ms
-  } = conText;
+  const { reply, react, isSuperUser, isAdmin, isGroup, isBotAdmin, ms } = conText;
 
-  if (!isGroup) return reply("❌ This command only works in groups!");
-  if (!isSuperUser && !isAdmin) return reply("❌ Admin/Owner Only Command!");
+  // In private chats, keep this command restricted to the bot owner.
+  if (!isGroup && !isSuperUser) {
+    return reply("❌ Owner Only: .del can only be used by the bot owner in DMs.");
+  }
+  // In groups, preserve the existing admin/owner restriction.
+  if (isGroup && !isSuperUser && !isAdmin) {
+    return reply("❌ Admin/Owner Only Command!");
+  }
 
-  const botId = conText.botId || (Prince.user?.id ? Prince.user.id.split(":")[0] + "@s.whatsapp.net" : "");
-  
-  // High-reliability key extraction
+  const botId = conText.botId || (Prince.user?.id
+    ? Prince.user.id.split(":")[0] + "@s.whatsapp.net"
+    : "");
+
   const getMessageKey = () => {
-    // 1. From conText.quoted (helper populated)
-    if (conText.quoted && conText.quoted.id) {
+    // Preferred: the quoted-message helper includes the original sender and fromMe flag.
+    if (conText.quoted?.id) {
       return {
         remoteJid: from,
         fromMe: conText.quoted.fromMe,
         id: conText.quoted.id,
-        participant: conText.quoted.sender || (conText.quoted.key && conText.quoted.key.participant)
+        participant: conText.quoted.sender || conText.quoted.key?.participant
       };
     }
-    
-    // 2. From raw message structure (ms.message)
-    const contextInfo = ms.message?.extendedTextMessage?.contextInfo || 
-                        ms.message?.imageMessage?.contextInfo || 
-                        ms.message?.videoMessage?.contextInfo ||
-                        ms.message?.documentWithCaptionMessage?.message?.documentMessage?.contextInfo ||
-                        ms.message?.viewOnceMessage?.message?.imageMessage?.contextInfo ||
-                        ms.message?.viewOnceMessageV2?.message?.imageMessage?.contextInfo;
 
-    if (contextInfo && contextInfo.stanzaId) {
-      return {
-        remoteJid: from,
-        fromMe: contextInfo.participant === botId || contextInfo.participant === Prince.user?.id,
-        id: contextInfo.stanzaId,
-        participant: contextInfo.participant
-      };
-    }
-    
-    return null;
+    const contextInfo =
+      ms.message?.extendedTextMessage?.contextInfo ||
+      ms.message?.imageMessage?.contextInfo ||
+      ms.message?.videoMessage?.contextInfo ||
+      ms.message?.documentWithCaptionMessage?.message?.documentMessage?.contextInfo ||
+      ms.message?.viewOnceMessage?.message?.imageMessage?.contextInfo ||
+      ms.message?.viewOnceMessageV2?.message?.imageMessage?.contextInfo;
+
+    if (!contextInfo?.stanzaId) return null;
+
+    return {
+      remoteJid: from,
+      fromMe: contextInfo.participant === botId ||
+        contextInfo.participant === Prince.user?.id,
+      id: contextInfo.stanzaId,
+      participant: contextInfo.participant
+    };
   };
 
   const key = getMessageKey();
-
-  if (!key || !key.id) {
-    return reply("❌ Please quote a message to delete!");
-  }
+  if (!key?.id) return reply("❌ Please reply to the message you want to delete, then send .del.");
 
   try {
-    const isBotMessage = key.fromMe;
+    // In a DM, WhatsApp only lets the bot revoke its own sent messages.
+    if (!isGroup && !key.fromMe) {
+      return reply("❌ In DMs, I can only delete messages sent by the bot. Reply to one of my messages with .del.");
+    }
 
-    if (!isBotMessage && !isBotAdmin) {
-      return reply(
-        "❌ Bot needs admin rights to delete others' messages in groups!",
-      );
+    // In groups, deleting another member's message requires bot admin rights.
+    if (isGroup && !key.fromMe && !isBotAdmin) {
+      return reply("❌ The bot needs admin rights to delete another member's message in this group.");
     }
 
     await Prince.sendMessage(from, { delete: key });
     await react("✅");
   } catch (error) {
-    console.error("Delete error details:", error);
+    console.error("Delete command error:", error);
     await react("❌");
     return reply(`❌ Failed to delete message: ${error.message}`);
   }
