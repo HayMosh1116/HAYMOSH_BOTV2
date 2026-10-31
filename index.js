@@ -123,44 +123,62 @@ logger.level = "silent";
 
 app.use(express.static("mayel"));
 app.get("/", (req, res) => res.sendFile(__dirname + "/mayel/prince.html"));
+const heartbeatEvents = [];
+let heartbeatConnection = "Starting";
+let heartbeatLastError = null;
+function addHeartbeatEvent(type, message, level = "info") {
+    const safeMessage = String(message || "No details provided").replace(/[\\r\\n]+/g, " ").slice(0, 220);
+    const event = { type, message: safeMessage, level, at: Date.now() };
+    heartbeatEvents.unshift(event);
+    if (heartbeatEvents.length > 12) heartbeatEvents.length = 12;
+    if (level === "error") heartbeatLastError = event;
+}
+function escapeHeartbeat(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[char]);
+}
+process.on("unhandledRejection", reason => addHeartbeatEvent("Background task issue", reason?.message || reason, "error"));
+process.on("uncaughtExceptionMonitor", error => addHeartbeatEvent("Unexpected bot error", error?.message || error, "error"));
+process.on("warning", warning => addHeartbeatEvent("Server warning", warning?.message || warning, "warning"));
+addHeartbeatEvent("Heartbeat page enabled", "Your personal bot status page is ready.");
+
 app.get("/heartbeat", (req, res) => {
     const connected = Boolean(Prince?.user);
+    const botDisplayName = getSetting("BOT_NAME", botName) || "Your Bot";
+    const prefixDisplay = getSetting("PREFIX", botPrefix) || ".";
+    const ownerDisplayName = ownerName || "Not set";
     const uptime = Math.floor(process.uptime());
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
-    const seconds = uptime % 60;
+    const memoryMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
     const checkedAt = new Date().toLocaleString();
-
+    const status = connected ? "Connected and ready" : heartbeatConnection === "Connecting" ? "Trying to reconnect" : "Not connected";
+    const statusTone = connected ? "good" : "warn";
+    const eventRows = heartbeatEvents.length
+        ? heartbeatEvents.map(event => `<article class="event ${event.level}"><span class="event-dot"></span><div><strong>${escapeHeartbeat(event.type)}</strong><p>${escapeHeartbeat(event.message)}</p><small>${new Date(event.at).toLocaleString()}</small></div></article>`).join("")
+        : '<p class="muted">Nothing unusual has been reported.</p>';
+    const issueSummary = heartbeatLastError
+        ? "The bot has reported an issue. Check the activity log below."
+        : connected ? "Everything looks good. Your bot is connected." : "Your bot is not connected to WhatsApp yet. It may still be starting or reconnecting.";
+    const safeName = escapeHeartbeat(botDisplayName);
+    const safeOwner = escapeHeartbeat(ownerDisplayName);
+    const safePrefix = escapeHeartbeat(prefixDisplay);
+    const safeVersion = escapeHeartbeat(botVersion || "Not available");
     res.type("html").send(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${botName || "Haywhy Bot"} · Heartbeat</title>
-  <style>
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#09090f;color:#f5f3ff;font-family:Arial,sans-serif}
-    main{width:min(100%,520px);padding:30px;border:1px solid #3b2b61;border-radius:22px;background:#15121f;box-shadow:0 18px 60px #0008}
-    .brand{color:#c4a7ff;font-size:13px;letter-spacing:2px;font-weight:700}.status{display:inline-flex;align-items:center;gap:9px;margin:22px 0;padding:10px 14px;border-radius:999px;background:${connected ? "#123b2b" : "#451b25"};color:${connected ? "#86efac" : "#fda4af"};font-weight:700}
-    .dot{width:9px;height:9px;border-radius:50%;background:currentColor}h1{margin:8px 0;font-size:30px}p{color:#b8b2c8;line-height:1.6}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}.item{padding:15px;border:1px solid #30283e;border-radius:14px}.label{display:block;color:#a79bbd;font-size:12px;margin-bottom:8px}.value{font-size:16px;font-weight:700;overflow-wrap:anywhere}
-    footer{margin-top:22px;color:#8d849d;font-size:12px}@media(max-width:420px){main{padding:22px}.grid{grid-template-columns:1fr}}
-  </style>
-</head>
-<body>
-  <main>
-    <div class="brand">HAYWHY BOT · HEARTBEAT</div>
-    <h1>${botName || "Your Bot"}</h1>
-    <div class="status"><span class="dot"></span>${connected ? "ONLINE" : "OFFLINE"}</div>
-    <p>This page reports the status of the bot running at this URL.</p>
-    <section class="grid">
-      <div class="item"><span class="label">WhatsApp connection</span><span class="value">${connected ? "Connected" : "Disconnected"}</span></div>
-      <div class="item"><span class="label">Server uptime</span><span class="value">${hours}h ${minutes}m ${seconds}s</span></div>
-      <div class="item"><span class="label">Bot version</span><span class="value">${botVersion || "Unknown"}</span></div>
-      <div class="item"><span class="label">Last page check</span><span class="value">${checkedAt}</span></div>
-    </section>
-    <footer>Refresh this page to check the latest status. This page shows only this bot instance.</footer>
-  </main>
-</body>
-</html>`);
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>${safeName} · Bot Status</title>
+<style>
+:root{color-scheme:dark;--bg:#090711;--panel:#151020;--line:#382752;--purple:#b78aff;--pink:#edb7ff;--text:#f8f3ff;--muted:#b8abc9;--green:#76e5b1;--amber:#ffd18a;--red:#ff9cae}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#39205d 0,transparent 38%),radial-gradient(ellipse at 100% 30%,#321c49 0,transparent 32%),var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;padding:30px 16px 50px}
+.wrap{max-width:920px;margin:auto}.top{display:flex;justify-content:space-between;gap:16px;margin-bottom:24px}.brand{font-size:12px;letter-spacing:3px;color:var(--pink);font-weight:800}.refresh,.hint{color:var(--muted);font-size:12px}.hero,.card{background:linear-gradient(145deg,#1c1530ed,#110d1ced);border:1px solid var(--line);border-radius:22px;box-shadow:0 20px 60px #0005}.hero{padding:30px}.eyebrow,.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1.4px}h1{font-size:clamp(28px,6vw,42px);margin:9px 0 4px}.owner{color:var(--muted);margin:0}.pill{display:inline-flex;align-items:center;gap:9px;margin-top:22px;padding:10px 15px;border-radius:999px;font-size:13px;font-weight:800}.good{background:#123b30;color:var(--green)}.warn{background:#48331c;color:var(--amber)}.dot,.event-dot{width:9px;height:9px;border-radius:50%;background:currentColor}.explain{color:#e4d8f2;line-height:1.65}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}.card,.detail{padding:18px}.label{display:block;margin-bottom:9px}.value{font-size:17px;font-weight:750;overflow-wrap:anywhere}.section{margin-top:25px}.section-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:12px}h2{font-size:18px;margin:0}.details{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.detail,.event{padding:16px;border-radius:16px;background:#171123;border:1px solid #332443}.events{display:grid;gap:10px}.event{display:flex;gap:12px}.event-dot{flex:0 0 9px;margin-top:5px;background:var(--purple)}.event.error .event-dot{background:var(--red)}.event.warning .event-dot{background:var(--amber)}.event p{margin:5px 0;color:#d3c8df;line-height:1.5;overflow-wrap:anywhere}.event small,.muted{color:var(--muted)}.footer{text-align:center;color:#897b9b;font-size:12px;margin-top:25px}
+@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:430px){body{padding:18px 12px}.hero{padding:22px}.grid,.details{grid-template-columns:1fr 1fr}.card,.detail{padding:14px}.value{font-size:15px}}
+</style></head><body><div class="wrap">
+<div class="top"><div class="brand">✦ HAYWHY BOT CARE</div><div class="refresh">Auto-refreshes every 30 seconds</div></div>
+<section class="hero"><div class="eyebrow">Your personal bot dashboard</div><h1>${safeName}</h1><p class="owner">Owned by ${safeOwner}</p><div class="pill ${statusTone}"><span class="dot"></span>${connected ? "ONLINE" : "CHECKING CONNECTION"}</div><p class="explain">${escapeHeartbeat(issueSummary)} This page shows only the bot running at this link.</p></section>
+<section class="grid"><div class="card"><span class="label">WhatsApp</span><div class="value">${connected ? "Connected ✓" : "Not connected"}</div></div><div class="card"><span class="label">Bot prefix</span><div class="value">${safePrefix}</div></div><div class="card"><span class="label">Running time</span><div class="value">${hours}h ${minutes}m</div></div><div class="card"><span class="label">Memory used</span><div class="value">${memoryMb} MB</div></div></section>
+<section class="section"><div class="section-head"><h2>Bot information</h2><span class="hint">Current settings</span></div><div class="details"><div class="detail"><span class="label">Bot name</span><div class="value">${safeName}</div></div><div class="detail"><span class="label">Owner</span><div class="value">${safeOwner}</div></div><div class="detail"><span class="label">Version</span><div class="value">${safeVersion}</div></div><div class="detail"><span class="label">Condition</span><div class="value">${escapeHeartbeat(status)}</div></div></div></section>
+<section class="section"><div class="section-head"><h2>Recent activity & issues</h2><span class="hint">Latest first</span></div><div class="events">${eventRows}</div></section>
+<div class="footer">Last checked: ${escapeHeartbeat(checkedAt)} · This page refreshes automatically.</div></div></body></html>`);
 });
 app.get("/healthz", (req, res) => {
     res.status(Prince ? 200 : 503).json({
@@ -1376,6 +1394,19 @@ async function startPrince() {
         Prince.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
             if (connection) devPingConnectionStatus = connection;
+            if (connection === "connecting") {
+                heartbeatConnection = "Connecting";
+                addHeartbeatEvent("WhatsApp is reconnecting", "The bot is trying to connect to WhatsApp.", "warning");
+            }
+            if (connection === "open") {
+                heartbeatConnection = "Connected";
+                addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
+            }
+            if (connection === "close") {
+                heartbeatConnection = "Disconnected";
+                const closeCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+                addHeartbeatEvent("WhatsApp connection closed", "The connection ended (code " + (closeCode || "not provided") + "). The bot will try to reconnect when possible.", "warning");
+            }
 
             if (connection === "connecting") {
                 console.log("🕗 Connecting Bot...");
@@ -1664,6 +1695,7 @@ _We'll miss you!_`;
         process.on("SIGINT", cleanup);
         process.on("SIGTERM", cleanup);
     } catch (error) {
+        addHeartbeatEvent("Bot startup failed", error?.message || error, "error");
         console.error("Socket initialization error:", error);
         setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
     }
