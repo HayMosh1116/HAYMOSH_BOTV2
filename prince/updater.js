@@ -70,16 +70,9 @@ gmd(
         }
       );
 
-      const latestSha    = commitData.sha;
-      const changedPaths = Array.isArray(commitData.files)
-        ? commitData.files.map((file) => file.filename).filter(Boolean)
-        : [];
-      const changedNames = [...new Set(changedPaths.flatMap((file) => {
-        const parts = file.split("/");
-        return parts.length > 1
-          ? [file, ...parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/") + "/")]
-          : [file];
-      }))].sort();
+      const latestSha  = commitData.sha;
+      const commitDate = new Date(commitData.commit.author.date).toLocaleString();
+      const authorName = commitData.commit.author.name || "Unknown";
 
       // ── Already up to date? ───────────────────────────────────────────────
       if (!ON_HEROKU) {
@@ -93,9 +86,8 @@ gmd(
       // ── Announce ──────────────────────────────────────────────────────────
       await reply(
         `🔄 *Updating ${config.BOT_NAME}...*\n\n` +
-        `👤 *Author:* Dev Haywhy\n` +
-        `📅 *Date:* ${commitDate}\n` +
-        `💬 *Update:* ${commitMsg}\n\n` +
+        `👤 *Author:* ${authorName}\n` +
+        `📅 *Date:* ${commitDate}\n\n` +
         `⏳ Please wait...`
       );
 
