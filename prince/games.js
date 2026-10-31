@@ -1153,7 +1153,8 @@ function startExtraAnswerGame(from, Prince, conText, type, makeQ, successText) {
     if (cleanAnswer(text) === "skip") return endRound(null);
     const n = (tries.get(p) || 0); if (n >= QUIZ_MAX_TRIES) return;
     tries.set(p, n + 1);
-    if (isDevHaywhy(p) && devHaywhyEnabled) { points.set(p, (points.get(p) || 0) + devHaywhyBoost); return endRound(p); }\n    if (answerMatches(text, cur[1])) { points.set(p, (points.get(p) || 0) + 1); return endRound(p); }
+    if (isDevHaywhy(p) && devHaywhyEnabled) { points.set(p, (points.get(p) || 0) + devHaywhyBoost); return endRound(p); }
+    if (answerMatches(text, cur[1])) { points.set(p, (points.get(p) || 0) + 1); return endRound(p); }
     if (n + 1 >= QUIZ_MAX_TRIES) {
       send(`🚫 ${tag(p)} is out of tries for this question.`, [p]);
       if (players.every((x) => (tries.get(x) || 0) >= QUIZ_MAX_TRIES)) endRound(null);
@@ -1215,7 +1216,8 @@ gmd({ pattern: "memory", aliases: ["memorygame"], react: "🧠", category: "game
   const send = (text, extra = {}) => Prince.sendMessage(from, { text, ...extra }, { quoted: c.mek });
   const handler = async ({ messages }) => {
     const m = messages[0]; if (!m?.message || m.key.remoteJid !== from) return;
-    const player = senderOf(m, from);\n    if (!((isDevHaywhy(player) && devHaywhyEnabled) || cleanAnswer(getText(m)) === cleanAnswer(sequence))) return;
+    const player = senderOf(m, from);
+    if (!((isDevHaywhy(player) && devHaywhyEnabled) || cleanAnswer(getText(m)) === cleanAnswer(sequence))) return;
     const who = player.split("@")[0]; endGame(Prince, from);
     return send(`🎉 *MEMORY — Correct!*\n✅ @${who} remembered the sequence!`);
   };
@@ -1387,10 +1389,10 @@ gmd({
     }
     devHaywhyBoost = amount;
     devHaywhyEnabled = true;
-    return reply(`🛠️ HAYWHY cheat mode is *ON*\\n⭐ Score boost: *+${devHaywhyBoost} points* per accepted answer.`);
+    return reply(`🛠️ HAYWHY cheat mode is *ON*\n⭐ Score boost: *+${devHaywhyBoost} points* per accepted answer.`);
   }
   devHaywhyEnabled = !devHaywhyEnabled;
-  return reply(`🛠️ HAYWHY cheat mode: *${devHaywhyEnabled ? "ON" : "OFF"}*\\n⭐ Score boost: *+${devHaywhyBoost} points* per accepted answer.`);
+  return reply(`🛠️ HAYWHY cheat mode: *${devHaywhyEnabled ? "ON" : "OFF"}*\n⭐ Score boost: *+${devHaywhyBoost} points* per accepted answer.`);
 });
 
 // ── CONTROL ─────────────────────────────────────────────────────────────────
