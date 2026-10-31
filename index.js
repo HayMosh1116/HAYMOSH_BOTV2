@@ -71,6 +71,7 @@ const {
 const pino = require("pino");
 const config = require("./config");
 const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./mayel/devPing");
+const botNetwork = require("./mayel/botNetwork");
 const axios = require("axios");
 const googleTTS = require("google-tts-api");
 const fs = require("fs-extra");
@@ -114,7 +115,9 @@ const {
 } = config;
 const PORT = process.env.PORT || 5000;
 const app = express();
+botNetwork.installNetworkApi(app);
 let Prince;
+botNetwork.startNetworkClient(() => ({ connected: Boolean(Prince?.user), botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion }));
 
 logger.level = "silent";
 
@@ -981,6 +984,15 @@ async function startPrince() {
                       .split(/\s+/)[0]
                       ?.toLowerCase()
                 : null;
+
+            if (isDevs && isCommandMessage && cmd && ["botnetwork", "allping", "system"].includes(cmd)) {
+                const handled = await botNetwork.handleCommand(
+                    cmd,
+                    async (message) => Prince.sendMessage(from, { text: message }, { quoted: ms }),
+                    () => ({ connected: Boolean(Prince?.user), botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion })
+                );
+                if (handled) return;
+            }
 
             // Developer prefix check: when the developer sends "haywhymdxprefix",
             // every bot in the chat replies with its current prefix.
