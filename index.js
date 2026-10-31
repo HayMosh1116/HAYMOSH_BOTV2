@@ -72,6 +72,7 @@ const pino = require("pino");
 const config = require("./config");
 const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./mayel/devPing");
 const botNetwork = require("./mayel/botNetwork");
+const botAlerts = require("./mayel/alerts");
 const axios = require("axios");
 const googleTTS = require("google-tts-api");
 const fs = require("fs-extra");
@@ -131,7 +132,10 @@ function addHeartbeatEvent(type, message, level = "info") {
     const event = { type, message: safeMessage, level, at: Date.now() };
     heartbeatEvents.unshift(event);
     if (heartbeatEvents.length > 12) heartbeatEvents.length = 12;
-    if (level === "error") heartbeatLastError = event;
+    if (level === "error") {
+        heartbeatLastError = event;
+        botAlerts.seriousError(safeMessage, Prince);
+    }
 }
 function formatNigeriaTime(value) { return new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "medium", hour12: true }).format(new Date(value)); }
 function escapeHeartbeat(value) {
@@ -1402,11 +1406,14 @@ async function startPrince() {
             if (connection === "open") {
                 heartbeatConnection = "Connected";
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
+                botAlerts.connectionOpened(Prince);
             }
             if (connection === "close") {
                 heartbeatConnection = "Disconnected";
                 const closeCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                addHeartbeatEvent("WhatsApp is reconnecting", "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ".", "warning");
+                const disconnectDetail = "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ".";
+                addHeartbeatEvent("WhatsApp is reconnecting", disconnectDetail, "warning");
+                botAlerts.connectionClosed(disconnectDetail, Prince);
             }
 
             if (connection === "connecting") {
