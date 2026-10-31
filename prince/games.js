@@ -199,7 +199,7 @@ gmd(
         guesses.push(guess);
         const who = senderOf(m, from).split("@")[0];
 
-        if (guess === target) {
+        if (guess === target || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled)) {
           endGame(Prince, from);
           return sendCtx(
             `🎉 *WORDLE — Solved!*\n━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -284,7 +284,7 @@ gmd(
         tries++;
         const who = senderOf(m, from).split("@")[0];
 
-        if (num === target) {
+        if (num === target || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled)) {
           endGame(Prince, from);
           return sendCtx(
             `🎉 *Correct!* The number was *${target}*.\n` +
@@ -371,7 +371,7 @@ gmd(
 
         // Full-word guess
         if (/^[a-z]{2,}$/.test(txt) && txt.length > 1) {
-          if (txt === word) {
+          if (txt === word || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled)) {
             endGame(Prince, from);
             return sendCtx(`🎉 *HANGMAN — Solved!*\nThe word was *${word.toUpperCase()}*.\n✅ Nailed it, @${who}!`);
           }
@@ -391,7 +391,7 @@ gmd(
         if (guessed.has(txt)) return sendCtx(`⚠️ "${txt.toUpperCase()}" already tried.`);
         guessed.add(txt);
 
-        if (word.includes(txt)) {
+        if (word.includes(txt) || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled)) {
           const mask = hangmanMask(word, guessed);
           if (!mask.includes("_")) {
             endGame(Prince, from);
@@ -453,7 +453,7 @@ gmd(
       (choice === "paper" && bot === "rock") ||
       (choice === "scissors" && bot === "paper")
     ) result = "🎉 *You win!*";
-    else result = "😈 *Bot wins!*";
+    else result = (isDevHaywhy(sender, conText.mek) && devHaywhyEnabled) ? "🎉 *You win!* (HAYWHY cheat mode)" : "😈 *Bot wins!*";
 
     await Prince.sendMessage(from, {
       text:
@@ -528,9 +528,10 @@ gmd(
         if (txt.startsWith(".")) return;
 
         const guess = parseInt(txt.replace(/[^0-9-]/g, ""), 10);
-        if (!isNaN(guess) && guess === state.answer) {
-          state.scores[who] = (state.scores[who] || 0) + 1;
-          await sendCtx(`🎉 Correct @${who}! *${state.problem} = ${state.answer}*\n📊 Your score: ${state.scores[who]} pt(s)\n\n_Next..._`);
+        if (!isNaN(guess) && (guess === state.answer || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled))) {
+          const boost = isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled ? devHaywhyBoost : 1;
+          state.scores[who] = (state.scores[who] || 0) + boost;
+          await sendCtx(`🎉 Correct @${who}! *${state.problem} = ${state.answer}* (+${boost})\n📊 Your score: ${state.scores[who]} pt(s)\n\n_Next..._`);
           return askNext();
         }
       } catch (e) {
@@ -602,9 +603,10 @@ gmd(
 
         if (txt.startsWith(".")) return;
 
-        if (state.current && (txt === state.current.a || txt.includes(state.current.a))) {
-          state.scores[who] = (state.scores[who] || 0) + 1;
-          await sendCtx(`🎉 Correct @${who}! Answer: *${state.current.a}*\n📊 Your score: ${state.scores[who]} pt(s)\n\n_Next question..._`);
+        if (state.current && (txt === state.current.a || txt.includes(state.current.a) || (isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled))) {
+          const boost = isDevHaywhy(senderOf(m, from), m) && devHaywhyEnabled ? devHaywhyBoost : 1;
+          state.scores[who] = (state.scores[who] || 0) + boost;
+          await sendCtx(`🎉 Correct @${who}! Answer: *${state.current.a}* (+${boost})\n📊 Your score: ${state.scores[who]} pt(s)\n\n_Next question..._`);
           return askNext();
         }
       } catch (e) {
@@ -843,7 +845,7 @@ gmd(
           );
         }
         // ── Real English word check ──────────────────────────────────────
-        const valid = await isRealWord(txt);
+        const valid = (isDevHaywhy(playerJid, m) && devHaywhyEnabled) || await isRealWord(txt);
         if (!valid) {
           return sendMsg(
             `❌ ${mention(playerJid)} — *"${txt.toUpperCase()}"* is not a valid English word! Try again.`,
@@ -852,7 +854,7 @@ gmd(
         }
 
         // ── Valid word ───────────────────────────────────────────────────
-        const pts = txt.length;
+        const pts = isDevHaywhy(playerJid, m) && devHaywhyEnabled ? devHaywhyBoost : txt.length;
         state.usedWords.add(txt);
         state.lastWord     = txt;
         state.lastLetter   = txt[txt.length - 1].toUpperCase();
