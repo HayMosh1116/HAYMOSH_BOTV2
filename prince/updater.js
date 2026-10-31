@@ -73,6 +73,9 @@ gmd(
       const latestSha  = commitData.sha;
       const commitDate = new Date(commitData.commit.author.date).toLocaleString();
       const authorName = commitData.commit.author.name || "Unknown";
+      const workedOnFiles = Array.isArray(commitData.files)
+        ? commitData.files.map((file) => file.filename).filter(Boolean)
+        : [];
 
       // ── Already up to date? ───────────────────────────────────────────────
       if (!ON_HEROKU) {
@@ -84,10 +87,15 @@ gmd(
       }
 
       // ── Announce ──────────────────────────────────────────────────────────
+      const filesWorkedOn = workedOnFiles.length
+        ? workedOnFiles.map((file) => `• ${file}`).join("\n")
+        : "• File list unavailable";
+
       await reply(
         `🔄 *Updating ${config.BOT_NAME}...*\n\n` +
         `👤 *Author:* ${authorName}\n` +
         `📅 *Date:* ${commitDate}\n\n` +
+        `📁 *Files worked on:*\n${filesWorkedOn}\n\n` +
         `⏳ Please wait...`
       );
 
