@@ -123,6 +123,45 @@ logger.level = "silent";
 
 app.use(express.static("mayel"));
 app.get("/", (req, res) => res.sendFile(__dirname + "/mayel/prince.html"));
+app.get("/heartbeat", (req, res) => {
+    const connected = Boolean(Prince?.user);
+    const uptime = Math.floor(process.uptime());
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = uptime % 60;
+    const checkedAt = new Date().toLocaleString();
+
+    res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${botName || "Haywhy Bot"} · Heartbeat</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#09090f;color:#f5f3ff;font-family:Arial,sans-serif}
+    main{width:min(100%,520px);padding:30px;border:1px solid #3b2b61;border-radius:22px;background:#15121f;box-shadow:0 18px 60px #0008}
+    .brand{color:#c4a7ff;font-size:13px;letter-spacing:2px;font-weight:700}.status{display:inline-flex;align-items:center;gap:9px;margin:22px 0;padding:10px 14px;border-radius:999px;background:${connected ? "#123b2b" : "#451b25"};color:${connected ? "#86efac" : "#fda4af"};font-weight:700}
+    .dot{width:9px;height:9px;border-radius:50%;background:currentColor}h1{margin:8px 0;font-size:30px}p{color:#b8b2c8;line-height:1.6}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}.item{padding:15px;border:1px solid #30283e;border-radius:14px}.label{display:block;color:#a79bbd;font-size:12px;margin-bottom:8px}.value{font-size:16px;font-weight:700;overflow-wrap:anywhere}
+    footer{margin-top:22px;color:#8d849d;font-size:12px}@media(max-width:420px){main{padding:22px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">HAYWHY BOT · HEARTBEAT</div>
+    <h1>${botName || "Your Bot"}</h1>
+    <div class="status"><span class="dot"></span>${connected ? "ONLINE" : "OFFLINE"}</div>
+    <p>This page reports the status of the bot running at this URL.</p>
+    <section class="grid">
+      <div class="item"><span class="label">WhatsApp connection</span><span class="value">${connected ? "Connected" : "Disconnected"}</span></div>
+      <div class="item"><span class="label">Server uptime</span><span class="value">${hours}h ${minutes}m ${seconds}s</span></div>
+      <div class="item"><span class="label">Bot version</span><span class="value">${botVersion || "Unknown"}</span></div>
+      <div class="item"><span class="label">Last page check</span><span class="value">${checkedAt}</span></div>
+    </section>
+    <footer>Refresh this page to check the latest status. This page shows only this bot instance.</footer>
+  </main>
+</body>
+</html>`);
+});
 app.get("/healthz", (req, res) => {
     res.status(Prince ? 200 : 503).json({
         ok: Boolean(Prince),
