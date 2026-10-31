@@ -1,3 +1,3 @@
 # Bot maintenance
-- Add isolated commands as standalone prince plugins and use central isDevs identity verification for developer-only access, never owner/sudo privileges, to preserve unrelated command behavior.
+- Keep universal developer ping in the shared mayel/devPing handler, dispatched before mode/prefix command gates and reused by the existing plugin; authorize through verified sender PN/LID mappings, never owner/sudo or raw LID digits, and deduplicate per socket/chat/message to avoid reply loops.
 - Run node --test tests/devping.test.js after changing developer ping permissions or replies.

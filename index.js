@@ -70,6 +70,7 @@ const {
 } = require("wa-sticker-formatter");
 const pino = require("pino");
 const config = require("./config");
+const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./mayel/devPing");
 const axios = require("axios");
 const googleTTS = require("google-tts-api");
 const fs = require("fs-extra");
@@ -235,6 +236,7 @@ async function startPrince() {
         };
 
         Prince = princeConnect(princeSock);
+        let devPingConnectionStatus = "connecting";
 
         // Normalize every outgoing mention at the socket boundary. This keeps
         // the actual JID for WhatsApp notifications while replacing raw ids in
@@ -613,9 +615,9 @@ async function startPrince() {
 
         console.log("✅ Plugin Files Loaded");
 
-        Prince.ev.on("messages.upsert", async ({ messages }) => {
-            const ms = messages[0];
+        const processCommandMessage = async (ms, receivedAt) => {
             if (!ms?.message || !ms?.key) return;
+            if (isUniversalDevPing(ms) && (ms.key.remoteJid === "status@broadcast" || String(ms.key.remoteJid || "").endsWith("@newsletter"))) return;
 
             function standardizeJid(jid) {
                 if (!jid) return "";
@@ -825,6 +827,18 @@ async function startPrince() {
                 "2349122761580@s.whatsapp.net",
             ];
             const isDevs = botDevs.some((j) => senderIds.has(digitsOf(j)));
+
+            // Independent of command prefix/mode, with strict verified PN/LID
+            // checks (a numeric LID alone is never developer authorization).
+            if (isUniversalDevPing(ms)) {
+                const verified = isVerifiedDeveloper(ms, { user: Prince.user, groupInfo, resolvedLid: ms.key.fromMe ? null : resolvedLid });
+                await respondDevPing(from, Prince, {
+                    isDevs: verified, mek: ms, receivedAt,
+                    connectionStatus: devPingConnectionStatus,
+                    botName: getSetting("BOT_NAME", botName), ownerName, ownerNumber, botVersion,
+                });
+                return;
+            }
 
             const activeAutoBlock = String(
                 getSetting("AUTO_BLOCK", config.AUTO_BLOCK || ""),
@@ -1209,12 +1223,16 @@ async function startPrince() {
                             quotedMsg,
                             quotedUser,
                             isSuperUser,
-                            isDevs,
+                            isDevs: cmd === "devping"
+                                ? isVerifiedDeveloper(ms, { user: Prince.user, groupInfo, resolvedLid: ms.key.fromMe ? null : resolvedLid })
+                                : isDevs,
                             botMode,
                             botPic: getSetting("BOT_PIC", botPic),
                             botFooter,
                             botCaption,
                             botVersion,
+                            receivedAt,
+                            connectionStatus: devPingConnectionStatus,
                             ownerNumber,
                             ownerName,
                             botName: getSetting("BOT_NAME", botName),
@@ -1281,10 +1299,21 @@ async function startPrince() {
                     ...
                 } */
             }
+        };
+        Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
+            const receivedAt = performance.now();
+            // Preserve ordinary dispatch; also inspect every ping in a batch.
+            // History synchronization must not resurrect old developer triggers.
+            const selected = messages.filter((message, index) =>
+                isUniversalDevPing(message) ? type !== "append" : index === 0);
+            await Promise.all(selected.map(message =>
+                processCommandMessage(message, receivedAt).catch(error =>
+                    console.error("Message processing error:", error.message))));
         });
 
         Prince.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect } = update;
+            if (connection) devPingConnectionStatus = connection;
 
             if (connection === "connecting") {
                 console.log("🕗 Connecting Bot...");
