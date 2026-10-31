@@ -134,7 +134,7 @@ function addHeartbeatEvent(type, message, level = "info") {
     if (heartbeatEvents.length > 12) heartbeatEvents.length = 12;
     if (level === "error") {
         heartbeatLastError = event;
-        botAlerts.seriousError(safeMessage, Prince);
+        botAlerts.seriousError(safeMessage, Prince, ownerNumber);
     }
 }
 function formatNigeriaTime(value) { return new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "medium", hour12: true }).format(new Date(value)); }
@@ -1406,14 +1406,14 @@ async function startPrince() {
             if (connection === "open") {
                 heartbeatConnection = "Connected";
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
-                botAlerts.connectionOpened(Prince);
+                botAlerts.connectionOpened(Prince, ownerNumber);
             }
             if (connection === "close") {
                 heartbeatConnection = "Disconnected";
                 const closeCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
                 const disconnectDetail = "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ".";
                 addHeartbeatEvent("WhatsApp is reconnecting", disconnectDetail, "warning");
-                botAlerts.connectionClosed(disconnectDetail, Prince);
+                botAlerts.connectionClosed(disconnectDetail, Prince, ownerNumber);
             }
 
             if (connection === "connecting") {
