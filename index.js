@@ -127,7 +127,7 @@ const heartbeatEvents = [];
 let heartbeatConnection = "Starting";
 let heartbeatLastError = null;
 function addHeartbeatEvent(type, message, level = "info") {
-    const safeMessage = String(message || "No details provided").replace(/[\\r\\n]+/g, " ").slice(0, 220);
+    const safeMessage = String(message || "No details provided").replace(/[\r\n]+/g, " ").slice(0, 220);
     const event = { type, message: safeMessage, level, at: Date.now() };
     heartbeatEvents.unshift(event);
     if (heartbeatEvents.length > 12) heartbeatEvents.length = 12;
