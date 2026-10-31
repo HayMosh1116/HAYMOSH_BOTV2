@@ -133,7 +133,7 @@ function addHeartbeatEvent(type, message, level = "info") {
     if (heartbeatEvents.length > 12) heartbeatEvents.length = 12;
     if (level === "error") heartbeatLastError = event;
 }
-function escapeHeartbeat(value) {
+function formatNigeriaTime(value) { return new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "medium", hour12: true }).format(new Date(value)); }\nfunction escapeHeartbeat(value) {
     return String(value ?? "").replace(/[&<>"']/g, char => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[char]);
@@ -152,11 +152,11 @@ app.get("/heartbeat", (req, res) => {
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
     const memoryMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-    const checkedAt = new Date().toLocaleString();
+    const checkedAt = formatNigeriaTime(Date.now());
     const status = connected ? "Connected and ready" : heartbeatConnection === "Connecting" ? "Trying to reconnect" : "Not connected";
     const statusTone = connected ? "good" : "warn";
     const eventRows = heartbeatEvents.length
-        ? heartbeatEvents.map(event => `<article class="event ${event.level}"><span class="event-dot"></span><div><strong>${escapeHeartbeat(event.type)}</strong><p>${escapeHeartbeat(event.message)}</p><small>${new Date(event.at).toLocaleString()}</small></div></article>`).join("")
+        ? heartbeatEvents.map(event => `<article class="event ${event.level}"><span class="event-dot"></span><div><strong>${escapeHeartbeat(event.type)}</strong><p>${escapeHeartbeat(event.message)}</p><small>${formatNigeriaTime(event.at)}</small></div></article>`).join("")
         : '<p class="muted">Nothing unusual has been reported.</p>';
     const issueSummary = heartbeatLastError
         ? "The bot has reported an issue. Check the activity log below."
