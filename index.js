@@ -133,7 +133,8 @@ function addHeartbeatEvent(type, message, level = "info") {
     if (heartbeatEvents.length > 12) heartbeatEvents.length = 12;
     if (level === "error") heartbeatLastError = event;
 }
-function formatNigeriaTime(value) { return new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "medium", hour12: true }).format(new Date(value)); }\nfunction escapeHeartbeat(value) {
+function formatNigeriaTime(value) { return new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "medium", hour12: true }).format(new Date(value)); }
+function escapeHeartbeat(value) {
     return String(value ?? "").replace(/[&<>"']/g, char => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[char]);
