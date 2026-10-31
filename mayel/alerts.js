@@ -30,15 +30,16 @@ async function sendEmail(subject, message) {
   });
 }
 
-async function sendWhatsApp(message, socket) {
-  if (!OWNER_NUMBER || !socket?.sendMessage) {
+async function sendWhatsApp(message, socket, configuredOwnerNumber) {
+  const destination = OWNER_NUMBER || String(configuredOwnerNumber || "").replace(/\\D/g, "");
+  if (!destination || !socket?.sendMessage) {
     console.warn("[HAYWHY alerts] OWNER_NUMBER or WhatsApp connection is unavailable; WhatsApp alert skipped.");
     return;
   }
-  await socket.sendMessage(OWNER_NUMBER + "@s.whatsapp.net", { text: message });
+  await socket.sendMessage(destination + "@s.whatsapp.net", { text: message });
 }
 
-async function notify(type, detail, socket) {
+async function notify(type, detail, socket, configuredOwnerNumber) {
   const key = type.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   if (!allowed(key)) return;
   const name = process.env.BOT_NAME || "HAYWHY Bot";
@@ -53,31 +54,31 @@ async function notify(type, detail, socket) {
 
   const results = await Promise.allSettled([
     sendEmail("[HAYWHY] " + type, message),
-    sendWhatsApp(message, socket),
+    sendWhatsApp(message, socket, configuredOwnerNumber),
   ]);
   for (const result of results) {
     if (result.status === "rejected") console.error("[HAYWHY alerts] Delivery failed:", result.reason?.message || result.reason);
   }
 }
 
-function connectionClosed(detail, socket) {
+function connectionClosed(detail, socket, configuredOwnerNumber) {
   clearTimeout(offlineTimer);
-  void notify("Bot disconnected", detail, socket);
+  void notify("Bot disconnected", detail, socket, configuredOwnerNumber);
   offlineTimer = setTimeout(() => {
-    void notify("Bot offline for 2 minutes", "The WhatsApp connection has remained offline for at least two minutes. " + detail, socket);
+    void notify("Bot offline for 2 minutes", "The WhatsApp connection has remained offline for at least two minutes. " + detail, socket, configuredOwnerNumber);
   }, 120000);
   offlineTimer.unref?.();
 }
 
-function connectionOpened(socket) {
+function connectionOpened(socket, configuredOwnerNumber) {
   const wasOffline = Boolean(offlineTimer);
   clearTimeout(offlineTimer);
   offlineTimer = null;
-  if (wasOffline) void notify("Bot reconnected", "The WhatsApp connection is online and ready again.", socket);
+  if (wasOffline) void notify("Bot reconnected", "The WhatsApp connection is online and ready again.", socket, configuredOwnerNumber);
 }
 
-function seriousError(detail, socket) {
-  void notify("Serious server error", detail, socket);
+function seriousError(detail, socket, configuredOwnerNumber) {
+  void notify("Serious server error", detail, socket, configuredOwnerNumber);
 }
 
 module.exports = { connectionClosed, connectionOpened, seriousError };
