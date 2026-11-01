@@ -1256,13 +1256,9 @@ gmd({ pattern: "fastest", aliases: ["fastestfinger", "quickquiz"], react: "⚡",
 
 // ── FAST TYPER ───────────────────────────────────────────────────────────────
 const FAST_TYPER_SENTENCES = [
-  "MY NAME IS DEV HAYWHY",
-  "I LOVE CODING",
-  "MY LOVE IS JAVASCRIPT THE LOML OF MY LIFE",
-  "CODING IS MY PASSION",
-  "I BUILD THINGS WITH CODE",
-  "JAVASCRIPT MAKES THE WEB COME ALIVE",
-  "PRACTICE MAKES A DEVELOPER BETTER",
+  "I LOVE CODING", "MY NAME IS DEV HAYWHY", "CODING IS MY PASSION",
+  "I BUILD THINGS WITH CODE", "MY LOVE IS JAVASCRIPT THE LOML OF MY LIFE",
+  "JAVASCRIPT MAKES THE WEB COME ALIVE", "PRACTICE MAKES A DEVELOPER BETTER",
   "I AM LEARNING SOMETHING NEW EVERY DAY",
   "GOOD CODE IS CLEAR SIMPLE AND EASY TO MAINTAIN",
   "A GREAT DEVELOPER NEVER STOPS LEARNING",
@@ -1274,45 +1270,87 @@ const FAST_TYPER_SENTENCES = [
   "THE BEST WAY TO IMPROVE AS A DEVELOPER IS TO BUILD PROJECTS AND LEARN FROM EVERY MISTAKE",
   "I AM NOT JUST WRITING CODE I AM CREATING SOLUTIONS THAT CAN MAKE SOMEONES LIFE EASIER",
   "CONSISTENCY CURIOSITY AND PATIENCE CAN TURN A BEGINNER INTO A CONFIDENT FULL STACK DEVELOPER",
-  "MY GOAL IS TO KEEP LEARNING KEEP BUILDING AND KEEP PUSHING MYSELF BEYOND WHAT I THOUGHT WAS POSSIBLE",
+  "MY GOAL IS TO KEEP LEARNING KEEP BUILDING AND KEEP PUSHING MYSELF BEYOND WHAT I THOUGHT WAS POSSIBLE"
 ];
 
+function unwrapGameMessage(message) {
+  let current = message || {};
+  for (let i = 0; i < 5; i++) {
+    const nested = current.ephemeralMessage?.message || current.viewOnceMessage?.message ||
+      current.viewOnceMessageV2?.message || current.documentWithCaptionMessage?.message;
+    if (!nested) break;
+    current = nested;
+  }
+  return current;
+}
+function getFastTyperText(m) {
+  const msg = unwrapGameMessage(m?.message);
+  return String(msg?.conversation || msg?.extendedTextMessage?.text ||
+    msg?.imageMessage?.caption || msg?.videoMessage?.caption || msg?.documentMessage?.caption || "")
+    .normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+}
 function normalizeFastTyper(value) {
-  // Case-insensitive comparison accepts automatic first-letter capitalization.
-  return String(value || "").normalize("NFKC").toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ").trim();
+  return String(value || "").normalize("NFKC").toLowerCase()
+    .replace(/[’]/g, "'").replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ").trim();
 }
 
-gmd({ pattern: "fasttyper", aliases: ["fasttype", "typefast"], react: "⌨️", category: "games",
-  description: "Type the displayed sentence first. Uppercase and lowercase both count."
+gmd({
+  pattern: "fasttyper",
+  aliases: ["fasttype", "typefast"],
+  react: "⌨️",
+  category: "games",
+  description: "Race the chat: type the displayed sentence before anyone else."
 }, async (from, Prince, c) => {
-  if (games.has(from)) return c.reply("⚠️ A game is already running in this chat. Type *.endgame* to stop it.");
+  if (games.has(from)) return c.reply("⚠️ A game is already running here. Type *.endgame* first.");
   const sentence = rand(FAST_TYPER_SENTENCES);
   const target = normalizeFastTyper(sentence);
-  const send = (text, mentions = []) => Prince.sendMessage(from, { text, mentions,
-    contextInfo: getContextInfo(c.sender, c.newsletterJid, c.botName)
+  let finished = false;
+  const send = (text, mentions = []) => Prince.sendMessage(from, {
+    text, mentions, contextInfo: getContextInfo(c.sender, c.newsletterJid, c.botName)
   }, { quoted: c.mek });
-  await send("⌨️ *ＦＡＳＴ ＴＹＰＥＲ*\n━━━━━━━━━━━━━━━━━━━━━━\n" +
-    "⚡ First person to type the sentence correctly wins!\n\n👇 *TYPE THIS:*\n```" + sentence + "```\n\n" +
-    "🔤 Uppercase is displayed; lowercase is accepted.\n" +
-    "📱 Automatic first-letter capitalization is accepted too.\n" +
-    "🏁 One winner • One round • 60 seconds\n━━━━━━━━━━━━━━━━━━━━━━");
-  const handler = async ({ messages }) => {
-    const m = messages?.[0];
-    if (!m?.message || m.key.remoteJid !== from) return;
-    if (normalizeFastTyper(getText(m)) !== target) return;
-    const winner = senderOf(m, from);
-    const name = "@" + String(winner).split("@")[0];
-    endGame(Prince, from);
-    return send("🏆 *FAST TYPER — WINNER!*\n━━━━━━━━━━━━━━━━━━━━━━\n" +
-      "⚡ " + name + " was the fastest!\n⭐ +1 point\n✅ " + sentence + "\n━━━━━━━━━━━━━━━━━━━━━━", [winner]);
+
+  const handler = async ({ messages = [] }) => {
+    try {
+      for (const m of messages) {
+        if (!m?.message || m.key?.remoteJid !== from || m.key?.fromMe) continue;
+        if (normalizeFastTyper(getFastTyperText(m)) !== target || finished) continue;
+        finished = true;
+        const winner = senderOf(m, from);
+        const tag = "@" + String(winner).split("@")[0].split(":")[0];
+        endGame(Prince, from);
+        await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\n" +
+          "🥇 " + tag + " typed it first!\n\n" +
+          "✅ " + sentence + "\n" +
+          "✨ Type *.fasttyper* for another round.", [winner]);
+        return;
+      }
+    } catch (error) { console.error("Fast Typer handler error:", error); }
   };
-  const timeout = setTimeout(() => {
-    if (!games.has(from)) return;
-    endGame(Prince, from);
-    send("⌛ *FAST TYPER* — Time is up!\nThe sentence was:\n*" + sentence + "*");
-  }, 60 * 1000);
-  games.set(from, { type: "fasttyper", handler, timeout });
+
+  games.set(from, { type: "fasttyper", handler });
   Prince.ev.on("messages.upsert", handler);
+  try {
+    await send("╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮\n" +
+      "       ⌨️ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑\n" +
+      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n" +
+      "⚡ FIRST PERSON TO TYPE IT WINS!\n\n" +
+      "┌──────────────────────────┐\n" + sentence + "\n" +
+      "└──────────────────────────┘\n\n" +
+      "🔠 Uppercase is displayed; lowercase is accepted.\n" +
+      "📱 Auto-capitalized first letters are accepted.\n" +
+      "⏳ 60 seconds • 🛑 *.endgame* to stop.");
+  } catch (error) {
+    endGame(Prince, from);
+    console.error("Fast Typer start error:", error);
+    return c.reply("❌ Fast Typer could not start. Please try again.");
+  }
+  const timeout = setTimeout(() => {
+    if (!games.has(from) || finished) return;
+    endGame(Prince, from);
+    send("⌛ TIME'S UP!\nThe sentence was: " + sentence);
+  }, 60000);
+  games.get(from).timeout = timeout;
 });
 gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
   description: "Play tagged tic-tac-toe by replying with a square number." }, async (from, Prince, c) => {
@@ -1495,48 +1533,42 @@ gmd(
     const { sender, botName, newsletterJid, mek } = conText;
     const prefix = conText.botPrefix || ".";
 
-    const text = [
-      "╭━━━〔 ✦ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐆𝐀𝐌𝐄𝐒 ✦ 〕━━━╮",
-      "│ 🎮 𝐏𝐈𝐂𝐊 𝐘𝐎𝐔𝐑 𝐂𝐇𝐀𝐋𝐋𝐄𝐍𝐆𝐄",
-      "╰━━━━━━━━━━━━━━━━━━━━━━╯",
-      "",
-      "Play solo, challenge a friend, or race everyone in the group.",
-      "",
-      "┏━━━ 𝐖𝐎𝐑𝐃 & 𝐌𝐈𝐍𝐃 ━━━┓",
-      "🟩 *${prefix}wordle* — 5-letter word puzzle",
-      "🔢 *${prefix}guess* — guess the number (1–100)",
-      "🪢 *${prefix}hangman* — uncover the hidden word",
-      "🔤 *${prefix}unscramble* — solve the jumbled word",
-      "🧠 *${prefix}memory* — remember the emoji sequence",
-      "🧩 *${prefix}riddle* — crack a riddle",
-      "┗━━━━━━━━━━━━━━━━━━━━┛",
-      "",
-      "┏━━━ 𝐒𝐏𝐄𝐄𝐃 & 𝐐𝐔𝐈𝐙 ━━━┓",
-      "⌨️ *${prefix}fasttyper* — type the sentence first",
-      "⚡ *${prefix}fastest* — fastest quiz answer wins",
-      "🧮 *${prefix}math* — solve the maths first",
-      "❓ *${prefix}trivia* — general knowledge race",
-      "⚽ *${prefix}footballquiz* — football quiz",
-      "🤔 *${prefix}emoji* — guess from emojis",
-      "🕵️ *${prefix}whoami* — identify the mystery person",
-      "┗━━━━━━━━━━━━━━━━━━━━┛",
-      "",
-      "┏━━━ 𝐂𝐇𝐀𝐋𝐋𝐄𝐍𝐆𝐄 & 𝐏𝐀𝐑𝐓𝐘 ━━━┓",
-      "✊ *${prefix}rps rock/paper/scissors* — play the bot",
-      "🔗 *${prefix}wordchain* — multiplayer word chain",
-      "❌ *${prefix}tictactoe* — tic-tac-toe",
-      "🔴 *${prefix}connect4* — Connect Four",
-      "🃏 *${prefix}blackjack* — play to 21",
-      "🤷 *${prefix}wouldrather* — choose between two",
-      "🗣️ *${prefix}truth* / *${prefix}dare* — party prompts",
-      "┗━━━━━━━━━━━━━━━━━━━━┛",
-      "",
-      "┌── 𝐆𝐀𝐌𝐄 𝐂𝐎𝐍𝐓𝐑𝐎𝐋 ──┐",
-      "🛑 *${prefix}endgame* — stop the active game",
-      "└──────────────────┘",
-      "",
-      "✨ 𝐋𝐞𝐭 𝐭𝐡𝐞 𝐠𝐚𝐦𝐞𝐬 𝐛𝐞𝐠𝐢𝐧."
-    ].map(line => line.replace(/\$\{prefix\}/g, prefix)).join("\n");
+    const text =
+      "╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮\\n" +
+      "       ✦ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐆𝐀𝐌𝐄 𝐙𝐎𝐍𝐄 ✦\\n" +
+      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\\n\\n" +
+      "       🎮 𝐂𝐇𝐎𝐎𝐒𝐄 𝐘𝐎𝐔𝐑 𝐆𝐀𝐌𝐄\\n" +
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
+      "╭─〔 🧠 𝐖𝐎𝐑𝐃 & 𝐌𝐈𝐍𝐃 〕\\n" +
+      "│ 🟩 *${prefix}wordle*  • Word puzzle\\n" +
+      "│ 🔢 *${prefix}guess*  • Guess the number\\n" +
+      "│ 🪢 *${prefix}hangman*  • Find the hidden word\\n" +
+      "│ 🔤 *${prefix}unscramble*  • Fix the mixed letters\\n" +
+      "│ 🧩 *${prefix}riddle*  • Solve a riddle\\n" +
+      "│ 🧠 *${prefix}memory*  • Test your memory\\n" +
+      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
+      "╭─〔 ⚡ 𝐒𝐏𝐄𝐄𝐃 & 𝐐𝐔𝐈𝐙 〕\\n" +
+      "│ ⌨️ *${prefix}fasttyper*  • Type faster than everyone\\n" +
+      "│ ⚡ *${prefix}fastest*  • Fastest answer wins\\n" +
+      "│ 🧮 *${prefix}math*  • Solve the maths\\n" +
+      "│ ❓ *${prefix}trivia*  • General knowledge\\n" +
+      "│ ⚽ *${prefix}footballquiz*  • Football challenge\\n" +
+      "│ 🤔 *${prefix}emoji*  • Guess the emoji clue\\n" +
+      "│ 🕵️ *${prefix}whoami*  • Who am I?\\n" +
+      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
+      "╭─〔 🎯 𝐂𝐇𝐀𝐋𝐋𝐄𝐍𝐆𝐄 & 𝐏𝐀𝐑𝐓𝐘 〕\\n" +
+      "│ ✊ *${prefix}rps*  • Rock, paper, scissors\\n" +
+      "│ 🔗 *${prefix}wordchain*  • Build a word chain\\n" +
+      "│ ❌ *${prefix}tictactoe*  • Tic-tac-toe\\n" +
+      "│ 🔴 *${prefix}connect4*  • Connect Four\\n" +
+      "│ 🃏 *${prefix}blackjack*  • Play to 21\\n" +
+      "│ 🤷 *${prefix}wouldrather*  • Pick one\\n" +
+      "│ 🗣️ *${prefix}truth* / *${prefix}dare*  • Party time\\n" +
+      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
+      "╭─〔 🛠️ 𝐆𝐀𝐌𝐄 𝐂𝐎𝐍𝐓𝐑𝐎𝐋 〕\\n" +
+      "│ 🛑 *${prefix}endgame*  • Stop the active game\\n" +
+      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
+      "        ✨ 𝐋𝐄𝐓 𝐓𝐇𝐄 𝐆𝐀𝐌𝐄𝐒 𝐁𝐄𝐆𝐈𝐍 ✨";
 
     await Prince.sendMessage(from, {
       text,
