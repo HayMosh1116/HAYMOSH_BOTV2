@@ -462,6 +462,17 @@ gmd({
   const key = getMessageKey();
   if (!key?.id) return reply("❌ Please reply to the message you want to delete, then send .del.");
 
+  // Protect the fixed HAYWHY developer from deletion by every bot user.
+  // This is independent of the deployer's OWNER_NUMBER setting.
+  const HAYWHY_DEVELOPER_NUMBER = "2349122761580";
+  const quotedSender = key.participant || conText.quoted?.sender ||
+    conText.quoted?.key?.participant || (key.fromMe ? botId : "");
+  const quotedSenderNumber = String(quotedSender || "")
+    .split("@")[0].split(":")[0].replace(/\D/g, "");
+  if (quotedSenderNumber === HAYWHY_DEVELOPER_NUMBER) {
+    return reply("🛡️ *Protected message:* HAYWHY developer messages cannot be deleted with .del.");
+  }
+
   try {
     // In a DM, WhatsApp only lets the bot revoke its own sent messages.
     if (!isGroup && !key.fromMe) {
