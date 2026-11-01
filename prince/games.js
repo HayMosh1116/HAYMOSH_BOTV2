@@ -1366,17 +1366,20 @@ gmd({
           continue;
         }
         if (phase !== "play" || roundLocked || !players.has(player)) continue;
-        if (normalizeFastTyper(answer) !== target) {
+        const devCheat = isDevHaywhy(player) && devHaywhyEnabled;
+        if (normalizeFastTyper(answer) !== target && !devCheat) {
           await send("❌ @" + player.split("@")[0].split(":")[0] + ", wrong typing! Try again.", [player]);
           continue;
         }
         roundLocked = true;
         const game = games.get(from);
         if (game?.roundTimeout) clearTimeout(game.roundTimeout);
-        scores.set(player, (scores.get(player) || 0) + 1);
+        const pointsEarned = devCheat ? devHaywhyBoost : 1;
+        scores.set(player, (scores.get(player) || 0) + pointsEarned);
         await send("╭━━〔 🏅 ROUND " + round + " RESULT 〕━━╮\n🥇 @" +
-          player.split("@")[0].split(":")[0] + " wins this round! (+1 point)\n" +
-          "📊 Score: " + scores.get(player) + "\n\nNext round starting shortly...", [player]);
+          player.split("@")[0].split(":")[0] + " wins this round!" +
+          (devCheat ? " (HAYWHY CHEAT: +" + pointsEarned + " points)" : " (+1 point)") +
+          "\n📊 Score: " + scores.get(player) + "\n\nNext round starting shortly...", [player]);
         game.nextTimeout = setTimeout(startRound, 2500);
       }
     } catch (error) { console.error("Fast Typer handler error:", error); }
