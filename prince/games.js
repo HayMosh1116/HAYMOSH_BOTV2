@@ -1352,7 +1352,7 @@ gmd({
   const handler = async ({ messages = [] }) => {
     try {
       for (const m of messages) {
-        if (!m?.message || m.key?.fromMe) continue;
+        if (!m?.message) continue;
         const chatId = m.key?.remoteJid || m.key?.remoteJidAlt;
         if (chatId && chatId !== from) continue;
         const player = senderOf(m, from);
