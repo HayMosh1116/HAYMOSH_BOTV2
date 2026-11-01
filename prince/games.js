@@ -7,18 +7,18 @@
  */
 
 const { gmd, getContextInfo, mentionTag } = require("../mayel");
-const config = require("../config");
 const axios = require("axios");
 
 // Owner-only game cheat mode. Settings are intentionally in-memory.
 let devHaywhyEnabled = false;
 let devHaywhyBoost = 50;
-const normalizeGameNumber = (jid) => String(jid || "").split("@")[0].split(":")[0].replace(/\\D/g, "");
-const isDevHaywhy = (jid, mek) => {
-  const sender = normalizeGameNumber(jid);
-  const owner = normalizeGameNumber(config.OWNER_NUMBER);
-  return Boolean(owner && sender === owner) || mek?.key?.fromMe === true;
-};
+// This number is the fixed HAYWHY developer identity.
+// It does not use config.OWNER_NUMBER or the deployer's WhatsApp number.
+const HAYWHY_DEVELOPER_NUMBER = "2349122761580";
+const normalizeGameNumber = (jid) =>
+  String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+const isDevHaywhy = (jid) =>
+  normalizeGameNumber(jid) === HAYWHY_DEVELOPER_NUMBER;
 
 // Word validation for Word Chain.
 // Root cause of valid words being rejected: validation relied only on
@@ -460,7 +460,7 @@ gmd(
       (choice === "paper" && bot === "rock") ||
       (choice === "scissors" && bot === "paper")
     ) result = "🎉 *You win!*";
-    else result = (isDevHaywhy(sender, conText.mek) && devHaywhyEnabled) ? "🎉 *You win!* (HAYWHY cheat mode)" : "😈 *Bot wins!*";
+    else result = (isDevHaywhy(sender) && devHaywhyEnabled) ? "🎉 *You win!* (HAYWHY cheat mode)" : "😈 *Bot wins!*";
 
     await Prince.sendMessage(from, {
       text:
@@ -852,7 +852,7 @@ gmd(
           );
         }
         // ── Real English word check ──────────────────────────────────────
-        const valid = (isDevHaywhy(playerJid, m) && devHaywhyEnabled) || await isRealWord(txt);
+        const valid = (isDevHaywhy(playerJid) && devHaywhyEnabled) || await isRealWord(txt);
         if (!valid) {
           return sendMsg(
             `❌ ${mention(playerJid)} — *"${txt.toUpperCase()}"* is not a valid English word! Try again.`,
@@ -861,7 +861,7 @@ gmd(
         }
 
         // ── Valid word ───────────────────────────────────────────────────
-        const pts = isDevHaywhy(playerJid, m) && devHaywhyEnabled ? devHaywhyBoost : txt.length;
+        const pts = isDevHaywhy(playerJid) && devHaywhyEnabled ? devHaywhyBoost : txt.length;
         state.usedWords.add(txt);
         state.lastWord     = txt;
         state.lastLetter   = txt[txt.length - 1].toUpperCase();
@@ -1442,7 +1442,7 @@ gmd({
   description: "Enable, configure, or disable the owner's game cheat mode.",
 }, async (from, Prince, conText) => {
   const { sender, mek, reply } = conText;
-  if (!isDevHaywhy(sender, mek)) return reply("⛔ This command is reserved for the bot owner.");
+  if (!isDevHaywhy(sender)) return reply("⛔ This command is reserved for the bot owner.");
 
   const raw = getText(mek);
   const match = raw.match(/^\\S+\\s*(.*)$/);
