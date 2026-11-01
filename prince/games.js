@@ -1300,43 +1300,52 @@ gmd({
   aliases: ["fasttype", "typefast"],
   react: "⌨️",
   category: "games",
-  description: "Join the race, then type the displayed sentence faster than everyone."
+  description: "Join a 15-round typing competition."
 }, async (from, Prince, c) => {
   if (games.has(from)) return c.reply("⚠️ A game is already running here. Type *.endgame* first.");
   const players = new Set();
-  const sentence = rand(FAST_TYPER_SENTENCES);
-  const target = normalizeFastTyper(sentence);
-  let phase = c.isGroup ? "join" : "play";
-  let finished = false;
+  const scores = new Map();
+  const totalRounds = 15;
+  let round = 0, phase = c.isGroup ? "join" : "play", sentence = "", target = "";
+  let roundLocked = false;
   const send = (text, mentions = []) => Prince.sendMessage(from, {
     text, mentions, contextInfo: getContextInfo(c.sender, c.newsletterJid, c.botName)
   }, { quoted: c.mek });
 
-  const beginRace = async () => {
+  const finishMatch = async () => {
     const game = games.get(from);
-    if (!game || game.type !== "fasttyper" || finished) return;
-    if (c.isGroup && players.size === 0) {
-      endGame(Prince, from);
-      return send("⌛ *FAST TYPER CANCELLED*\nNobody joined. Start another round with *.fasttyper*.");
-    }
+    if (game?.roundTimeout) clearTimeout(game.roundTimeout);
+    if (game?.nextTimeout) clearTimeout(game.nextTimeout);
+    const ranking = [...scores.entries()].sort((x,y) => y[1]-x[1]);
+    const leaderboard = ranking.length
+      ? ranking.map(([jid, score], i) => (i+1)+". @" + jid.split("@")[0].split(":")[0] + " — " + score + " win(s)").join("\n")
+      : "No points were scored.";
+    endGame(Prince, from);
+    await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 𝐅𝐈𝐍𝐀𝐋 〕━━╮\n" +
+      "All *15 rounds* are complete!\n\n" + leaderboard + "\n\n🎮 Thanks for playing HAYWHY Games!", ranking.map(x=>x[0]));
+  };
+
+  const startRound = async () => {
+    const game = games.get(from);
+    if (!game || game.type !== "fasttyper") return;
+    if (round >= totalRounds) return finishMatch();
+    round++;
+    roundLocked = false;
     phase = "play";
-    if (game.joinTimeout) clearTimeout(game.joinTimeout);
-    const joined = [...players];
-    await send(
-      "╭━━〔 ⚡ 𝐑𝐀𝐂𝐄 𝐒𝐓𝐀𝐑𝐓𝐒 𝐍𝐎𝐖 〕━━╮\n" +
-      (joined.length ? "👥 *Players:* " + joined.map(j => "@" + j.split("@")[0].split(":")[0]).join(", ") + "\n\n" : "") +
+    sentence = rand(FAST_TYPER_SENTENCES);
+    target = normalizeFastTyper(sentence);
+    await send("╭━━〔 ⚡ 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 • ROUND " + round + "/" + totalRounds + " 〕━━╮\n" +
       "⌨️ *TYPE THIS SENTENCE EXACTLY:*\n\n" +
       "╭──────────────────────────╮\n" + sentence + "\n╰──────────────────────────╯\n\n" +
-      "✅ Correct typing wins. ❌ Wrong attempts are reported.\n" +
-      "🔡 Uppercase/lowercase and normal auto-capitalization are accepted.\n" +
-      "⏳ 60 seconds • *.endgame* to stop.",
-      joined
-    );
-    game.timeout = setTimeout(() => {
-      if (!games.has(from) || finished) return;
-      finished = true;
-      endGame(Prince, from);
-      send("⌛ *TIME'S UP!*\nNobody typed it correctly.\n\nCorrect sentence: *" + sentence + "*");
+      "👥 Players: " + [...players].map(j=>"@"+j.split("@")[0].split(":")[0]).join(", ") + "\n" +
+      "✅ First correct player wins this round and gets 1 point.\n" +
+      "❌ Wrong attempts are reported.\n⏳ 60 seconds for this round.\n🛑 *.endgame* stops the whole match.",
+      [...players]);
+    game.roundTimeout = setTimeout(async () => {
+      if (!games.has(from) || roundLocked) return;
+      roundLocked = true;
+      await send("⌛ *ROUND " + round + " TIME'S UP!*\nNo correct answer this round. Moving to the next round...");
+      game.nextTimeout = setTimeout(startRound, 2500);
     }, 60000);
   };
 
@@ -1350,51 +1359,51 @@ gmd({
         const answer = getFastTyperText(m);
         if (!answer) continue;
         if (phase === "join") {
-          if (normalizeFastTyper(answer) !== "join") continue;
-          if (players.has(player)) continue;
+          if (normalizeFastTyper(answer) !== "join" || players.has(player)) continue;
           players.add(player);
-          await send("✅ @" + player.split("@")[0].split(":")[0] +
-            " joined Fast Typer! (" + players.size + " player(s)).", [player]);
+          scores.set(player, 0);
+          await send("✅ @" + player.split("@")[0].split(":")[0] + " joined the 15-round race! (" + players.size + " player(s)).", [player]);
           continue;
         }
-        if (finished || !players.has(player)) continue;
+        if (phase !== "play" || roundLocked || !players.has(player)) continue;
         if (normalizeFastTyper(answer) !== target) {
-          await send("❌ @" + player.split("@")[0].split(":")[0] +
-            ", wrong typing! Check the sentence and try again.", [player]);
+          await send("❌ @" + player.split("@")[0].split(":")[0] + ", wrong typing! Try again.", [player]);
           continue;
         }
-        finished = true;
-        const tag = "@" + player.split("@")[0].split(":")[0];
-        endGame(Prince, from);
-        await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\n🥇 " + tag +
-          " wins the typing race!\n\n✅ *" + sentence +
-          "*\n🎉 Congratulations! Type *.fasttyper* for another round.", [player]);
-        return;
+        roundLocked = true;
+        const game = games.get(from);
+        if (game?.roundTimeout) clearTimeout(game.roundTimeout);
+        scores.set(player, (scores.get(player) || 0) + 1);
+        await send("╭━━〔 🏅 ROUND " + round + " RESULT 〕━━╮\n🥇 @" +
+          player.split("@")[0].split(":")[0] + " wins this round! (+1 point)\n" +
+          "📊 Score: " + scores.get(player) + "\n\nNext round starting shortly...", [player]);
+        game.nextTimeout = setTimeout(startRound, 2500);
       }
     } catch (error) { console.error("Fast Typer handler error:", error); }
   };
 
-  const game = { type: "fasttyper", handler, joinTimeout: null, timeout: null };
+  const game = { type: "fasttyper", handler, joinTimeout: null, roundTimeout: null, nextTimeout: null };
   games.set(from, game);
   Prince.ev.on("messages.upsert", handler);
   if (c.isGroup) {
     await send("╭━━〔 ⌨️ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\n" +
-      "⚡ *A NEW TYPING RACE IS OPEN!*\n\n" +
+      "⚡ *15-ROUND TYPING CHAMPIONSHIP!*\n\n" +
       "Type *join* within *30 seconds* to enter.\n" +
-      "The sentence appears when registration closes.\n\n" +
-      "👥 Players joined: *0*\n⏳ Registration: 30 seconds.\n🛑 *.endgame* to cancel.");
-    game.joinTimeout = setTimeout(beginRace, 30000);
+      "All joined players stay in for all 15 rounds.\n\n" +
+      "👥 Players joined: *0*\n⏳ Registration closes in 30 seconds.\n🛑 *.endgame* cancels the match.");
+    game.joinTimeout = setTimeout(() => {
+      if (!games.has(from)) return;
+      if (!players.size) {
+        endGame(Prince, from);
+        return send("⌛ *FAST TYPER CANCELLED*\nNobody joined this match.");
+      }
+      startRound();
+    }, 30000);
   } else {
     players.add(c.sender);
-    phase = "play";
-    await send("⌨️ *HAYWHY FAST TYPER*\n\nType this sentence exactly:\n\n*" +
-      sentence + "*\n\n❌ Wrong attempts are reported.\n⏳ 60 seconds • *.endgame* to stop.");
-    game.timeout = setTimeout(() => {
-      if (!games.has(from) || finished) return;
-      finished = true;
-      endGame(Prince, from);
-      send("⌛ TIME'S UP! Correct sentence: *" + sentence + "*");
-    }, 60000);
+    scores.set(c.sender, 0);
+    await send("⌨️ *HAYWHY FAST TYPER — 15 ROUNDS*\n\nYou're registered automatically. Starting now!");
+    startRound();
   }
 });
 gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
