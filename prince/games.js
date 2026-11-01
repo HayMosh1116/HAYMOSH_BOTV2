@@ -1291,7 +1291,7 @@ function getFastTyperText(m) {
     .normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
 }
 function normalizeFastTyper(value) {
-  return String(value || "").normalize("NFKC").toLowerCase()
+  return String(value || "").normalize("NFKC")
     .replace(/[’]/g, "'").replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/\s+/g, " ").trim();
 }
