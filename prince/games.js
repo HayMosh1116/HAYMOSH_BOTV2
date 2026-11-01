@@ -1332,8 +1332,8 @@ gmd({
     round++;
     roundLocked = false;
     phase = "play";
-    sentence = rand(FAST_TYPER_SENTENCES).toLowerCase();
-    target = normalizeFastTyper(sentence);
+    sentence = rand(FAST_TYPER_SENTENCES).toUpperCase();
+    target = normalizeFastTyper(sentence.toLowerCase());
     await send("╭━━〔 ⚡ 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 • ROUND " + round + "/" + totalRounds + " 〕━━╮\n" +
       "⌨️ *TYPE THIS SENTENCE EXACTLY:*\n\n" +
       "╭──────────────────────────╮\n" + sentence + "\n╰──────────────────────────╯\n\n" +
