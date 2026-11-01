@@ -1288,12 +1288,12 @@ function getFastTyperText(m) {
   const msg = unwrapGameMessage(m?.message);
   return String(msg?.conversation || msg?.extendedTextMessage?.text ||
     msg?.imageMessage?.caption || msg?.videoMessage?.caption || msg?.documentMessage?.caption || "")
-    .normalize("NFKC").replace(/[\\u200B-\\u200D\\uFEFF]/g, "").trim();
+    .normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
 }
 function normalizeFastTyper(value) {
   return String(value || "").normalize("NFKC").toLowerCase()
-    .replace(/[’]/g, "'").replace(/[\\u200B-\\u200D\\uFEFF]/g, "")
-    .replace(/\\s+/g, " ").trim();
+    .replace(/[’]/g, "'").replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ").trim();
 }
 gmd({
   pattern: "fasttyper",
