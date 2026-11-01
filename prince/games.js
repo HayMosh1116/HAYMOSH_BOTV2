@@ -8,6 +8,7 @@
 
 const { gmd, getContextInfo, mentionTag } = require("../mayel");
 const axios = require("axios");
+const sharp = require("sharp");
 
 // Owner-only game cheat mode. Settings are intentionally in-memory.
 let devHaywhyEnabled = false;
@@ -1272,12 +1273,12 @@ const FAST_TYPER_SENTENCES = [
   "CONSISTENCY CURIOSITY AND PATIENCE CAN TURN A BEGINNER INTO A CONFIDENT FULL STACK DEVELOPER",
   "MY GOAL IS TO KEEP LEARNING KEEP BUILDING AND KEEP PUSHING MYSELF BEYOND WHAT I THOUGHT WAS POSSIBLE"
 ];
-
 function unwrapGameMessage(message) {
   let current = message || {};
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 6; i++) {
     const nested = current.ephemeralMessage?.message || current.viewOnceMessage?.message ||
-      current.viewOnceMessageV2?.message || current.documentWithCaptionMessage?.message;
+      current.viewOnceMessageV2?.message || current.viewOnceMessageV2Extension?.message ||
+      current.documentWithCaptionMessage?.message;
     if (!nested) break;
     current = nested;
   }
@@ -1287,70 +1288,112 @@ function getFastTyperText(m) {
   const msg = unwrapGameMessage(m?.message);
   return String(msg?.conversation || msg?.extendedTextMessage?.text ||
     msg?.imageMessage?.caption || msg?.videoMessage?.caption || msg?.documentMessage?.caption || "")
-    .normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+    .normalize("NFKC").replace(/[\\u200B-\\u200D\\uFEFF]/g, "").trim();
 }
 function normalizeFastTyper(value) {
   return String(value || "").normalize("NFKC").toLowerCase()
-    .replace(/[’]/g, "'").replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/\s+/g, " ").trim();
+    .replace(/[’]/g, "'").replace(/[\\u200B-\\u200D\\uFEFF]/g, "")
+    .replace(/\\s+/g, " ").trim();
 }
-
 gmd({
   pattern: "fasttyper",
   aliases: ["fasttype", "typefast"],
   react: "⌨️",
   category: "games",
-  description: "Race the chat: type the displayed sentence before anyone else."
+  description: "Join the race, then type the displayed sentence faster than everyone."
 }, async (from, Prince, c) => {
   if (games.has(from)) return c.reply("⚠️ A game is already running here. Type *.endgame* first.");
+  const players = new Set();
   const sentence = rand(FAST_TYPER_SENTENCES);
   const target = normalizeFastTyper(sentence);
+  let phase = c.isGroup ? "join" : "play";
   let finished = false;
   const send = (text, mentions = []) => Prince.sendMessage(from, {
     text, mentions, contextInfo: getContextInfo(c.sender, c.newsletterJid, c.botName)
   }, { quoted: c.mek });
 
+  const beginRace = async () => {
+    const game = games.get(from);
+    if (!game || game.type !== "fasttyper" || finished) return;
+    if (c.isGroup && players.size === 0) {
+      endGame(Prince, from);
+      return send("⌛ *FAST TYPER CANCELLED*\\nNobody joined. Start another round with *.fasttyper*.");
+    }
+    phase = "play";
+    if (game.joinTimeout) clearTimeout(game.joinTimeout);
+    const joined = [...players];
+    await send(
+      "╭━━〔 ⚡ 𝐑𝐀𝐂𝐄 𝐒𝐓𝐀𝐑𝐓𝐒 𝐍𝐎𝐖 〕━━╮\\n" +
+      (joined.length ? "👥 *Players:* " + joined.map(j => "@" + j.split("@")[0].split(":")[0]).join(", ") + "\\n\\n" : "") +
+      "⌨️ *TYPE THIS SENTENCE EXACTLY:*\\n\\n" +
+      "╭──────────────────────────╮\\n" + sentence + "\\n╰──────────────────────────╯\\n\\n" +
+      "✅ Correct typing wins. ❌ Wrong attempts are reported.\\n" +
+      "🔡 Uppercase/lowercase and normal auto-capitalization are accepted.\\n" +
+      "⏳ 60 seconds • *.endgame* to stop.",
+      joined
+    );
+    game.timeout = setTimeout(() => {
+      if (!games.has(from) || finished) return;
+      finished = true;
+      endGame(Prince, from);
+      send("⌛ *TIME'S UP!*\\nNobody typed it correctly.\\n\\nCorrect sentence: *" + sentence + "*");
+    }, 60000);
+  };
+
   const handler = async ({ messages = [] }) => {
     try {
       for (const m of messages) {
         if (!m?.message || m.key?.remoteJid !== from || m.key?.fromMe) continue;
-        if (normalizeFastTyper(getFastTyperText(m)) !== target || finished) continue;
+        const player = senderOf(m, from);
+        const answer = getFastTyperText(m);
+        if (!answer) continue;
+        if (phase === "join") {
+          if (normalizeFastTyper(answer) !== "join") continue;
+          if (players.has(player)) continue;
+          players.add(player);
+          await send("✅ @" + player.split("@")[0].split(":")[0] +
+            " joined Fast Typer! (" + players.size + " player(s)).", [player]);
+          continue;
+        }
+        if (finished || !players.has(player)) continue;
+        if (normalizeFastTyper(answer) !== target) {
+          await send("❌ @" + player.split("@")[0].split(":")[0] +
+            ", wrong typing! Check the sentence and try again.", [player]);
+          continue;
+        }
         finished = true;
-        const winner = senderOf(m, from);
-        const tag = "@" + String(winner).split("@")[0].split(":")[0];
+        const tag = "@" + player.split("@")[0].split(":")[0];
         endGame(Prince, from);
-        await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\n" +
-          "🥇 " + tag + " typed it first!\n\n" +
-          "✅ " + sentence + "\n" +
-          "✨ Type *.fasttyper* for another round.", [winner]);
+        await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\\n🥇 " + tag +
+          " wins the typing race!\\n\\n✅ *" + sentence +
+          "*\\n🎉 Congratulations! Type *.fasttyper* for another round.", [player]);
         return;
       }
     } catch (error) { console.error("Fast Typer handler error:", error); }
   };
 
-  games.set(from, { type: "fasttyper", handler });
+  const game = { type: "fasttyper", handler, joinTimeout: null, timeout: null };
+  games.set(from, game);
   Prince.ev.on("messages.upsert", handler);
-  try {
-    await send("╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮\n" +
-      "       ⌨️ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑\n" +
-      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n" +
-      "⚡ FIRST PERSON TO TYPE IT WINS!\n\n" +
-      "┌──────────────────────────┐\n" + sentence + "\n" +
-      "└──────────────────────────┘\n\n" +
-      "🔠 Uppercase is displayed; lowercase is accepted.\n" +
-      "📱 Auto-capitalized first letters are accepted.\n" +
-      "⏳ 60 seconds • 🛑 *.endgame* to stop.");
-  } catch (error) {
-    endGame(Prince, from);
-    console.error("Fast Typer start error:", error);
-    return c.reply("❌ Fast Typer could not start. Please try again.");
+  if (c.isGroup) {
+    await send("╭━━〔 ⌨️ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\\n" +
+      "⚡ *A NEW TYPING RACE IS OPEN!*\\n\\n" +
+      "Type *join* within *30 seconds* to enter.\\n" +
+      "The sentence appears when registration closes.\\n\\n" +
+      "👥 Players joined: *0*\\n⏳ Registration: 30 seconds.\\n🛑 *.endgame* to cancel.");
+    game.joinTimeout = setTimeout(beginRace, 30000);
+  } else {
+    players.add(c.sender);
+    phase = "play";
+    await send("⌨️ *HAYWHY FAST TYPER*\\n\\nType this sentence exactly:\\n\\n*" +
+      sentence + "*\\n\\n❌ Wrong attempts are reported.\\n⏳ 60 seconds • *.endgame* to stop.");
+    game.timeout = setTimeout(() => {
+      if (!games.has(from) || finished) return;
+      finished = true;
+      endGame(Prince, from);
+      send("⌛ TIME'S UP! Correct sentence: *" + sentence + "*");
+    }, 60000);
   }
-  const timeout = setTimeout(() => {
-    if (!games.has(from) || finished) return;
-    endGame(Prince, from);
-    send("⌛ TIME'S UP!\nThe sentence was: " + sentence);
-  }, 60000);
-  games.get(from).timeout = timeout;
 });
 gmd({ pattern: "tictactoe", aliases: ["ttt"], react: "❌", category: "games",
   description: "Play tagged tic-tac-toe by replying with a square number." }, async (from, Prince, c) => {
@@ -1520,59 +1563,38 @@ gmd(
     return reply(`🛑 The *${type}* game has been stopped.`);
   }
 );
-
+ 
 gmd(
   {
     pattern: "games",
     aliases: ["gamemenu", "gamelist"],
     react: "🎮",
     category: "games",
-    description: "Show the list of available games.",
+    description: "Show the HAYWHY Game Zone graphic poster.",
   },
   async (from, Prince, conText) => {
-    const { sender, botName, newsletterJid, mek } = conText;
     const prefix = conText.botPrefix || ".";
-
-    const text =
-      "╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮\\n" +
-      "       ✦ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐆𝐀𝐌𝐄 𝐙𝐎𝐍𝐄 ✦\\n" +
-      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\\n\\n" +
-      "       🎮 𝐂𝐇𝐎𝐎𝐒𝐄 𝐘𝐎𝐔𝐑 𝐆𝐀𝐌𝐄\\n" +
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
-      "╭─〔 🧠 𝐖𝐎𝐑𝐃 & 𝐌𝐈𝐍𝐃 〕\\n" +
-      "│ 🟩 *${prefix}wordle*  • Word puzzle\\n" +
-      "│ 🔢 *${prefix}guess*  • Guess the number\\n" +
-      "│ 🪢 *${prefix}hangman*  • Find the hidden word\\n" +
-      "│ 🔤 *${prefix}unscramble*  • Fix the mixed letters\\n" +
-      "│ 🧩 *${prefix}riddle*  • Solve a riddle\\n" +
-      "│ 🧠 *${prefix}memory*  • Test your memory\\n" +
-      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
-      "╭─〔 ⚡ 𝐒𝐏𝐄𝐄𝐃 & 𝐐𝐔𝐈𝐙 〕\\n" +
-      "│ ⌨️ *${prefix}fasttyper*  • Type faster than everyone\\n" +
-      "│ ⚡ *${prefix}fastest*  • Fastest answer wins\\n" +
-      "│ 🧮 *${prefix}math*  • Solve the maths\\n" +
-      "│ ❓ *${prefix}trivia*  • General knowledge\\n" +
-      "│ ⚽ *${prefix}footballquiz*  • Football challenge\\n" +
-      "│ 🤔 *${prefix}emoji*  • Guess the emoji clue\\n" +
-      "│ 🕵️ *${prefix}whoami*  • Who am I?\\n" +
-      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
-      "╭─〔 🎯 𝐂𝐇𝐀𝐋𝐋𝐄𝐍𝐆𝐄 & 𝐏𝐀𝐑𝐓𝐘 〕\\n" +
-      "│ ✊ *${prefix}rps*  • Rock, paper, scissors\\n" +
-      "│ 🔗 *${prefix}wordchain*  • Build a word chain\\n" +
-      "│ ❌ *${prefix}tictactoe*  • Tic-tac-toe\\n" +
-      "│ 🔴 *${prefix}connect4*  • Connect Four\\n" +
-      "│ 🃏 *${prefix}blackjack*  • Play to 21\\n" +
-      "│ 🤷 *${prefix}wouldrather*  • Pick one\\n" +
-      "│ 🗣️ *${prefix}truth* / *${prefix}dare*  • Party time\\n" +
-      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
-      "╭─〔 🛠️ 𝐆𝐀𝐌𝐄 𝐂𝐎𝐍𝐓𝐑𝐎𝐋 〕\\n" +
-      "│ 🛑 *${prefix}endgame*  • Stop the active game\\n" +
-      "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n" +
-      "        ✨ 𝐋𝐄𝐓 𝐓𝐇𝐄 𝐆𝐀𝐌𝐄𝐒 𝐁𝐄𝐆𝐈𝐍 ✨";
-
-    await Prince.sendMessage(from, {
-      text,
-      contextInfo: getContextInfo(sender, newsletterJid, botName),
-    }, { quoted: mek });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+    <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#08051a"/><stop offset=".55" stop-color="#160b38"/><stop offset="1" stop-color="#050817"/></linearGradient><linearGradient id="p"><stop stop-color="#a855f7"/><stop offset="1" stop-color="#581c87"/></linearGradient><linearGradient id="c"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+    <rect width="1080" height="1350" fill="url(#bg)"/><circle cx="940" cy="90" r="240" fill="#7e22ce" opacity=".18"/><circle cx="60" cy="900" r="260" fill="#6d28d9" opacity=".13"/>
+    <text x="540" y="85" text-anchor="middle" fill="#e9d5ff" font-family="Arial" font-size="28" letter-spacing="8">H A Y W H Y  •  T E C H</text>
+    <text x="540" y="190" text-anchor="middle" fill="#fff" font-family="Arial" font-size="96" font-weight="900">GAME ZONE</text><text x="540" y="245" text-anchor="middle" fill="#d8b4fe" font-family="Arial" font-size="30">PLAY • THINK • COMPETE</text>
+    <rect x="45" y="290" width="990" height="280" rx="28" fill="#100d27" stroke="#a855f7" stroke-width="4"/><rect x="45" y="290" width="990" height="65" rx="25" fill="url(#p)"/><text x="85" y="335" fill="white" font-family="Arial" font-size="34" font-weight="bold">🧠 WORD &amp; MIND</text>
+    <g fill="white" font-family="Arial" font-size="27"><text x="90" y="410">Wordle</text><text x="90" y="460">Hangman</text><text x="90" y="510">Word Chain</text><text x="90" y="550">Unscramble • Riddle • Memory</text><text x="565" y="410">Guess the Number</text><text x="565" y="460">Riddles &amp; puzzles</text></g>
+    <g fill="#d8b4fe" font-family="Arial" font-size="22" font-weight="bold"><text x="320" y="410">${prefix}wordle</text><text x="320" y="460">${prefix}hangman</text><text x="320" y="510">${prefix}wordchain</text><text x="565" y="510">${prefix}unscramble / ${prefix}riddle</text><text x="565" y="550">${prefix}memory / ${prefix}guess</text></g>
+    <rect x="45" y="600" width="990" height="300" rx="28" fill="#100d27" stroke="#22d3ee" stroke-width="4"/><rect x="45" y="600" width="990" height="65" rx="25" fill="url(#c)"/><text x="85" y="645" fill="#08051a" font-family="Arial" font-size="34" font-weight="bold">⚡ SPEED &amp; QUIZ</text>
+    <g fill="white" font-family="Arial" font-size="27"><text x="90" y="725">Fast Typer</text><text x="90" y="780">Fastest Finger</text><text x="90" y="835">Math Quiz</text><text x="565" y="725">Trivia</text><text x="565" y="780">Football Quiz</text><text x="565" y="835">Who Am I? • Emoji</text><text x="90" y="875">Join the race and type to win!</text></g>
+    <g fill="#67e8f9" font-family="Arial" font-size="22" font-weight="bold"><text x="320" y="725">${prefix}fasttyper</text><text x="320" y="780">${prefix}fastest</text><text x="320" y="835">${prefix}math</text><text x="740" y="725">${prefix}trivia</text><text x="740" y="780">${prefix}footballquiz</text><text x="740" y="835">${prefix}whoami / ${prefix}emoji</text></g>
+    <rect x="45" y="930" width="990" height="235" rx="28" fill="#100d27" stroke="#a855f7" stroke-width="4"/><rect x="45" y="930" width="990" height="65" rx="25" fill="url(#p)"/><text x="85" y="975" fill="white" font-family="Arial" font-size="34" font-weight="bold">🎯 CHALLENGE &amp; PARTY</text>
+    <g fill="white" font-family="Arial" font-size="27"><text x="90" y="1050">Rock Paper Scissors • Tic-tac-toe</text><text x="90" y="1105">Connect Four • Blackjack</text><text x="565" y="1050">Would You Rather</text><text x="565" y="1105">Truth or Dare</text></g>
+    <g fill="#d8b4fe" font-family="Arial" font-size="22" font-weight="bold"><text x="90" y="1145">${prefix}rps / ${prefix}tictactoe / ${prefix}connect4</text><text x="565" y="1145">${prefix}blackjack / ${prefix}wyr / ${prefix}truth</text></g>
+    <text x="540" y="1235" text-anchor="middle" fill="white" font-family="Arial" font-size="36" font-weight="bold">TYPE A COMMAND. LET THE GAMES BEGIN!</text><text x="540" y="1290" text-anchor="middle" fill="#d8b4fe" font-family="Arial" font-size="25">Group games • Solo games • Friendly competition</text><rect x="300" y="1310" width="480" height="6" rx="3" fill="#a855f7"/></svg>`;
+    try {
+      const poster = await sharp(Buffer.from(svg)).png().toBuffer();
+      await Prince.sendMessage(from, { image: poster, caption: "🎮 *HAYWHY GAME ZONE*\\nChoose a game from the poster and send its command!" }, { quoted: conText.mek });
+    } catch (error) {
+      console.error("Games poster error:", error);
+      return conText.reply("❌ Couldn't create the games poster. Check Sharp installation.");
+    }
   }
 );
