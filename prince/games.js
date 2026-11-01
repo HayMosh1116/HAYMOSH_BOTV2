@@ -1134,10 +1134,10 @@ function startExtraAnswerGame(from, Prince, conText, type, makeQ, successText) {
     clearTimeout(roundTimer);
     roundTimer = setTimeout(() => endRound(null), QUIZ_ROUND_SEC * 1000);
   };
-  const endRound = (winner) => {
+  const endRound = (winner, awardedPoints = 1) => {
     if (locked || !games.has(from)) return; locked = true; clearTimeout(roundTimer);
     const msg = winner
-      ? `🎉 ${tag(winner)} ${successText} (+1)\n✅ Answer: *${show(cur[1])}*`
+      ? `🎉 ${tag(winner)} ${successText} (+${awardedPoints})\n✅ Answer: *${show(cur[1])}*`
       : `⌛ Nobody got it.\n✅ Answer: *${show(cur[1])}*`;
     send(`${msg}\n\n${board()}`, players);
     setTimeout(askRound, 3000);
@@ -1163,8 +1163,14 @@ function startExtraAnswerGame(from, Prince, conText, type, makeQ, successText) {
     if (cleanAnswer(text) === "skip") return endRound(null);
     const n = (tries.get(p) || 0); if (n >= QUIZ_MAX_TRIES) return;
     tries.set(p, n + 1);
-    if (isDevHaywhy(p) && devHaywhyEnabled) { points.set(p, (points.get(p) || 0) + devHaywhyBoost); return endRound(p); }
-    if (answerMatches(text, cur[1])) { points.set(p, (points.get(p) || 0) + 1); return endRound(p); }
+    if (isDevHaywhy(p) && devHaywhyEnabled) {
+      points.set(p, (points.get(p) || 0) + devHaywhyBoost);
+      return endRound(p, devHaywhyBoost);
+    }
+    if (answerMatches(text, cur[1])) {
+      points.set(p, (points.get(p) || 0) + 1);
+      return endRound(p, 1);
+    }
     if (n + 1 >= QUIZ_MAX_TRIES) {
       send(`🚫 ${tag(p)} is out of tries for this question.`, [p]);
       if (players.every((x) => (tries.get(x) || 0) >= QUIZ_MAX_TRIES)) endRound(null);
