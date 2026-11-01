@@ -1317,18 +1317,18 @@ gmd({
     if (!game || game.type !== "fasttyper" || finished) return;
     if (c.isGroup && players.size === 0) {
       endGame(Prince, from);
-      return send("⌛ *FAST TYPER CANCELLED*\\nNobody joined. Start another round with *.fasttyper*.");
+      return send("⌛ *FAST TYPER CANCELLED*\nNobody joined. Start another round with *.fasttyper*.");
     }
     phase = "play";
     if (game.joinTimeout) clearTimeout(game.joinTimeout);
     const joined = [...players];
     await send(
-      "╭━━〔 ⚡ 𝐑𝐀𝐂𝐄 𝐒𝐓𝐀𝐑𝐓𝐒 𝐍𝐎𝐖 〕━━╮\\n" +
-      (joined.length ? "👥 *Players:* " + joined.map(j => "@" + j.split("@")[0].split(":")[0]).join(", ") + "\\n\\n" : "") +
-      "⌨️ *TYPE THIS SENTENCE EXACTLY:*\\n\\n" +
-      "╭──────────────────────────╮\\n" + sentence + "\\n╰──────────────────────────╯\\n\\n" +
-      "✅ Correct typing wins. ❌ Wrong attempts are reported.\\n" +
-      "🔡 Uppercase/lowercase and normal auto-capitalization are accepted.\\n" +
+      "╭━━〔 ⚡ 𝐑𝐀𝐂𝐄 𝐒𝐓𝐀𝐑𝐓𝐒 𝐍𝐎𝐖 〕━━╮\n" +
+      (joined.length ? "👥 *Players:* " + joined.map(j => "@" + j.split("@")[0].split(":")[0]).join(", ") + "\n\n" : "") +
+      "⌨️ *TYPE THIS SENTENCE EXACTLY:*\n\n" +
+      "╭──────────────────────────╮\n" + sentence + "\n╰──────────────────────────╯\n\n" +
+      "✅ Correct typing wins. ❌ Wrong attempts are reported.\n" +
+      "🔡 Uppercase/lowercase and normal auto-capitalization are accepted.\n" +
       "⏳ 60 seconds • *.endgame* to stop.",
       joined
     );
@@ -1336,14 +1336,16 @@ gmd({
       if (!games.has(from) || finished) return;
       finished = true;
       endGame(Prince, from);
-      send("⌛ *TIME'S UP!*\\nNobody typed it correctly.\\n\\nCorrect sentence: *" + sentence + "*");
+      send("⌛ *TIME'S UP!*\nNobody typed it correctly.\n\nCorrect sentence: *" + sentence + "*");
     }, 60000);
   };
 
   const handler = async ({ messages = [] }) => {
     try {
       for (const m of messages) {
-        if (!m?.message || m.key?.remoteJid !== from || m.key?.fromMe) continue;
+        if (!m?.message || m.key?.fromMe) continue;
+        const chatId = m.key?.remoteJid || m.key?.remoteJidAlt;
+        if (chatId && chatId !== from) continue;
         const player = senderOf(m, from);
         const answer = getFastTyperText(m);
         if (!answer) continue;
@@ -1364,9 +1366,9 @@ gmd({
         finished = true;
         const tag = "@" + player.split("@")[0].split(":")[0];
         endGame(Prince, from);
-        await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\\n🥇 " + tag +
-          " wins the typing race!\\n\\n✅ *" + sentence +
-          "*\\n🎉 Congratulations! Type *.fasttyper* for another round.", [player]);
+        await send("╭━━〔 🏆 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\n🥇 " + tag +
+          " wins the typing race!\n\n✅ *" + sentence +
+          "*\n🎉 Congratulations! Type *.fasttyper* for another round.", [player]);
         return;
       }
     } catch (error) { console.error("Fast Typer handler error:", error); }
@@ -1376,17 +1378,17 @@ gmd({
   games.set(from, game);
   Prince.ev.on("messages.upsert", handler);
   if (c.isGroup) {
-    await send("╭━━〔 ⌨️ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\\n" +
-      "⚡ *A NEW TYPING RACE IS OPEN!*\\n\\n" +
-      "Type *join* within *30 seconds* to enter.\\n" +
-      "The sentence appears when registration closes.\\n\\n" +
-      "👥 Players joined: *0*\\n⏳ Registration: 30 seconds.\\n🛑 *.endgame* to cancel.");
+    await send("╭━━〔 ⌨️ 𝐇𝐀𝐘𝐖𝐇𝐘 𝐅𝐀𝐒𝐓 𝐓𝐘𝐏𝐄𝐑 〕━━╮\n" +
+      "⚡ *A NEW TYPING RACE IS OPEN!*\n\n" +
+      "Type *join* within *30 seconds* to enter.\n" +
+      "The sentence appears when registration closes.\n\n" +
+      "👥 Players joined: *0*\n⏳ Registration: 30 seconds.\n🛑 *.endgame* to cancel.");
     game.joinTimeout = setTimeout(beginRace, 30000);
   } else {
     players.add(c.sender);
     phase = "play";
-    await send("⌨️ *HAYWHY FAST TYPER*\\n\\nType this sentence exactly:\\n\\n*" +
-      sentence + "*\\n\\n❌ Wrong attempts are reported.\\n⏳ 60 seconds • *.endgame* to stop.");
+    await send("⌨️ *HAYWHY FAST TYPER*\n\nType this sentence exactly:\n\n*" +
+      sentence + "*\n\n❌ Wrong attempts are reported.\n⏳ 60 seconds • *.endgame* to stop.");
     game.timeout = setTimeout(() => {
       if (!games.has(from) || finished) return;
       finished = true;
