@@ -1359,7 +1359,7 @@ gmd({
         const answer = getFastTyperText(m);
         if (!answer) continue;
         if (phase === "join") {
-          if (normalizeFastTyper(answer) !== "join" || players.has(player)) continue;
+          if (normalizeFastTyper(answer).toLowerCase() !== "join" || players.has(player)) continue;
           players.add(player);
           scores.set(player, 0);
           await send("✅ @" + player.split("@")[0].split(":")[0] + " joined the 15-round race! (" + players.size + " player(s)).", [player]);
