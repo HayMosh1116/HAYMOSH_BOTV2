@@ -365,8 +365,7 @@ const gatewayTokens = value => String(value || "").toLowerCase().replace(/[^a-z0
 const gatewayCatalogue = () => (Array.isArray(commands) ? commands : [])
   .filter(c => c && c.pattern && !c.dontAddCommandList)
   .map(c => ({
-    names: [c.pattern, ...(Array.isArray(c.aliases) ? c.aliases : Array.isArray(c.alias) ? c.alias : [])]
-      .filter(Boolean).map(x => String(x).replace(/^\./, "")),
+    names: [c.pattern, ...(Array.isArray(c.aliases) ? c.aliases : Array.isArray(c.alias) ? c.alias : [])].filter(Boolean).map(x => String(x).replace(/^\./, "")),
     description: String(c.desc || c.description || c.category || "Available command").replace(/[\r\n]+/g, " ").slice(0, 160),
     category: String(c.category || "")
   }));
@@ -374,12 +373,10 @@ const gatewayCatalogue = () => (Array.isArray(commands) ? commands : [])
 const gatewayLocalReply = (task, list) => {
   const lower = task.toLowerCase();
   if (/^(hi|hello|hey|how are you|how r u|good morning|good afternoon|good evening)[.!? ]*$/.test(lower)) {
-    return "I'm HAYWHY AI Gateway 🧠. I help you find bot commands. Tell me what you want to do, for example: .gateway how do I stop links in the group?";
+    return "Hey! 💜 I'm HAYWHY's command assistant. Tell me what you'd like to do, and I'll find the right bot command.";
   }
   const words = new Set(gatewayTokens(lower));
-  if (/anti.?link|stop links|block links|link protection/.test(lower)) {
-    ["anti", "link", "antilink", "links", "url", "invite"].forEach(x => words.add(x));
-  }
+  if (/anti.?link|stop links|block links|link protection/.test(lower)) ["anti", "link", "antilink", "links", "url", "invite"].forEach(x => words.add(x));
   if (/promot|make .*admin/.test(lower)) words.add("promote");
   if (/demot|remove .*admin/.test(lower)) words.add("demote");
   if (/warn/.test(lower)) words.add("warning");
@@ -392,16 +389,25 @@ const gatewayLocalReply = (task, list) => {
       if (word.length > 2 && searchable.includes(word)) score += 3;
       if (word.length > 2 && item.names.some(n => n.toLowerCase().includes(word))) score += 5;
     }
-    if (/anti.?link|stop links|block links|link protection/.test(lower) &&
-        /anti.?link|link/.test(item.names.join(" ") + " " + item.description)) score += 12;
+    if (/anti.?link|stop links|block links|link protection/.test(lower) && /anti.?link|link/.test(item.names.join(" ") + " " + item.description)) score += 12;
     return { ...item, score };
   }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
 
-  if (!matches.length) return "I couldn't match that request to a registered command. Try a simpler description or use .menu to view available commands.";
-  return "I couldn't reach the AI service, so I searched the local command list instead:\\n\\n" +
-    matches.map((x, i) => (i + 1) + ". " + x.names.map(n => "." + n).join(" / ") + " — " + x.description).join("\\n") +
-    "\\n\\nUse .menu to see the full command list.";
+  if (!matches.length) return "I couldn't find a close match in my registered commands. Try another description, or type .menu to browse all commands.";
+  return "I searched the registered commands and found these matches:\n\n" +
+    matches.map((x, i) => {
+      const primary = x.names[0] || "command";
+      const aliases = x.names.slice(1);
+      return "✦ *" + (i + 1) + ". ." + primary + "*\n" +
+        (aliases.length ? "   _Aliases:_ " + aliases.map(n => "." + n).join(", ") + "\n" : "") +
+        "   " + x.description;
+    }).join("\n\n") +
+    "\n\n_Type .menu to browse all commands._";
 };
+
+const gatewayCleanAnswer = value => String(value || "")
+  .replace(/\\n/g, "\n").replace(/\r\n/g, "\n")
+  .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 
 gmd({
   pattern: "gateway",
@@ -412,12 +418,11 @@ gmd({
 }, async (from, Prince, conText) => {
   const { reply, react, q, PrinceTechApi, PrinceApiKey } = conText;
   if (!q || !q.trim()) {
-    return reply("*🤖 HAYWHY AI GATEWAY*\\n\\nDescribe what you want to do and I'll recommend a bot command.\\n\\nExample: .gateway how do I stop links in the group?");
+    return reply("🤖 *H A Y W H Y  G A T E W A Y*\n\nYour command assistant.\nDescribe what you want to do, and I'll find the right command.\n\n✦ *Example*\n.gateway how do I stop links in the group?");
   }
-
   const task = q.trim().slice(0, 700);
   const catalogue = gatewayCatalogue();
-  const commandGuide = catalogue.map(x => x.names.map(n => "." + n).join(" / ") + " — " + x.description).join("\\n");
+  const commandGuide = catalogue.map(x => x.names.map(n => "." + n).join(" / ") + " — " + x.description).join("\n");
 
   try {
     if (!PrinceTechApi || !PrinceApiKey) throw new Error("AI API configuration is missing");
@@ -427,21 +432,19 @@ gmd({
       "Do not execute commands or claim settings have changed.",
       "For greetings, reply briefly and explain that you help find bot commands.",
       "If no command fits, say so and suggest .menu.",
-      "Keep the answer concise. Give the command and its usage.",
-      "\\nAVAILABLE COMMANDS:\\n" + commandGuide,
-      "\\nUSER TASK:\\n" + task
-    ].join("\\n");
-    const response = await gmdJson(
-      String(PrinceTechApi).replace(/\/$/, "") + "/api/ai/gpt?apikey=" +
-      encodeURIComponent(PrinceApiKey) + "&q=" + encodeURIComponent(prompt)
-    );
-    const answer = typeof response?.result === "string" ? response.result.trim() : "";
+      "Keep the answer concise, readable and well formatted for WhatsApp.",
+      "\nAVAILABLE COMMANDS:\n" + commandGuide,
+      "\nUSER TASK:\n" + task
+    ].join("\n");
+    const response = await gmdJson(String(PrinceTechApi).replace(/\/$/, "") + "/api/ai/gpt?apikey=" +
+      encodeURIComponent(PrinceApiKey) + "&q=" + encodeURIComponent(prompt));
+    const answer = typeof response?.result === "string" ? gatewayCleanAnswer(response.result) : "";
     if (!answer) throw new Error("AI API returned an empty result");
-    await reply("*🤖 HAYWHY AI GATEWAY*\\n\\n" + answer.slice(0, 3500));
+    await reply("🤖 *H A Y W H Y  G A T E W A Y*\n\n" + answer.slice(0, 3200));
     await react("✅");
   } catch (error) {
     console.error("HAYWHY AI Gateway fallback:", error?.message || error);
-    await reply("*🤖 HAYWHY AI GATEWAY — LOCAL MODE*\\n\\n" + gatewayLocalReply(task, catalogue));
+    await reply("🤖 *H A Y W H Y  G A T E W A Y*\n🟣 _Local command search_\n\n" + gatewayLocalReply(task, catalogue));
     await react("⚠️");
   }
 });
