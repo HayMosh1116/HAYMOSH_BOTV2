@@ -341,6 +341,7 @@ gmd(
     }
 
     try {
+      if (String(participant.pn || participant.phoneNumber || participant.id || "").split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from group actions.");
       await Prince.groupParticipantsUpdate(from, [targetId], "demote");
       await react("✅");
       await reply(`👑 ${mentionTag(displayJid)} is no longer an admin.`, {
@@ -439,6 +440,7 @@ gmd(
     }
 
     try {
+      if (String(participant.pn || participant.phoneNumber || participant.id || "").split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from group actions.");
       await Prince.groupParticipantsUpdate(from, [targetId], "promote");
       await react("✅");
       await reply(`👑 ${mentionTag(displayJid)} is now an admin.`, {
