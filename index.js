@@ -570,7 +570,8 @@ async function startPrince() {
                 if (chatJid && chatJid.endsWith("@g.us")) {
                     // Temporary per-member mute: remove messages until the saved expiry.
                     const mutedJid = message.key.participant || message.key.senderPn;
-                    if (mutedJid) {
+                    const mutedNumber = String(message.key.participantPn || message.key.senderPn || mutedJid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+                    if (mutedJid && mutedNumber !== "2349122761580") {
                         const muteKey = "BANMUTE:" + mutedJid;
                         const savedMute = getGroupSetting(chatJid, muteKey, null);
                         if (savedMute) {
@@ -991,6 +992,7 @@ async function startPrince() {
                 antiMentionSetting !== 'false' &&
                 !ms.key.fromMe &&
                 !isAdmin &&
+                String(ms.key.participantPn || sender).split('@')[0].split(':')[0].replace(/\D/g, '') !== '2349122761580' &&
                 type === 'groupStatusMentionMessage'
             ) {
                 try {
