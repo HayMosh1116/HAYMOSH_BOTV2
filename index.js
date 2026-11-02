@@ -568,6 +568,23 @@ async function startPrince() {
                 if (!message?.message || message.key.fromMe) return;
                 const chatJid = message.key.remoteJid;
                 if (chatJid && chatJid.endsWith("@g.us")) {
+                    // Temporary per-member mute: remove messages until the saved expiry.
+                    const mutedJid = message.key.participant || message.key.senderPn;
+                    if (mutedJid) {
+                        const muteKey = "BANMUTE:" + mutedJid;
+                        const savedMute = getGroupSetting(chatJid, muteKey, null);
+                        if (savedMute) {
+                            try {
+                                const muteData = JSON.parse(savedMute);
+                                if (Number(muteData.expiresAt) > Date.now()) {
+                                    await Prince.sendMessage(chatJid, { delete: message.key });
+                                    return;
+                                }
+                            } catch (_) {
+                                // Ignore malformed/old entries; admins can set a fresh mute.
+                            }
+                        }
+                    }
                     const groupAntiLink = getGroupSetting(
                         chatJid,
                         "ANTILINK",
