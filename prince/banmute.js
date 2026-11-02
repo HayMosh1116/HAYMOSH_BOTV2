@@ -1,7 +1,7 @@
 const { gmd, getGroupSetting, setGroupSetting, toMentionJid, mentionTag } = require("../mayel");
 
 function parseDuration(value) {
-  const match = String(value || "").trim().match(/^(\\d+)(s|m|h|d)$/i);
+  const match = String(value || "").trim().match(/^(\d+)(s|m|h|d)$/i);
   if (!match) return null;
   const amount = Number(match[1]);
   const unit = match[2].toLowerCase();
@@ -25,7 +25,7 @@ gmd({
 
   const targetInput = mentionedJid?.[0] || quotedUser;
   if (!targetInput) return reply("Usage: .banmute @member 30m\nYou can also reply to a member's message.");
-  const durationToken = String(q || "").trim().split(/\\s+/).find(part => /^\\d+[smhd]$/i.test(part));
+  const durationToken = String(q || "").trim().split(/\s+/).find(part => /^\d+[smhd]$/i.test(part));
   const duration = parseDuration(durationToken);
   if (!duration) return reply("❌ Choose a duration from 10 seconds to 7 days. Example: .banmute @member 30m");
 
