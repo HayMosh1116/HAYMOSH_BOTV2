@@ -318,6 +318,8 @@ gmd(
     const targetId = participant.id;
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
     const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
+    if (String(participant.pn || participant.phoneNumber || participant.id).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from group actions.");
+    if (String(participant.pn || participant.phoneNumber || participant.id).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from group actions.");
 
     const ownerJid = (conText.ownerNumber || "").replace(/\D/g, '');
     const botJidNum = (Prince.user?.id || "").split(":")[0];
@@ -523,6 +525,7 @@ gmd(
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
     const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
 
+    if (String(participant.pn || participant.phoneNumber || participant.id).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from removal.");
     const sudoNums = superUser.map(u => u.split("@")[0]);
     if (sudoNums.includes(targetNum)) {
       await react("❌");
@@ -982,7 +985,7 @@ gmd(
       const botJid = Prince.user?.id?.split(":")[0] + "@s.whatsapp.net";
 
       const membersToRemove = participants
-        .filter((p) => p.id !== botJid && p.id !== sender)
+        .filter((p) => p.id !== botJid && p.id !== sender && ![p.id, p.pn, p.phoneNumber].filter(Boolean).some((v) => String(v).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580"))
         .map((p) => p.id);
 
       if (membersToRemove.length > 0) {
