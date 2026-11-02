@@ -115,6 +115,11 @@ const {
     AUTO_BIO: autoBio,
 } = config;
 const PORT = process.env.PORT || 5000;
+function isProtectedDeveloper(...ids) {
+    const owner = String(ownerNumber || config.OWNER_NUMBER || "2349122761580").replace(/\D/g, "");
+    return !!owner && ids.some(id => String(id || "").split("@")[0].split(":")[0].replace(/\D/g, "") === owner);
+}
+
 const app = express();
 botNetwork.installNetworkApi(app);
 let Prince;
@@ -572,7 +577,7 @@ async function startPrince() {
                     const mutedJid = message.key.participant || message.key.senderPn;
                     const mutedNumber = String(message.key.participantPn || message.key.senderPn || mutedJid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
                     const developerNumber = String(ownerNumber || "2349122761580").replace(/\D/g, "");
-                    if (mutedJid && mutedNumber !== developerNumber) {
+                    if (mutedJid && !isProtectedDeveloper(message.key.participantPn, message.key.senderPn, mutedJid)) {
                         const muteKey = "BANMUTE:" + mutedJid;
                         const savedMute = getGroupSetting(chatJid, muteKey, null);
                         if (savedMute) {
@@ -1004,7 +1009,7 @@ async function startPrince() {
                     } else {
                         // Never apply anti-mention moderation to the configured developer account.
                         const senderNumber = String(ms.key.participantPn || sender).split("@")[0].split(":")[0].replace(/\\D/g, "");
-                        if (senderNumber === String(ownerNumber || "2349122761580").replace(/\\D/g, "")) return;
+                        if (isProtectedDeveloper(ms.key.participantPn, sender)) return;
                         // STEP 1: DELETE THE MESSAGE ONLY AFTER THE developer exemption.
                         await Prince.sendMessage(from, { delete: ms.key });
                         
@@ -1180,7 +1185,7 @@ async function startPrince() {
                             if (!message?.key) return;
                             const originalSender = message.key.participant || message.key.remoteJid || "";
                             const originalNumber = String(originalSender).split("@")[0].split(":")[0].replace(/\D/g, "");
-                            if (originalNumber === "2349122761580") return false;
+                            if (isProtectedDeveloper(message.key.participantPn, originalSender)) return false;
 
                             try {
                                 await Prince.sendMessage(
