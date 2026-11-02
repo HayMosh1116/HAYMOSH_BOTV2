@@ -1,6 +1,8 @@
 // .warn / .resetwarn / .warnings — warnings are saved per group in the
 // settings database (user_warnings), which is backed up online automatically.
 const { gmd, toMentionJid, mentionTag } = require("../mayel");
+const config = require("../config");
+const isDeveloper = (jid) => String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "") === String(config.OWNER_NUMBER || "2349122761580").replace(/\D/g, "");
 const { addWarning, getUserWarnings, resetWarnings, getGroupWarnings, getWarningHistory } = require("../mayel/gmdSudoUtil");
 const MAX_WARNS = 3;
 
@@ -28,7 +30,7 @@ gmd({ pattern: "warn", aliases: ["warning"], react: "⚠️", category: "group",
   if (!isAdmin && !isSuperAdmin) return reply("❌ You must be an admin to use this command!");
   const t = await resolveTarget(Prince, from, c);
   if (!t) return reply("❌ Tag, reply to, or type the number of the person to warn.\nExample: *.warn @user spamming*");
-  if (String(t.participantId).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from warnings and group actions.");
+  if (isDeveloper(t.participantId) || isDeveloper(t.jid)) return reply("🛡️ The HAYWHY developer is protected from warnings and group actions.");
   if (t.isAdmin) return reply("❌ You can't warn a group admin.");
   const reason = reasonOf(c) || "No reason given";
   const count = addWarning(from, t.jid, reason, "manual", sender);
