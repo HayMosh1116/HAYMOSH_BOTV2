@@ -28,6 +28,7 @@ gmd({ pattern: "warn", aliases: ["warning"], react: "⚠️", category: "group",
   if (!isAdmin && !isSuperAdmin) return reply("❌ You must be an admin to use this command!");
   const t = await resolveTarget(Prince, from, c);
   if (!t) return reply("❌ Tag, reply to, or type the number of the person to warn.\nExample: *.warn @user spamming*");
+  if (String(t.participantId).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from warnings and group actions.");
   if (t.isAdmin) return reply("❌ You can't warn a group admin.");
   const reason = reasonOf(c) || "No reason given";
   const count = addWarning(from, t.jid, reason, "manual", sender);
@@ -50,6 +51,7 @@ gmd({ pattern: "resetwarn", aliases: ["delwarn", "clearwarn", "unwarn"], react: 
   if (!isAdmin && !isSuperAdmin) return reply("❌ You must be an admin to use this command!");
   const t = await resolveTarget(Prince, from, c);
   if (!t) return reply("❌ Tag, reply to, or type the number of the person.\nExample: *.resetwarn @user*");
+  if (String(t.participantId).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from changes to warning records.");
   const before = getUserWarnings(from, t.jid).count || 0;
   resetWarnings(from, t.jid);
   return Prince.sendMessage(from, { text: before ? `♻️ Cleared *${before}* warning(s) for ${mentionTag(t.jid)}.` : `✅ ${mentionTag(t.jid)} has no warnings.`, mentions: [t.jid] }, { quoted: c.mek });
