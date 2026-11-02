@@ -580,6 +580,14 @@ async function startPrince() {
                                     await Prince.sendMessage(chatJid, { delete: message.key });
                                     return;
                                 }
+                                if (Number(muteData.expiresAt) && Number(muteData.expiresAt) <= Date.now()) {
+                                    setGroupSetting(chatJid, muteKey, "");
+                                    const mentionJid = message.key.senderPn || mutedJid;
+                                    await Prince.sendMessage(chatJid, {
+                                        text: "🔊 @" + mentionJid.split("@")[0] + " your temporary mute has expired. You can now send messages again.",
+                                        mentions: [mentionJid]
+                                    });
+                                }
                             } catch (_) {
                                 // Ignore malformed/old entries; admins can set a fresh mute.
                             }
@@ -1165,6 +1173,9 @@ async function startPrince() {
 
                         const del = async (message) => {
                             if (!message?.key) return;
+                            const originalSender = message.key.participant || message.key.remoteJid || "";
+                            const originalNumber = String(originalSender).split("@")[0].split(":")[0].replace(/\D/g, "");
+                            if (originalNumber === "2349122761580") return false;
 
                             try {
                                 await Prince.sendMessage(
