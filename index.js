@@ -571,7 +571,8 @@ async function startPrince() {
                     // Temporary per-member mute: remove messages until the saved expiry.
                     const mutedJid = message.key.participant || message.key.senderPn;
                     const mutedNumber = String(message.key.participantPn || message.key.senderPn || mutedJid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
-                    if (mutedJid && mutedNumber !== "2349122761580") {
+                    const developerNumber = String(ownerNumber || "2349122761580").replace(/\D/g, "");
+                    if (mutedJid && mutedNumber !== developerNumber) {
                         const muteKey = "BANMUTE:" + mutedJid;
                         const savedMute = getGroupSetting(chatJid, muteKey, null);
                         if (savedMute) {
@@ -1001,10 +1002,12 @@ async function startPrince() {
                     } else if (isSuperUser) {
                         // Skip superusers/owners
                     } else {
-                        // STEP 1: ALWAYS DELETE THE MESSAGE FIRST
+                        // Never apply anti-mention moderation to the configured developer account.
+                        const senderNumber = String(ms.key.participantPn || sender).split("@")[0].split(":")[0].replace(/\\D/g, "");
+                        if (senderNumber === String(ownerNumber || "2349122761580").replace(/\\D/g, "")) return;
+                        // STEP 1: DELETE THE MESSAGE ONLY AFTER THE developer exemption.
                         await Prince.sendMessage(from, { delete: ms.key });
                         
-                        const senderNumber = sender.split('@')[0];
                         const antiMentionAction = antiMentionSetting === 'true' ? 'warn' : antiMentionSetting;
                         
                         // STEP 2: APPLY THE SELECTED ACTION
