@@ -358,3 +358,64 @@ gmd({
   }
 });
 
+
+
+// HAYWHY AI Gateway: recommend existing commands from natural-language requests.
+// It never executes commands or changes group settings on the user's behalf.
+gmd({
+  pattern: "gateway",
+  aliases: ["aigateway", "commandhelp"],
+  react: "🧠",
+  desc: "Recommend the right HAYWHY bot command for a task",
+  category: "ai",
+}, async (from, Prince, conText) => {
+  const { reply, react, q } = conText;
+  if (!q || !q.trim()) {
+    return reply(
+      "*🤖 HAYWHY AI GATEWAY*\n\nDescribe what you want to do and I'll recommend a bot command.\n\nExample: `.gateway I want to play a game with friends`"
+    );
+  }
+
+  const task = q.trim().slice(0, 700);
+  const commandGuide = [
+    ".games — show available games",
+    ".fasttyper — start a typing competition",
+    ".rank — show game leaderboard (if enabled)",
+    ".profile — show player statistics (if enabled)",
+    ".endgame — stop the current game",
+    ".antilink on/off — change anti-link protection (authorized users only)",
+    ".warn @user reason — warn a group member (if enabled)",
+    ".github username — look up a GitHub user (if enabled)",
+    ".repo owner/name — look up a GitHub repository (if enabled)",
+    ".npm package — search for an npm package (if enabled)",
+    ".gpt question — ask the AI",
+    ".translate text — translate text (if enabled)"
+  ].join("\n");
+
+  try {
+    const prompt = [
+      "You are HAYWHY AI Gateway, a WhatsApp bot command guide.",
+      "Recommend only commands from this exact catalogue. Never invent commands.",
+      "Do not execute commands, claim settings changed, or bypass admin permissions.",
+      "If no command fits, say so and suggest the closest available command.",
+      "Keep the answer concise. Give the command and one-line usage explanation.",
+      "\nAVAILABLE COMMANDS:\n" + commandGuide,
+      "\nUSER TASK:\n" + task
+    ].join("\n");
+
+    const response = await gmdJson(
+      `${conText.PrinceTechApi}/api/ai/gpt?apikey=${conText.PrinceApiKey}&q=${encodeURIComponent(prompt)}`
+    );
+    const answer = response?.result;
+    if (!answer || typeof answer !== "string") {
+      await react("❌");
+      return reply("I couldn't generate a recommendation right now. Try again shortly.");
+    }
+    await reply("*🤖 HAYWHY AI GATEWAY*\n\n" + answer.slice(0, 3500));
+    await react("✅");
+  } catch (error) {
+    console.error("HAYWHY AI Gateway error:", error?.message || error);
+    await react("❌");
+    return reply("AI Gateway is temporarily unavailable. Please try again later.");
+  }
+});
