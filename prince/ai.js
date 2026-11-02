@@ -377,25 +377,23 @@ gmd({
   }
 
   const task = q.trim().slice(0, 700);
-  const commandGuide = [
-    ".games — show available games",
-    ".fasttyper — start a typing competition",
-    ".rank — show game leaderboard (if enabled)",
-    ".profile — show player statistics (if enabled)",
-    ".endgame — stop the current game",
-    ".antilink on/off — change anti-link protection (authorized users only)",
-    ".warn @user reason — warn a group member (if enabled)",
-    ".github username — look up a GitHub user (if enabled)",
-    ".repo owner/name — look up a GitHub repository (if enabled)",
-    ".npm package — search for an npm package (if enabled)",
-    ".gpt question — ask the AI",
-    ".translate text — translate text (if enabled)"
-  ].join("\n");
+  const commandGuide = (Array.isArray(commands) ? commands : [])
+    .filter(command => command && command.pattern && !command.dontAddCommandList)
+    .map(command => {
+      const aliases = Array.isArray(command.aliases) ? command.aliases :
+        Array.isArray(command.alias) ? command.alias : [];
+      const names = [command.pattern, ...aliases].filter(Boolean).map(name => "." + String(name).replace(/^\\./, ""));
+      const description = String(command.desc || command.description || command.category || "Available command")
+        .replace(/[\\r\\n]+/g, " ").slice(0, 140);
+      return names.join(" / ") + " — " + description;
+    })
+    .slice(0, 180)
+    .join("\\n") || "No commands are currently registered.";
 
   try {
     const prompt = [
       "You are HAYWHY AI Gateway, a WhatsApp bot command guide.",
-      "Recommend only commands from this exact catalogue. Never invent commands.",
+      "Recommend only commands from this exact live catalogue. Never invent commands or recommend disabled/unregistered features.",
       "Do not execute commands, claim settings changed, or bypass admin permissions.",
       "If no command fits, say so and suggest the closest available command.",
       "Keep the answer concise. Give the command and one-line usage explanation.",
