@@ -47,6 +47,8 @@ const statements = {
   saveMessage: db.prepare("INSERT INTO group_activity_message_ids (group_jid, message_id) VALUES (?, ?)"),
   getGroup: db.prepare("SELECT * FROM group_activity_groups WHERE group_jid = ?"),
   getMembers: db.prepare("SELECT m.member_jid, m.display_name, m.total_messages, COALESCE(d.message_count, 0) AS today FROM group_activity_members m LEFT JOIN group_activity_days d ON d.group_jid = m.group_jid AND d.member_jid = m.member_jid AND d.day = ? WHERE m.group_jid = ? ORDER BY m.total_messages DESC, m.display_name COLLATE NOCASE ASC LIMIT 30"),
+  getMemberCount: db.prepare("SELECT COUNT(*) AS total FROM group_activity_members WHERE group_jid = ?"),
+  getTodayTotal: db.prepare("SELECT COALESCE(SUM(message_count), 0) AS total FROM group_activity_days WHERE group_jid = ? AND day = ?"),
 };
 
 const recordTransaction = db.transaction(({ groupId, senderJid, pushName, messageId, timestamp, day }) => {
@@ -133,16 +135,25 @@ gmd({
     return `${label} ${memberTag} — ${formatNumber(row.total_messages)} msgs`;
   });
   const start = formatDate(group.started_at);
-  const todayTotal = rows.reduce((sum, row) => sum + row.today, 0);
+  const todayTotal = statements.getTodayTotal.get(from, lagosDayKey()).total;
+  const memberCount = statements.getMemberCount.get(from).total;
   const text = [
-    "╔═══「 GROUP ACTIVITY LIST 」", "",
-    `📅 ACCURATE SINCE: ${start}`,
-    `📅 APPROX. SINCE: ${start} (tracking began when this feature was installed)`, "",
-    ...lines, "",
-    `📈 TODAY: ${formatNumber(todayTotal)} messages`,
-    `💬 TOTAL: ${formatNumber(group.total_messages)} messages all-time`,
-    `👥 MEMBERS TRACKED: ${formatNumber(rows.length)}`,
-    "╚════════════════════",
+    "╭━━━〔 📊 GROUP ACTIVITY 〕━━━╮",
+    "",
+    `🗓️ FIRST RECORDED: ${start}` ,
+    "📡 TRACKING: Live since the first recorded message",
+    "",
+    "┏━━〔 🏆 TOP CONTRIBUTORS 〕",
+    ...(lines.length ? lines : ["No member activity yet."]),
+    "┗━━━━━━━━━━━━━━━━━━━━",
+    "",
+    "┌─〔 📈 GROUP STATISTICS 〕",
+    `│ ⚡ TODAY: ${formatNumber(todayTotal)} messages`,
+    `│ 💬 ALL-TIME: ${formatNumber(group.total_messages)} messages`,
+    `│ 👥 MEMBERS: ${formatNumber(memberCount)} tracked`,
+    "└────────────────────",
+    "",
+    "╰━━━〔 HAYWHY • ACTIVITY TRACKER 〕━━━╯",
   ].join("\n");
   const mentions = rows.map(row => row.member_jid).filter(jid => jid.endsWith("@s.whatsapp.net"));
   return reply(text, { mentions });
