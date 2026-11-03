@@ -16,7 +16,7 @@ async function fetchLiveScores(choice) {
 
   try {
     const response = await axios.get(
-      "https://sportscore.com/api/widget/matches/",
+      "https://sportscore.com/api/v1/matches/",
       {
         params: { sport: "football", limit: 50, src: "haywhy-bot" },
         timeout: 12000,
