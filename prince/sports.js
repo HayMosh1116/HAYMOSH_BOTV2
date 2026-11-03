@@ -364,7 +364,8 @@ gmd(
           output += `   🕒 ${time}${statusText ? ` (${statusText})` : ""}\n\n`;
         });
 
-        output += `_📊 Showing ${Math.min(filteredGames.length, 20)} of ${filteredGames.length} matches_\n\n> *${config.FOOTER}*`;
+        output += `_📊 Showing ${Math.min(filteredGames.length, 20)} of ${filteredGames.length} matches_\n`;
+        output += `_Data from SportScore: https://sportscore.com/_\n\n> *${config.FOOTER}*`;
 
         await Prince.sendMessage(
           chatId,
