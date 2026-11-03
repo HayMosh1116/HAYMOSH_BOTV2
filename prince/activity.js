@@ -135,13 +135,14 @@ gmd({
     return `${label} ${memberTag} — ${formatNumber(row.total_messages)} msgs`;
   });
   const start = formatDate(group.started_at);
+  const lastActive = formatDate(group.last_message_at || group.started_at);
   const todayTotal = statements.getTodayTotal.get(from, lagosDayKey()).total;
   const memberCount = statements.getMemberCount.get(from).total;
   const text = [
     "╭━━━〔 📊 GROUP ACTIVITY 〕━━━╮",
     "",
-    `🗓️ FIRST RECORDED: ${start}` ,
-    "📡 TRACKING: Live since the first recorded message",
+    `🗓️ STARTED: ${start}`,
+    `🕒 LAST MESSAGE: ${lastActive}`,
     "",
     "┏━━〔 🏆 TOP CONTRIBUTORS 〕",
     ...(lines.length ? lines : ["No member activity yet."]),
