@@ -16,20 +16,15 @@ async function fetchLiveScores(choice) {
 
   try {
     const response = await axios.get(
-      "https://sportscore.com/api/v1/fixtures/",
+      "https://sportscore.com/api/widget/matches/",
       {
-        params: {
-          sport: "football",
-          date: today,
-          status: requestedStatus,
-          limit: 100,
-        },
+        params: { sport: "football", limit: 50, src: "haywhy-bot" },
         timeout: 12000,
       },
     );
 
     const payload = response.data;
-    const matches = payload?.matches || payload?.fixtures || payload?.data?.matches;
+    const matches = payload?.matches;
     if (!Array.isArray(matches)) {
       throw new Error("SportScore returned an unexpected fixtures response.");
     }
@@ -259,13 +254,32 @@ gmd(
 │ 3. ⏰ Upcoming
 ╰━━━━━━━━━━━╯`;
 
-    const sent = await Prince.sendMessage(
-      from,
-      { image: { url: SPORTS_IMAGE }, caption, contextInfo: ctxInfo },
-      { quoted: mek },
-    );
+    // Prefer the branded image menu, but fall back to plain text if WhatsApp
+    // cannot fetch or send the remote image.
+    let sent;
+    try {
+      sent = await Prince.sendMessage(
+        from,
+        { image: { url: SPORTS_IMAGE }, caption, contextInfo: ctxInfo },
+        { quoted: mek },
+      );
+    } catch (imageError) {
+      console.error("livescore menu image failed; sending text menu:", imageError.message);
+      sent = await Prince.sendMessage(
+        from,
+        { text: caption, contextInfo: ctxInfo },
+        { quoted: mek },
+      );
+    }
 
-    const messageId = sent.key.id;
+    const messageId = sent?.key?.id;
+    if (!messageId) {
+      return Prince.sendMessage(
+        from,
+        { text: "❌ I couldn't open the live-score menu. Please try again.", contextInfo: ctxInfo },
+        { quoted: mek },
+      );
+    }
     let listenerTimeout;
 
     const cleanupListener = () => {
