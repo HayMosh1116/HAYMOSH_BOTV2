@@ -8,50 +8,57 @@ const {
 const SPORTS_API_BASE = "https://apiskeith.top";
 const SPORTS_IMAGE = "https://i.ibb.co/gLRMhk9p/N0r-QVLHAY0.jpg";
 
-async function fetchLiveScores() {
-  // SportScore is the no-key primary provider. Keep the existing API as backup.
+async function fetchLiveScores(choice) {
+  // SportScore's public fixtures endpoint needs no API key.
+  const statusByChoice = { "1": "live", "2": "finished", "3": "upcoming" };
+  const requestedStatus = statusByChoice[choice] || "live";
+  const today = new Date().toISOString().slice(0, 10);
+
   try {
     const response = await axios.get(
-      "https://sportscore.com/api/widget/matches/?sport=football&limit=50&src=haywhy-bot",
-      { timeout: 12000 },
+      "https://sportscore.com/api/v1/fixtures/",
+      {
+        params: {
+          sport: "football",
+          date: today,
+          status: requestedStatus,
+          limit: 100,
+        },
+        timeout: 12000,
+      },
     );
-    const matches = response.data?.matches;
 
+    const payload = response.data;
+    const matches = payload?.matches || payload?.fixtures || payload?.data?.matches;
     if (!Array.isArray(matches)) {
-      throw new Error("SportScore returned an unexpected response.");
+      throw new Error("SportScore returned an unexpected fixtures response.");
     }
 
-    const statusMap = {
-      live: "1T",
-      finished: "FT",
-      upcoming: "",
-      scheduled: "",
-      "not started": "",
-      halftime: "HT",
-      "half-time": "HT",
-      postponed: "Pst",
-      cancelled: "Canc",
-    };
-
     const games = matches.map((match) => {
-      const rawStatus = String(match.status || "").toLowerCase();
-      const status = statusMap[rawStatus] || (rawStatus.includes("live") ? "1T" : rawStatus.includes("finish") ? "FT" : "");
-      const kickoff = match.time ? new Date(match.time) : null;
-      const validKickoff = kickoff && !Number.isNaN(kickoff.getTime());
+      const rawStatus = String(match.status || requestedStatus).toLowerCase();
+      let status = "";
+      if (rawStatus.includes("live") || rawStatus.includes("progress") || rawStatus.includes("1st half")) status = "1T";
+      else if (rawStatus.includes("2nd half")) status = "2T";
+      else if (rawStatus.includes("half")) status = "HT";
+      else if (rawStatus.includes("finish") || rawStatus === "ft") status = "FT";
+      else if (rawStatus.includes("pen")) status = "Pen";
+      else if (rawStatus.includes("postpon")) status = "Pst";
+      else if (rawStatus.includes("cancel")) status = "Canc";
+
+      const kickoff = match.time || match.kickoff || match.start_time;
+      const date = kickoff ? new Date(kickoff) : null;
+      const validDate = date && !Number.isNaN(date.getTime());
+      const score = match.score || {};
 
       return {
-        p1: match.home || "Home",
-        p2: match.away || "Away",
-        tm: validKickoff
-          ? kickoff.toLocaleTimeString("en-GB", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" })
-          : "",
-        dt: validKickoff
-          ? kickoff.toLocaleDateString("en-CA", { timeZone: "UTC" })
-          : "",
+        p1: match.home || match.home_team || match.homeTeam || "Home",
+        p2: match.away || match.away_team || match.awayTeam || "Away",
+        tm: validDate ? date.toISOString().slice(11, 16) : "",
+        dt: validDate ? date.toISOString().slice(0, 10) : "",
         R: {
           st: status,
-          r1: match.home_score ?? undefined,
-          r2: match.away_score ?? undefined,
+          r1: match.home_score ?? match.homeScore ?? score.home ?? undefined,
+          r2: match.away_score ?? match.awayScore ?? score.away ?? undefined,
         },
       };
     });
@@ -61,6 +68,7 @@ async function fetchLiveScores() {
     console.error("SportScore livescore provider failed; trying backup:", primaryError.message);
   }
 
+  // Preserve the existing provider as a fallback, with transient-error retries.
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -299,7 +307,7 @@ gmd(
           react: { text: selected.emoji, key: msg.key },
         });
 
-        const res = await fetchLiveScores();
+        const res = await fetchLiveScores(choice);
         const data = res.data;
 
         if (!data?.status || !data.result?.games) {
@@ -365,7 +373,7 @@ gmd(
         });
 
         output += `_📊 Showing ${Math.min(filteredGames.length, 20)} of ${filteredGames.length} matches_\n`;
-        output += `_Data from SportScore: https://sportscore.com/_\n\n> *${config.FOOTER}*`;
+        output += `_Data source: SportScore (https://sportscore.com) or backup provider._\n\n> *${config.FOOTER}*`;
 
         await Prince.sendMessage(
           chatId,
