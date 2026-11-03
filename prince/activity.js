@@ -46,7 +46,7 @@ const statements = {
   addDay: db.prepare("INSERT INTO group_activity_days (group_jid, member_jid, day, message_count) VALUES (?, ?, ?, 1) ON CONFLICT(group_jid, member_jid, day) DO UPDATE SET message_count = message_count + 1"),
   saveMessage: db.prepare("INSERT INTO group_activity_message_ids (group_jid, message_id) VALUES (?, ?)"),
   getGroup: db.prepare("SELECT * FROM group_activity_groups WHERE group_jid = ?"),
-  getMembers: db.prepare("SELECT m.member_jid, m.display_name, m.total_messages, COALESCE(d.message_count, 0) AS today FROM group_activity_members m LEFT JOIN group_activity_days d ON d.group_jid = m.group_jid AND d.member_jid = m.member_jid AND d.day = ? WHERE m.group_jid = ? ORDER BY m.total_messages DESC, m.display_name COLLATE NOCASE ASC LIMIT 30"),
+  getMembers: db.prepare("SELECT m.member_jid, m.display_name, m.total_messages, COALESCE(d.message_count, 0) AS today FROM group_activity_members m LEFT JOIN group_activity_days d ON d.group_jid = m.group_jid AND d.member_jid = m.member_jid AND d.day = ? WHERE m.group_jid = ? ORDER BY m.total_messages DESC, m.display_name COLLATE NOCASE ASC"),
   getMemberCount: db.prepare("SELECT COUNT(*) AS total FROM group_activity_members WHERE group_jid = ?"),
   getTodayTotal: db.prepare("SELECT COALESCE(SUM(message_count), 0) AS total FROM group_activity_days WHERE group_jid = ? AND day = ?"),
 };
@@ -138,14 +138,15 @@ gmd({
   const lastActive = formatDate(group.last_message_at || group.started_at);
   const todayTotal = statements.getTodayTotal.get(from, lagosDayKey()).total;
   const memberCount = statements.getMemberCount.get(from).total;
-  const text = [
+  const header = [
     "╭━━━〔 📊 GROUP ACTIVITY 〕━━━╮",
     "",
     `🗓️ STARTED: ${start}`,
     `🕒 LAST MESSAGE: ${lastActive}`,
     "",
     "┏━━〔 🏆 TOP CONTRIBUTORS 〕",
-    ...(lines.length ? lines : ["No member activity yet."]),
+  ].join("\n");
+  const footer = [
     "┗━━━━━━━━━━━━━━━━━━━━",
     "",
     "┌─〔 📈 GROUP STATISTICS 〕",
@@ -156,8 +157,36 @@ gmd({
     "",
     "╰━━━〔 HAYWHY • ACTIVITY TRACKER 〕━━━╯",
   ].join("\n");
-  const mentions = rows.map(row => row.member_jid).filter(jid => jid.endsWith("@s.whatsapp.net"));
-  return reply(text, { mentions });
+
+  // Keep each WhatsApp message comfortably below the platform's text-size limit.
+  // Every tracked member is included; large leaderboards are sent in consecutive parts.
+  const maxMessageLength = 3500;
+  const chunks = [];
+  let current = header;
+  for (const line of (lines.length ? lines : ["No member activity yet."])) {
+    const candidate = current + "\n" + line;
+    if (candidate.length > maxMessageLength && current !== header) {
+      chunks.push(current);
+      current = "📊 GROUP ACTIVITY — CONTINUED\n\n" + line;
+    } else {
+      current = candidate;
+    }
+  }
+  if ((current + "\n" + footer).length <= maxMessageLength) {
+    chunks.push(current + "\n" + footer);
+  } else {
+    chunks.push(current);
+    chunks.push(footer);
+  }
+
+  for (const chunk of chunks) {
+    const chunkMentions = rows
+      .filter(row => row.member_jid.endsWith("@s.whatsapp.net"))
+      .filter(row => chunk.includes("@" + row.member_jid.split("@")[0]))
+      .map(row => row.member_jid);
+    await reply(chunk, { mentions: chunkMentions });
+  }
+  return;
 });
 
 module.exports = { trackGroupMessage };
