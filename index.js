@@ -823,7 +823,7 @@ async function startPrince() {
                         senderJid: sender,
                         pushName,
                         messageId: ms.key.id,
-                        timestamp: receivedAt || Date.now(),
+                        timestamp: Date.now(),
                     });
                 } catch (error) {
                     console.error("[Activity] Message tracking failed:", error.message);
