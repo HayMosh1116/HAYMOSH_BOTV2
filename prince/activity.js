@@ -34,7 +34,7 @@ function trackGroupMessage({ groupId, senderJid, pushName, messageId, timestamp 
   if (group.recentIds.includes(messageId)) return;
   const member = group.members[senderJid] || (group.members[senderJid] = { name: pushName || "Unknown member", total: 0, days: {} });
   if (pushName) member.name = pushName;
-  const day = new Date(timestamp).toISOString().slice(0, 10);
+  const day = lagosDayKey(timestamp);
   member.total += 1;
   member.days[day] = (member.days[day] || 0) + 1;
   group.total += 1;
@@ -44,6 +44,7 @@ function trackGroupMessage({ groupId, senderJid, pushName, messageId, timestamp 
   saveData();
 }
 
+function lagosDayKey(value = Date.now()) { return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)); }
 function formatDate(value) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Lagos", day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 }
@@ -70,13 +71,13 @@ gmd({
     .map(([jid, stats]) => {
       const participant = participantMap.get(jid);
       const name = participant?.notify || participant?.name || participant?.verifiedName || stats.name || jid.split("@")[0];
-      return { jid, name, total: stats.total, today: stats.days?.[new Date().toISOString().slice(0, 10)] || 0 };
+      return { jid, name, total: stats.total, today: stats.days?.[lagosDayKey()] || 0 };
     })
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   const medals = ["🥇", "🥈", "🥉"];
   const lines = rows.slice(0, 30).map((row, index) => {
     const label = medals[index] || (String(index + 1) + ".");
-    const mention = row.jid.endsWith("@s.whatsapp.net") || row.jid.endsWith("@lid") ? "@" + row.jid.split("@")[0] : row.name;
+    const mention = row.jid.endsWith("@s.whatsapp.net") ? "@" + row.jid.split("@")[0] : row.name;
     return `${label} ${mention} — ${formatNumber(row.total)} msgs`;
   });
   const start = formatDate(group.startedAt);
@@ -94,7 +95,7 @@ gmd({
     `👥 MEMBERS TRACKED: ${formatNumber(rows.length)}`,
     "╚════════════════════",
   ].join("\n");
-  const mentions = rows.slice(0, 30).map(row => row.jid).filter(jid => jid.includes("@"));
+  const mentions = rows.slice(0, 30).map(row => row.jid).filter(jid => jid.endsWith("@s.whatsapp.net"));
   return reply(text, { mentions });
 });
 
