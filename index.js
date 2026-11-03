@@ -815,6 +815,20 @@ async function startPrince() {
                 null;
             const type = getContentType(ms.message);
             const pushName = ms.pushName || "Prince-Md User";
+            // Record group activity once per incoming WhatsApp message.
+            if (isGroup && !ms.key.fromMe) {
+                try {
+                    require("./prince/activity").trackGroupMessage({
+                        groupId: from,
+                        senderJid: sender,
+                        pushName,
+                        messageId: ms.key.id,
+                        timestamp: receivedAt || Date.now(),
+                    });
+                } catch (error) {
+                    console.error("[Activity] Message tracking failed:", error.message);
+                }
+            }
             if (store?.contacts && sender && pushName !== "Prince-Md User") {
                 const existingContact = store.contacts.get(sender) || {};
                 store.contacts.set(sender, {
