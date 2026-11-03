@@ -467,9 +467,23 @@ gmd({
   const HAYWHY_DEVELOPER_NUMBER = "2349122761580";
   const quotedSender = key.participant || conText.quoted?.sender ||
     conText.quoted?.key?.participant || (key.fromMe ? botId : "");
-  const quotedSenderNumber = String(quotedSender || "")
+  const protectedDeveloperNumbers = new Set([
+    HAYWHY_DEVELOPER_NUMBER,
+    String(config.OWNER_NUMBER || "").replace(/\D/g, ""),
+  ].filter(Boolean));
+
+  let resolvedQuotedSender = quotedSender;
+  if (resolvedQuotedSender && String(resolvedQuotedSender).endsWith("@lid")) {
+    try {
+      resolvedQuotedSender = await Prince.getJidFromLid(resolvedQuotedSender) || resolvedQuotedSender;
+    } catch (error) {
+      console.error("[.del] Could not resolve quoted LID:", error.message);
+    }
+  }
+
+  const quotedSenderNumber = String(resolvedQuotedSender || "")
     .split("@")[0].split(":")[0].replace(/\D/g, "");
-  if (quotedSenderNumber === HAYWHY_DEVELOPER_NUMBER) {
+  if (protectedDeveloperNumbers.has(quotedSenderNumber)) {
     return reply("🛡️ *Protected message:* HAYWHY developer messages cannot be deleted with .del.");
   }
 
