@@ -8,6 +8,30 @@ const {
 const SPORTS_API_BASE = "https://apiskeith.top";
 const SPORTS_IMAGE = "https://i.ibb.co/gLRMhk9p/N0r-QVLHAY0.jpg";
 
+async function fetchLiveScores() {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await axios.get(`${SPORTS_API_BASE}/livescore`, {
+        timeout: 15000,
+      });
+    } catch (err) {
+      const status = err.response?.status;
+      const retryable = !status || [429, 500, 502, 503, 504].includes(status);
+
+      if (!retryable || attempt === maxAttempts) throw err;
+
+      const retryAfter = Number(err.response?.headers?.["retry-after"]);
+      const delay = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 5000)
+        : attempt * 1500;
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 const LEAGUE_CONFIG = {
   1: { name: "Premier League", code: "epl", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
   2: { name: "Bundesliga", code: "bundesliga", emoji: "🇩🇪" },
@@ -181,6 +205,12 @@ gmd(
     );
 
     const messageId = sent.key.id;
+    let listenerTimeout;
+
+    const cleanupListener = () => {
+      Prince.ev.off("messages.upsert", handler);
+      if (listenerTimeout) clearTimeout(listenerTimeout);
+    };
 
     const handler = async (update) => {
       const msg = update.messages[0];
@@ -216,15 +246,14 @@ gmd(
           react: { text: selected.emoji, key: msg.key },
         });
 
-        const res = await axios.get(`${SPORTS_API_BASE}/livescore`, {
-          timeout: 15000,
-        });
+        const res = await fetchLiveScores();
         const data = res.data;
 
-        if (!data.status || !data.result?.games) {
+        if (!data?.status || !data.result?.games) {
+          cleanupListener();
           return Prince.sendMessage(
             chatId,
-            { text: "❌ No match data available at the moment.", contextInfo: ctxInfo },
+            { text: "❌ No match data is available right now. Please try again later.", contextInfo: ctxInfo },
             { quoted: msg },
           );
         }
@@ -290,19 +319,28 @@ gmd(
           { quoted: msg },
         );
 
-        Prince.ev.off("messages.upsert", handler);
+        cleanupListener();
       } catch (err) {
         console.error("livescore error:", err);
+        cleanupListener();
+
+        const status = err.response?.status;
+        const errorText = status === 503 || status === 502 || status === 504
+          ? "⚠️ The live-score service is temporarily unavailable. I tried again automatically, but it is still down. Please try again shortly."
+          : status === 429
+            ? "⚠️ The live-score service is receiving too many requests. Please try again shortly."
+            : "❌ I couldn't fetch the matches right now. Please try again later.";
+
         await Prince.sendMessage(
           chatId,
-          { text: `❌ Error fetching matches: ${err.message}`, contextInfo: ctxInfo },
+          { text: errorText, contextInfo: ctxInfo },
           { quoted: msg },
         );
       }
     };
 
     Prince.ev.on("messages.upsert", handler);
-    setTimeout(() => Prince.ev.off("messages.upsert", handler), 120000);
+    listenerTimeout = setTimeout(cleanupListener, 120000);
   },
 );
 
