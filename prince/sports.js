@@ -254,22 +254,24 @@ gmd(
 │ 3. ⏰ Upcoming
 ╰━━━━━━━━━━━╯`;
 
-    // Prefer the branded image menu, but fall back to plain text if WhatsApp
-    // cannot fetch or send the remote image.
+    // Send a plain-text menu first so a remote image failure cannot stop
+    // the command before the user sees anything.
     let sent;
     try {
       sent = await Prince.sendMessage(
         from,
-        { image: { url: SPORTS_IMAGE }, caption, contextInfo: ctxInfo },
+        { text: caption },
         { quoted: mek },
       );
-    } catch (imageError) {
-      console.error("livescore menu image failed; sending text menu:", imageError.message);
-      sent = await Prince.sendMessage(
-        from,
-        { text: caption, contextInfo: ctxInfo },
-        { quoted: mek },
-      );
+    } catch (menuError) {
+      console.error("livescore menu send failed:", menuError);
+      try {
+        await conText.reply(caption);
+      } catch (replyError) {
+        console.error("livescore reply fallback failed:", replyError);
+        throw replyError;
+      }
+      return;
     }
 
     const messageId = sent?.key?.id;
