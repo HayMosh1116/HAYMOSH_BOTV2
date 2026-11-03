@@ -9,24 +9,77 @@ const SPORTS_API_BASE = "https://apiskeith.top";
 const SPORTS_IMAGE = "https://i.ibb.co/gLRMhk9p/N0r-QVLHAY0.jpg";
 
 async function fetchLiveScores() {
-  const maxAttempts = 3;
+  // SportScore is the no-key primary provider. Keep the existing API as backup.
+  try {
+    const response = await axios.get(
+      "https://sportscore.com/api/widget/matches/?sport=football&limit=50&src=haywhy-bot",
+      { timeout: 12000 },
+    );
+    const matches = response.data?.matches;
 
+    if (!Array.isArray(matches)) {
+      throw new Error("SportScore returned an unexpected response.");
+    }
+
+    const statusMap = {
+      live: "1T",
+      finished: "FT",
+      upcoming: "",
+      scheduled: "",
+      "not started": "",
+      halftime: "HT",
+      "half-time": "HT",
+      postponed: "Pst",
+      cancelled: "Canc",
+    };
+
+    const games = matches.map((match) => {
+      const rawStatus = String(match.status || "").toLowerCase();
+      const status = statusMap[rawStatus] || (rawStatus.includes("live") ? "1T" : rawStatus.includes("finish") ? "FT" : "");
+      const kickoff = match.time ? new Date(match.time) : null;
+      const validKickoff = kickoff && !Number.isNaN(kickoff.getTime());
+
+      return {
+        p1: match.home || "Home",
+        p2: match.away || "Away",
+        tm: validKickoff
+          ? kickoff.toLocaleTimeString("en-GB", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" })
+          : "",
+        dt: validKickoff
+          ? kickoff.toLocaleDateString("en-CA", { timeZone: "UTC" })
+          : "",
+        R: {
+          st: status,
+          r1: match.home_score ?? undefined,
+          r2: match.away_score ?? undefined,
+        },
+      };
+    });
+
+    return { data: { status: true, result: { games } }, provider: "SportScore" };
+  } catch (primaryError) {
+    console.error("SportScore livescore provider failed; trying backup:", primaryError.message);
+  }
+
+  const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await axios.get(`${SPORTS_API_BASE}/livescore`, {
+      const response = await axios.get(`${SPORTS_API_BASE}/livescore`, {
         timeout: 15000,
       });
+      if (!response.data?.status || !response.data?.result?.games) {
+        throw new Error("Backup provider returned no match data.");
+      }
+      return { data: response.data, provider: "backup" };
     } catch (err) {
       const status = err.response?.status;
       const retryable = !status || [429, 500, 502, 503, 504].includes(status);
-
       if (!retryable || attempt === maxAttempts) throw err;
 
       const retryAfter = Number(err.response?.headers?.["retry-after"]);
       const delay = Number.isFinite(retryAfter) && retryAfter > 0
         ? Math.min(retryAfter * 1000, 5000)
         : attempt * 1500;
-
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
