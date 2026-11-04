@@ -520,3 +520,85 @@ gmd({
     }
   }
 );
+
+
+// ============================================================
+// Guru API download tools
+// Configure GURU_API_KEY in the hosting platform's environment.
+// Never store the key in source code.
+// ============================================================
+const GURU_API_URL = "https://ktrenqecceeooyrquooc.supabase.co/functions/v1/api-proxy";
+
+async function guruRequest(action, payload) {
+  const apiKey = process.env.GURU_API_KEY;
+  if (!apiKey) throw new Error("Guru API is not configured. Add GURU_API_KEY to the bot's environment variables.");
+  const response = await require("axios").post(
+    GURU_API_URL,
+    { apiKey, action, payload },
+    { timeout: 120000, maxBodyLength: Infinity, maxContentLength: Infinity, responseType: "arraybuffer", validateStatus: () => true }
+  );
+  const contentType = String(response.headers?.["content-type"] || "");
+  const raw = Buffer.from(response.data || []);
+  if (response.status < 200 || response.status >= 300) {
+    let detail = raw.toString("utf8").slice(0, 500);
+    try { detail = JSON.parse(detail).message || JSON.parse(detail).error || detail; } catch (_) {}
+    throw new Error("Guru API returned HTTP " + response.status + (detail ? ": " + detail : ""));
+  }
+  if (contentType.includes("application/json") || contentType.includes("text/")) {
+    const text = raw.toString("utf8");
+    let data;
+    try { data = JSON.parse(text); } catch (_) { throw new Error(text.slice(0, 400) || "Guru API returned an empty response."); }
+    if (data.success === false || data.error) throw new Error(data.message || data.error || "Guru API request failed.");
+    const findUrl = (value, depth = 0) => {
+      if (!value || depth > 5) return null;
+      if (typeof value === "string" && /^https?:\\/\\//i.test(value)) return value;
+      if (Array.isArray(value)) { for (const item of value) { const found = findUrl(item, depth + 1); if (found) return found; } }
+      if (typeof value === "object") {
+        for (const key of ["download_url", "downloadUrl", "url", "link", "file", "result", "data", "output"]) {
+          const found = findUrl(value[key], depth + 1); if (found) return found;
+        }
+      }
+      return null;
+    };
+    const url = findUrl(data);
+    if (!url) throw new Error(data.message || "Guru API response did not contain a downloadable file URL.");
+    const fileResponse = await require("axios").get(url, { responseType: "arraybuffer", timeout: 120000, maxContentLength: Infinity });
+    return Buffer.from(fileResponse.data);
+  }
+  if (!raw.length) throw new Error("Guru API returned an empty file.");
+  return raw;
+}
+
+async function sendGuruMedia(from, Prince, conText, action, kind) {
+  const { q, mek, reply, react, botFooter } = conText;
+  if (!q) { await react("❌"); return reply("Please provide a " + (kind === "image" ? "website URL" : "YouTube URL") + "."); }
+  if (kind === "image" && !/^https?:\\/\\//i.test(q.trim())) {
+    await react("❌"); return reply("Please provide a valid website URL starting with https:// or http://.");
+  }
+  try {
+    await react("⏳");
+    const buffer = await guruRequest(action, kind === "image" ? { url: q.trim() } : { url: q.trim() });
+    if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("The API did not return a valid file.");
+    if (kind === "audio") {
+      await Prince.sendMessage(from, { audio: buffer, mimetype: "audio/mpeg", fileName: "guru-audio.mp3", ptt: false, caption: botFooter ? String(botFooter) : "" }, { quoted: mek });
+    } else if (kind === "video") {
+      await Prince.sendMessage(from, { video: buffer, mimetype: "video/mp4", caption: "Downloaded via Guru API." }, { quoted: mek });
+    } else {
+      await Prince.sendMessage(from, { image: buffer, mimetype: "image/png", caption: "Website screenshot" }, { quoted: mek });
+    }
+    await react("✅");
+  } catch (error) {
+    console.error("Guru API " + action + " failed:", error.message);
+    await react("❌");
+    await reply("Guru API failed: " + error.message);
+  }
+}
+
+gmd({ pattern: "guru-mp3", aliases: ["gurump3"], category: "downloader", react: "🎵", description: "Download YouTube audio using Guru API" },
+  async (from, Prince, conText) => sendGuruMedia(from, Prince, conText, "yt-mp3", "audio"));
+
+gmd({ pattern: "guru-mp4", aliases: ["gurump4"], category: "downloader", react: "🎥", description: "Download YouTube video using Guru API" },
+  async (from, Prince, conText) => sendGuruMedia(from, Prince, conText, "yt-mp4", "video"));
+
+gmd({ pattern: "screenshot", aliases: ["webshot", "ssweb"], category: "downloader", react: "📸", description: "Capture a website screenshot using Guru API" },
+  async (from, Prince, conText) => sendGuruMedia(from, Prince, conText, "screenshot-web", "image"));
