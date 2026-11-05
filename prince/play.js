@@ -1,5 +1,11 @@
 const { gmd, getContextInfo } = require("../mayel");
 
+const HTTP_URL_RE = new RegExp("^https?:\\/\\/", "i");
+const YOUTUBE_ID_RE = new RegExp("(?:youtu\\.be\\/|v=|\\/shorts\\/|\\/embed\\/|\\/live\\/)([\\w-]{11})");
+const FFMPEG_ERROR_RE = new RegExp("ffmpeg|spawn .*ENOENT|audio converter", "i");
+const NO_VERIFIED_MATCH_RE = new RegExp("no_verified_match", "i");
+const SAFE_FILENAME_RE = new RegExp("[^\\w\\s.-]", "gi");
+
 
 function getDownloadUrl(payload) {
   const candidates = [
@@ -12,7 +18,7 @@ function getDownloadUrl(payload) {
     payload?.result?.url,
     payload?.result?.url_dl,
   ];
-  return candidates.find((url) => typeof url === "string" && /^https?:\/\//i.test(url));
+  return candidates.find((url) => typeof url === "string" && HTTP_URL_RE.test(url));
 }
 
 const yts = require("yt-search");
@@ -32,7 +38,7 @@ function normalizeVideo(v) {
 }
 
 function extractVideoId(text) {
-  const m = String(text || "").match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
+  const m = String(text || "").match(YOUTUBE_ID_RE);
   return m ? m[1] : null;
 }
 
@@ -230,7 +236,7 @@ gmd({
     }
 
     try {
-      const isDirectUrl = /^https?:\/\//i.test(q);
+      const isDirectUrl = HTTP_URL_RE.test(q);
       // Keep command response fast: do not block the search on serial
       // metadata/catalogue APIs. Search YouTube, then verified SoundCloud.
       const identity = null;
@@ -271,10 +277,10 @@ gmd({
           return await formatAudio(buffer);
         } catch (e) {
           console.log(`.play verified download failed: ${e.message}`);
-          if (/ffmpeg|spawn .*ENOENT|audio converter/i.test(e.message || "")) {
+          if (FFMPEG_ERROR_RE.test(e.message || "")) {
             throw new Error("The song was found, but the bot's audio converter is unavailable. Please contact the bot owner to install FFmpeg.");
           }
-          throw new Error(e.code === "no_verified_match" || /no_verified_match/i.test(e.message)
+          throw new Error(e.code === "no_verified_match" || NO_VERIFIED_MATCH_RE.test(e.message || "")
             ? "I couldn't verify a matching audio source for this song, so I did not send audio. Try adding the artist name."
             : "Failed to download this song right now. Please try again in a moment.");
         }
@@ -325,7 +331,7 @@ ${providerLine}
               await Prince.sendMessage(from, {
                 audio: convertedBuffer,
                 mimetype: "audio/mpeg",
-                fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
+                fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(SAFE_FILENAME_RE, ''),
                 caption: `${firstVideo.name}${jamendoTrack?.licenseUrl ? `\nLicense: ${jamendoTrack.licenseUrl}` : ""}`,
                 externalAdReply: {
                    title: `${firstVideo.name || firstVideo.title || "audio"}.mp3`,
@@ -344,7 +350,7 @@ ${providerLine}
               await Prince.sendMessage(from, {
                 document: convertedBuffer,
                 mimetype: "audio/mpeg",
-                 fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(/[^\w\s.-]/gi, ''),
+                 fileName: `${firstVideo.name || firstVideo.title || "audio"}.mp3`.replace(SAFE_FILENAME_RE, ''),
                  caption: `${firstVideo.name || firstVideo.title || "Audio"}${jamendoTrack?.licenseUrl ? `\nLicense: ${jamendoTrack.licenseUrl}` : ""}`,
               }, { quoted: messageData });
               Prince.ev.off("messages.upsert", handleResponse);
@@ -476,7 +482,7 @@ gmd({
                 video: convertedBuffer,
                 mimetype: "video/mp4",
                 pvt: true,
-                 fileName: `${firstVideo.name || firstVideo.title || "video"}.mp4`.replace(/[^\w\s.-]/gi, ''),
+                 fileName: `${firstVideo.name || firstVideo.title || "video"}.mp4`.replace(SAFE_FILENAME_RE, ''),
                  caption: `🎥 ${firstVideo.name || firstVideo.title || "Video"}`,
               }, { quoted: messageData });
               break;
@@ -485,7 +491,7 @@ gmd({
               await Prince.sendMessage(from, {
                 document: convertedBuffer,
                 mimetype: "video/mp4",
-                 fileName: `${firstVideo.name || firstVideo.title || "video"}.mp4`.replace(/[^\w\s.-]/gi, ''),
+                 fileName: `${firstVideo.name || firstVideo.title || "video"}.mp4`.replace(SAFE_FILENAME_RE, ''),
                  caption: `📄 ${firstVideo.name || firstVideo.title || "Video"}`,
               }, { quoted: messageData });
               break;
@@ -551,7 +557,7 @@ async function guruRequest(action, payload) {
     if (data.success === false || data.error) throw new Error(data.message || data.error || "Guru API request failed.");
     const findUrl = (value, depth = 0) => {
       if (!value || depth > 5) return null;
-      if (typeof value === "string" && /^https?:\\/\\//i.test(value)) return value;
+      if (typeof value === "string" && HTTP_URL_RE.test(value)) return value;
       if (Array.isArray(value)) { for (const item of value) { const found = findUrl(item, depth + 1); if (found) return found; } }
       if (typeof value === "object") {
         for (const key of ["download_url", "downloadUrl", "url", "link", "file", "result", "data", "output"]) {
@@ -572,7 +578,7 @@ async function guruRequest(action, payload) {
 async function sendGuruMedia(from, Prince, conText, action, kind) {
   const { q, mek, reply, react, botFooter } = conText;
   if (!q) { await react("❌"); return reply("Please provide a " + (kind === "image" ? "website URL" : "YouTube URL") + "."); }
-  if (kind === "image" && !/^https?:\\/\\//i.test(q.trim())) {
+  if (kind === "image" && !HTTP_URL_RE.test(q.trim())) {
     await react("❌"); return reply("Please provide a valid website URL starting with https:// or http://.");
   }
   try {
