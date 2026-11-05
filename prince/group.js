@@ -959,7 +959,7 @@ gmd(
     aliases: ["terminategc", "destroygc", "nukegc"],
     react: "💀",
     category: "group",
-    description: "Terminate group - removes all members and bot leaves.",
+    description: "Terminate group - removes members while the bot stays.",
   },
   async (from, Prince, conText) => {
     const {
@@ -993,7 +993,7 @@ gmd(
       killGcConfirmations.set(confirmationKey, { step: 1, expiresAt: now + KILLGC_CONFIRM_TTL });
       await react("⚠️");
       return reply(
-        "⚠️ *Confirmation 1 of 2 required.*\n\nThis will remove members and make the bot leave this group.\n\nReply with *.killgc confirm* to continue, or ignore this message to cancel."
+        "⚠️ *Confirmation 1 of 2 required.*\n\nThis will remove members while the bot stays in this group.\n\nReply with *.killgc confirm* to continue, or ignore this message to cancel."
       );
     }
 
@@ -1017,7 +1017,7 @@ gmd(
       await Prince.sendMessage(
         from,
         {
-          text: `💀 *Group termination confirmed.*\n\n_All members will be removed and the bot will leave this group._\n\n⚠️ _Using this command frequently might lead to WhatsApp bans._`,
+          text: `💀 *Group termination confirmed.*\n\n_All removable members will be removed. The bot will remain in this group._\n\n⚠️ _Using this command frequently might lead to WhatsApp bans._`,
           contextInfo: getContextInfo(sender, newsletterJid, botName),
         },
         { quoted: mek },
@@ -1037,7 +1037,7 @@ gmd(
         await Prince.groupParticipantsUpdate(from, membersToRemove, "remove");
       }
 
-      await Prince.groupLeave(from);
+      await reply("✅ Group cleanup completed. The bot remains in this group.");
     } catch (error) {
       await react("❌");
       await reply(`❌ Failed to terminate group: ${error.message}`);
