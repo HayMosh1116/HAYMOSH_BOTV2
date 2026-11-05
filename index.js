@@ -700,9 +700,8 @@ async function startPrince() {
                     try {
                         require(path.join(pluginsPath, fileName));
                     } catch (e) {
-                        console.error(
-                            `❌ Failed to load ${fileName}: ${e.message}`,
-                        );
+                        console.error(`❌ Failed to load plugin ${fileName}`);
+                        console.error(e && e.stack ? e.stack : e);
                     }
                 }
             });
