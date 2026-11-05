@@ -97,6 +97,12 @@ function formatUptime(secs) {
     return parts.join(', ');
 }
 
+// ─── tiny superscript command counts ──────────────────────────────────────────
+function toTinyNumber(value) {
+  const map = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹' };
+  return String(value).split('').map(char => map[char] || char).join('');
+}
+
 // ─── .menu ────────────────────────────────────────────────────────────────────
 gmd({
   pattern: "menu",
@@ -124,7 +130,7 @@ gmd({
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
     const count = categorized[cat]?.length || 0;
-    return `_┃➠_ ${String(i + 1).padStart(2, '0')}. ${emoji}  *${label}*  ·  ${count} cmds`;
+    return `_┃➠_ ${String(i + 1).padStart(2, '0')}. ${emoji}  *${label}*  _·  ${toTinyNumber(count)} ᶜᵐᵈˢ_`;
   }).join('\n');
 
   const caption =
@@ -145,7 +151,7 @@ gmd({
     `_┃➠_ Reply *0* to close the menu\n` +
     `_┃➠_ *${botPrefix}allmenu* · Full directory\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n` +
-    `> _ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖_`;
+    `> _𝑷𝒐𝒘𝒆𝒓𝒆𝒅 𝒃𝒚 ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩_`;
 
   const menuMsg = await Prince.sendMessage(from, {
     image: { url: botPic },
@@ -249,7 +255,7 @@ gmd({
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
     `Every command, neatly arranged by category.\n` +
     `Use *${botPrefix}command* to run any command.\n` +
-    `> _ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖_`;
+    `> _𝑷𝒐𝒘𝒆𝒓𝒆𝒅 𝒃𝒚 ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩_`;
 
   await Prince.sendMessage(from, {
     image: { url: botPic },
