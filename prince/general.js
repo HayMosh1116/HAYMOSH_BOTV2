@@ -245,15 +245,17 @@ gmd({
   }).format(new Date());
 
   const intro =
-    `╭━━━━━━━━〔👾*HAYWHY MDX*〕━━━━━━━━╮\n` +
-    `┃          ⚡ *THE COMPLETE INDEX*\n` +
-    `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
-    `_┃➠_ 📚 Total commands  : *${totalCmds}*\n` +
-    `_┃➠_ 🗂️ Command sections: *${catNames.length}*\n` +
-    `_┃➠_ 🔑 Command prefix  : *${botPrefix}*\n` +
-    `_┃➠_ 📅 Directory date  : *${date}*\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-    `Every command, neatly arranged by category.\n` +
+    `╭━━━〔 👾 *H A Y W H Y  M D X* 〕━━━╮\n` +
+    `┃       ⚡ *COMPLETE COMMAND CENTRE* ⚡\n` +
+    `┣━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
+    `_┃➠_ 👑 Developer : *${(conText.config?.OWNER_NAME || botName || 'DEV-HAYWHY').trim()}*\n` +
+    `_┃➠_ ⚙️ Prefix    : *${botPrefix}*\n` +
+    `_┃➠_ 📚 Commands  : *${totalCmds}*\n` +
+    `_┃➠_ 🗂️ Sections  : *${catNames.length}*\n` +
+    `_┃➠_ 📅 Date      : *${date}*\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `       ✦ *FULL COMMAND DIRECTORY* ✦\n` +
+    `Every command, arranged by category.\n` +
     `Use *${botPrefix}command* to run any command.\n` +
     `> _𝑷𝒐𝒘𝒆𝒓𝒆𝒅 𝒃𝒚 ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩_`;
 
@@ -272,7 +274,7 @@ gmd({
       `_┃➠_ ${String(i + 1).padStart(2, '0')}. ${smallCaps(cmd)}`
     ).join('\n');
     return `╭━━〔 ${emoji} *${label}* · ${String(index + 1).padStart(2, '0')} 〕━━╮\n` +
-      `_┃➠_ *${cmds.length} COMMANDS*\n` +
+      `_┃➠_ _· ${toTinyNumber(cmds.length)} ᶜᵐᵈˢ_\n` +
       `┣━━━━━━━━━━━━━━━━━━━━━━┫\n` +
       `${rows}\n` +
       `╰━━━━━━━━━━━━━━━━━━━━━━╯`;
@@ -294,8 +296,8 @@ gmd({
 
   for (let i = 0; i < pages.length; i++) {
     const footer = i === pages.length - 1
-      ? `\n\n╭━━〔 🧭 *END OF DIRECTORY* 〕━━╮\n_┃➠_ Run *${botPrefix}menu* for the\n_┃➠_ interactive command centre.\n╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n> _HAYWHY MDX · PAGE ${i + 1}/${pages.length}_ 💜`
-      : `\n\n> _HAYWHY MDX · PAGE ${i + 1}/${pages.length}_  ➜ NEXT PAGE`;
+      ? `\n\n╭━━〔 🧭 *END OF DIRECTORY* 〕━━╮\n_┃➠_ Run *${botPrefix}menu* for the\n_┃➠_ interactive command centre.\n╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n> _𝑷𝒐𝒘𝒆𝒓𝒆𝒅 𝒃𝒚 ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩_\n> _HAYWHY MDX · PAGE ${i + 1}/${pages.length}_ 💜`
+      : `\n\n> _HAYWHY MDX · PAGE ${i + 1}/${pages.length}_  ➜ _NEXT PAGE_`;
     await Prince.sendMessage(from, {
       text: pages[i] + footer,
       contextInfo: getContextInfo(null, newsletterJid, botName),
