@@ -22,7 +22,7 @@ function getDownloadUrl(payload) {
 }
 
 const yts = require("yt-search");
-const { downloadSongAudio, listSoundCloudMatches, prepareYtDlp, scoreMatch, MATCH_THRESHOLD } = require("../mayel/ytAudio");
+const { downloadSongAudio, downloadYouTubeAudio, getYouTubeTitle, listSoundCloudMatches, prepareYtDlp, scoreMatch, MATCH_THRESHOLD } = require("../mayel/ytAudio");
 const { resolveMusicIdentity, findJamendoTrack, downloadJamendoAudio } = require("../mayel/musicProviders");
 prepareYtDlp();
 
@@ -583,6 +583,24 @@ async function sendGuruMedia(from, Prince, conText, action, kind) {
   }
   try {
     await react("⏳");
+    // Keep guru-mp3 usable without a paid/secret Guru key. The existing
+    // downloader verifies the YouTube title before sending the audio.
+    if (action === "yt-mp3" && !String(process.env.GURU_API_KEY || "").trim()) {
+      const title = await getYouTubeTitle(q.trim());
+      const downloaded = await downloadYouTubeAudio(q.trim(), [title]);
+      const audio = typeof conText.formatAudio === "function"
+        ? await conText.formatAudio(downloaded.buffer)
+        : downloaded.buffer;
+      await Prince.sendMessage(from, {
+        audio,
+        mimetype: "audio/mpeg",
+        fileName: "youtube-audio.mp3",
+        ptt: false,
+        caption: botFooter ? String(botFooter) : "",
+      }, { quoted: mek });
+      await react("✅");
+      return;
+    }
     const buffer = await guruRequest(action, kind === "image" ? { url: q.trim() } : { url: q.trim() });
     if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("The API did not return a valid file.");
     if (kind === "audio") {

@@ -41,6 +41,10 @@
       "value": "public",
       "required": false
     },
+    "GURU_API_KEY": {
+      "description": "Optional Guru API key for guru-mp3, guru-mp4 and screenshot",
+      "required": false
+    },
     "MONGODB_URI": {
       "description": "MongoDB connection URI for the bot database",
       "required": false
