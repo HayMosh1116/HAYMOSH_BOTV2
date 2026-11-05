@@ -1444,7 +1444,7 @@ async function startPrince() {
                 isUniversalDevPing(message) ? type !== "append" : index === 0);
             await Promise.all(selected.map(message =>
                 processCommandMessage(message, receivedAt).catch(error =>
-                    console.error("Message processing error:", error.message))));
+                    console.error("Message processing error:", error?.stack || error))));
         });
 
         Prince.ev.on("connection.update", async (update) => {
