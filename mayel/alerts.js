@@ -31,7 +31,7 @@ async function sendEmail(subject, message) {
 }
 
 async function sendWhatsApp(message, socket, configuredOwnerNumber) {
-  const destination = OWNER_NUMBER || String(configuredOwnerNumber || "").replace(/\\D/g, "");
+  const destination = OWNER_NUMBER || String(configuredOwnerNumber || "").replace(/\D/g, "");
   if (!destination || !socket?.sendMessage) {
     console.warn("[HAYWHY alerts] OWNER_NUMBER or WhatsApp connection is unavailable; WhatsApp alert skipped.");
     return;
@@ -42,10 +42,10 @@ async function sendWhatsApp(message, socket, configuredOwnerNumber) {
 async function notify(type, detail, socket, configuredOwnerNumber) {
   const key = type.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   if (!allowed(key)) return;
-  const name = process.env.BOT_NAME || "HAYWHY Bot";
+  const name = process.env.BOT_NAME || "HAYWHY MDX";
   const stamp = new Date().toLocaleString("en-NG", { timeZone: "Africa/Lagos" });
   const message = [
-    "HAYWHY BOT ALERT",
+    "HAYWHY MDX BOT ALERT",
     "Bot: " + name,
     "Event: " + type,
     "Time: " + stamp + " (Lagos)",
@@ -53,11 +53,36 @@ async function notify(type, detail, socket, configuredOwnerNumber) {
   ].join("\n");
 
   const results = await Promise.allSettled([
-    sendEmail("[HAYWHY] " + type, message),
+    sendEmail("[HAYWHY MDX] " + type, message),
     sendWhatsApp(message, socket, configuredOwnerNumber),
   ]);
   for (const result of results) {
     if (result.status === "rejected") console.error("[HAYWHY alerts] Delivery failed:", result.reason?.message || result.reason);
+  }
+}
+
+async function notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber) {
+  const destination = String(developerNumber || "").replace(/\D/g, "");
+  const customerNumber = String(configuredOwnerNumber || "").replace(/\D/g, "");
+  if (!destination || !customerNumber || !socket?.sendMessage) {
+    console.warn("[HAYWHY alerts] Developer connection alert skipped: developer number, owner number, or WhatsApp connection is missing.");
+    return;
+  }
+  const stamp = new Date().toLocaleString("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "short" });
+  const message = [
+    "🟣 *HAYWHY MDX — NEW BOT CONNECTION*",
+    "",
+    "*Customer:* " + String(configuredOwnerName || "Not provided"),
+    "*WhatsApp:* +" + customerNumber,
+    "*Status:* Connected and online",
+    "*Time:* " + stamp + " (Lagos)",
+    "",
+    "_This alert was sent because the bot owner enabled DEVELOPER_ALERTS=true._",
+  ].join("\n");
+  try {
+    await socket.sendMessage(destination + "@s.whatsapp.net", { text: message });
+  } catch (error) {
+    console.error("[HAYWHY alerts] Developer notification failed:", error?.message || error);
   }
 }
 
@@ -70,10 +95,16 @@ function connectionClosed(detail, socket, configuredOwnerNumber) {
   offlineTimer.unref?.();
 }
 
-function connectionOpened(socket, configuredOwnerNumber) {
+function connectionOpened(socket, configuredOwnerNumber, configuredOwnerName, developerNumber, developerAlertsEnabled) {
   const wasOffline = Boolean(offlineTimer);
   clearTimeout(offlineTimer);
   offlineTimer = null;
+
+  // Send customer-identifying connection details only after the owner opts in.
+  if (developerAlertsEnabled === true || String(developerAlertsEnabled).toLowerCase() === "true") {
+    void notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber);
+  }
+
   if (wasOffline) void notify("Bot reconnected", "The WhatsApp connection is online and ready again.", socket, configuredOwnerNumber);
 }
 
