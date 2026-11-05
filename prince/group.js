@@ -986,28 +986,51 @@ gmd(
     const now = Date.now();
     const pending = killGcConfirmations.get(confirmationKey);
     if (pending && pending.expiresAt <= now) killGcConfirmations.delete(confirmationKey);
+
     const confirmation = killGcConfirmations.get(confirmationKey);
     const response = String(conText.args?.[0] || "").trim().toLowerCase();
 
+    // Anyone who starts the flow must explicitly choose 1 to proceed.
+    // Choosing 2 cancels at either stage; unrelated input never advances it.
     if (!confirmation) {
-      killGcConfirmations.set(confirmationKey, { step: 1, expiresAt: now + KILLGC_CONFIRM_TTL });
+      killGcConfirmations.set(confirmationKey, {
+        step: 1,
+        expiresAt: now + KILLGC_CONFIRM_TTL,
+      });
       await react("⚠️");
       return reply(
-        "⚠️ *Confirmation 1 of 2 required.*\n\nThis will remove members while the bot stays in this group.\n\nReply with *.killgc confirm* to continue, or ignore this message to cancel."
+        "⚠️ *GROUP TERMINATION — CONFIRMATION 1/2*\n\nThis will remove the other removable members from this group while the bot stays.\n\nReply with *.killgc 1* to proceed.\nReply with *.killgc 2* to cancel.\n\n_This confirmation expires in 60 seconds._"
       );
     }
 
-    if (response !== "confirm") {
+    if (response === "2" || response === "cancel") {
       killGcConfirmations.delete(confirmationKey);
-      await react("❌");
-      return reply("❌ Group termination cancelled. No members were removed.");
+      await react("❎");
+      return reply("❎ *Cancelled.* No group members were removed.");
     }
 
     if (confirmation.step === 1) {
-      killGcConfirmations.set(confirmationKey, { step: 2, expiresAt: now + KILLGC_CONFIRM_TTL });
+      if (response !== "1") {
+        await react("⚠️");
+        return reply(
+          "⚠️ Please choose one option:\n\n*.killgc 1* — proceed to the final confirmation.\n*.killgc 2* — cancel.\n\n_No action has been taken._"
+        );
+      }
+
+      killGcConfirmations.set(confirmationKey, {
+        step: 2,
+        expiresAt: now + KILLGC_CONFIRM_TTL,
+      });
       await react("⚠️");
       return reply(
-        "⚠️ *Final confirmation 2 of 2.*\n\nThis action cannot be undone. Reply with *.killgc confirm* again to permanently terminate this group."
+        "🚨 *FINAL CONFIRMATION — 2/2*\n\nYou are about to remove the other removable members from this group. This cannot be undone automatically.\n\nTo confirm, type exactly: *.killgc DELETE*\nTo cancel, type: *.killgc 2*\n\n_The final confirmation expires in 60 seconds._"
+      );
+    }
+
+    if (response !== "delete") {
+      await react("⚠️");
+      return reply(
+        "🚨 Final confirmation is still pending.\n\nType exactly *.killgc DELETE* to execute, or *.killgc 2* to cancel.\n\n_No action has been taken._"
       );
     }
 
