@@ -261,7 +261,7 @@ gmd(
         `N:${safeName};;;;`,
         `TEL;TYPE=CELL;TYPE=VOICE;waid=${number}:${number}`,
         "END:VCARD",
-      ].join("\\r\\n");
+      ].join("\r\n");
 
       await Prince.sendMessage(
         from,
