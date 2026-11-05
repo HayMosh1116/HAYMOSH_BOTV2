@@ -205,7 +205,7 @@ gmd({
       `┃ Example: *${botPrefix}${cmds[0] || 'ping'}*\n` +
       `┃ Reply *0* to close this menu\n` +
       `╰━━━━━━━━━━━━━━━━━━━━━━╯\n` +
-      `> *HAYWHY MDX · COMMAND CENTRE* 😎`;
+      `> _HAYWHY MDX · COMMAND CENTRE_ 😎`;
 
     await Prince.sendMessage(from, {
       text: submenu,
