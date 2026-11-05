@@ -414,9 +414,9 @@ async function handlePlainReveal(Prince, ms) {
     }
     if (!_voCache.has(quotedKey) && !fallback) return;
     const type = (_voCache.get(quotedKey) || fallback).type;
-    if (type !== "imageMessage" && type !== "videoMessage") return;
+    if (type !== "imageMessage" && type !== "videoMessage" && type !== "audioMessage") return;
 
-    const label = type === "imageMessage" ? "Image" : "Video";
+    const label = type === "imageMessage" ? "Image" : type === "videoMessage" ? "Video" : "Audio";
     const content = await getViewOnceContent(
         Prince, quotedKey, fallback,
         `🔓 *View Once ${label} Revealed*\n\n_Requested with ${text}_`,
