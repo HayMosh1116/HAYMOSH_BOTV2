@@ -207,6 +207,83 @@ function participantPhone(participant) {
 
 gmd(
   {
+    pattern: "savecontact",
+    aliases: ["savecontactcard"],
+    react: "📇",
+    category: "general",
+    description: "Create a contact card from a replied-to WhatsApp message",
+  },
+  async (from, Prince, conText) => {
+    const { reply, react, mek, quotedUser, groupInfo } = conText;
+
+    if (!quotedUser) {
+      await react("❌");
+      return reply(
+        "📇 *SAVE CONTACT*\n\nReply directly to the person's message with *.savecontact* to create their contact card.\n\nWorks in private chats and groups."
+      );
+    }
+
+    try {
+      const targetJid = String(quotedUser).trim();
+      const participants = groupInfo?.participants || [];
+      const participant = participants.find((p) =>
+        [p?.id, p?.pn, p?.phoneNumber, p?.jid, p?.lid]
+          .filter(Boolean)
+          .some((value) => {
+            const candidate = String(value).split("@")[0].split(":")[0];
+            const target = targetJid.split("@")[0].split(":")[0];
+            return candidate === target;
+          })
+      );
+
+      const number = participant
+        ? participantPhone(participant)
+        : participantPhone({ pn: targetJid, phoneNumber: targetJid, jid: targetJid });
+
+      if (!number) {
+        await react("❌");
+        return reply(
+          "❌ I couldn't retrieve a phone number for that message. Ask the person to message you directly, then try again."
+        );
+      }
+
+      const displayName = String(
+        participant?.notify ||
+        participant?.name ||
+        participant?.verifiedName ||
+        number
+      ).trim();
+      const safeName = escapeVCard(displayName);
+      const vcard = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        `FN:${safeName}`,
+        `N:${safeName};;;;`,
+        `TEL;TYPE=CELL;TYPE=VOICE;waid=${number}:${number}`,
+        "END:VCARD",
+      ].join("\\r\\n");
+
+      await Prince.sendMessage(
+        from,
+        {
+          contacts: {
+            displayName,
+            contacts: [{ vcard }],
+          },
+        },
+        { quoted: mek }
+      );
+      await react("✅");
+    } catch (error) {
+      console.error("Save contact error:", error);
+      await react("❌");
+      return reply("❌ Failed to create the contact card. Please try again.");
+    }
+  }
+);
+
+gmd(
+  {
     pattern: "vcf",
     aliases: ["groupvcf", "gcvcf", "groupcontacts"],
     react: "📇",
