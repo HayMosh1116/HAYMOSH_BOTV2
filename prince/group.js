@@ -5,6 +5,11 @@ function isProtectedDeveloper(p) {
   return !!owner && [p?.id, p?.pn, p?.phoneNumber, p?.jid].some(v => String(v || "").split("@")[0].split(":")[0].replace(/\D/g, "") === owner);
 }
 
+// Destructive group termination requires two fresh confirmations after the
+// initial command. Keys include both group and sender to isolate sessions.
+const killGcConfirmations = new Map();
+const KILLGC_CONFIRM_TTL = 60 * 1000;
+
 gmd(
   {
     pattern: "unmute",
@@ -977,11 +982,42 @@ gmd(
     if (!isAdmin && !isSuperAdmin)
       return reply("❌ You must be an admin to use this command!");
 
+    const confirmationKey = `${from}:${sender}`;
+    const now = Date.now();
+    const pending = killGcConfirmations.get(confirmationKey);
+    if (pending && pending.expiresAt <= now) killGcConfirmations.delete(confirmationKey);
+    const confirmation = killGcConfirmations.get(confirmationKey);
+    const response = String(conText.args?.[0] || "").trim().toLowerCase();
+
+    if (!confirmation) {
+      killGcConfirmations.set(confirmationKey, { step: 1, expiresAt: now + KILLGC_CONFIRM_TTL });
+      await react("⚠️");
+      return reply(
+        "⚠️ *Confirmation 1 of 2 required.*\n\nThis will remove members and make the bot leave this group.\n\nReply with *.killgc confirm* to continue, or ignore this message to cancel."
+      );
+    }
+
+    if (response !== "confirm") {
+      killGcConfirmations.delete(confirmationKey);
+      await react("❌");
+      return reply("❌ Group termination cancelled. No members were removed.");
+    }
+
+    if (confirmation.step === 1) {
+      killGcConfirmations.set(confirmationKey, { step: 2, expiresAt: now + KILLGC_CONFIRM_TTL });
+      await react("⚠️");
+      return reply(
+        "⚠️ *Final confirmation 2 of 2.*\n\nThis action cannot be undone. Reply with *.killgc confirm* again to permanently terminate this group."
+      );
+    }
+
+    killGcConfirmations.delete(confirmationKey);
+
     try {
       await Prince.sendMessage(
         from,
         {
-          text: `⚠️ *WARNING* ⚠️\n\n💀 *Group will be terminated now...*\n\n_All members will be removed._\n\n⚠️ _Using this command frequently might lead to WhatsApp bans._`,
+          text: `💀 *Group termination confirmed.*\n\n_All members will be removed and the bot will leave this group._\n\n⚠️ _Using this command frequently might lead to WhatsApp bans._`,
           contextInfo: getContextInfo(sender, newsletterJid, botName),
         },
         { quoted: mek },
