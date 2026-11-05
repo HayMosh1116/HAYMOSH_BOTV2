@@ -367,12 +367,12 @@ gmd(
 
     try {
       let track = null;
-      let providerError = null;
+
 
       // Try the configured PrinceTech lyrics service first.
       try {
         const response = await axios.get(
-          `${String(PrinceTechApi || "").replace(/\\/+$/, "")}/api/search/lyricsv2`,
+          `${String(PrinceTechApi || "").replace(/\/+$/, "")}/api/search/lyricsv2`,
           {
             params: { apikey: PrinceApiKey, query: q.trim() },
             timeout: 15000,
@@ -388,7 +388,7 @@ gmd(
           };
         }
       } catch (error) {
-        providerError = error;
+
         console.warn("PrinceTech lyrics provider failed; trying LRCLIB:", error.message);
       }
 
@@ -412,7 +412,7 @@ gmd(
         if (match) {
           const rawLyrics = match.plainLyrics || match.syncedLyrics || "";
           const cleanLyrics = rawLyrics
-            .replace(/^\\s*\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,3})?\\]\\s?/gm, "")
+            .replace(/^\s*\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]\s?/gm, "")
             .trim();
 
           if (cleanLyrics) {
