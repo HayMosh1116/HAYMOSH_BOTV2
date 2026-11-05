@@ -3,7 +3,7 @@
   "description": "Prince MDX - Multi-Device WhatsApp Bot",
   "logo": "https://raw.githubusercontent.com/Mayelprince/url/main/menun.jpg",
   "keywords": ["whatsapp", "bot", "prince-md", "baileys", "multi-device"],
-  "repository": "https://github.com/Mayelprince/PRINCE-MDXI",
+  "repository": "https://github.com/HayMosh1116/HAYMOSH_BOTV2",
   "stack": "heroku-22",
   "buildpacks": [
     {
