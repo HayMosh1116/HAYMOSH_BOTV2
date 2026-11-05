@@ -137,14 +137,14 @@ gmd({
     `╭━━━〔 👾 *H A Y W H Y  M D X* 〕━━━╮\n` +
     `┃       ⚡ *COMMAND CENTRE* ⚡\n` +
     `┣━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
-    `_┃➠_ 👑 Developer : *${ownerName}*\n` +
+    `_┃➠_ 👑 Owner : *${ownerName}*\n` +
     `_┃➠_ ⚙️ Prefix    : *${botPrefix}*\n` +
     `_┃➠_ 📚 Commands  : *${totalCmds}*\n` +
     `_┃➠_ 🗂️ Sections  : *${catNames.length}*\n` +
     `_┃➠_ 🟢 Uptime    : ${uptime}\n` +
     `_┃➠_ 🕒 ${time}  ·  📅 ${date}\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-    `       ✦ *EXPLORE COMMANDS* ✦\n` +
+    `  ✦*EXPLORE COMMANDS*✦\n` +
     `${categoryRows}\n\n` +
     `╭━━〔 🎮 *MENU CONTROLS* 〕━━╮\n` +
     `_┃➠_ Reply with a section number\n` +
@@ -245,7 +245,7 @@ gmd({
   }).format(new Date());
 
   const intro =
-    `╭━━━━━━━━〔 👾 *HAYWHY MDX* 〕━━━━━━━━╮\n` +
+    `╭━━━━━━━━〔👾*HAYWHY MDX*〕━━━━━━━━╮\n` +
     `┃          ⚡ *THE COMPLETE INDEX*\n` +
     `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
     `_┃➠_ 📚 Total commands  : *${totalCmds}*\n` +
