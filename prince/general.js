@@ -178,7 +178,7 @@ gmd({
       return;
     }
 
-    if (!/^\\d+$/.test(choice)) return;
+    if (!/^\d+$/.test(choice)) return;
     const idx = Number(choice) - 1;
     if (idx < 0 || idx >= catNames.length) {
       await Prince.sendMessage(from, {
