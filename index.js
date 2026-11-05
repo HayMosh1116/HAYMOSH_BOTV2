@@ -1462,7 +1462,7 @@ async function startPrince() {
             if (connection === "open") {
                 heartbeatConnection = "Connected";
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
-                botAlerts.connectionOpened(Prince, ownerNumber);
+                botAlerts.connectionOpened(Prince, ownerNumber, ownerName, config.DEVELOPER_NUMBER, config.DEVELOPER_ALERTS);
             }
             if (connection === "close") {
                 heartbeatConnection = "Disconnected";
@@ -1496,20 +1496,31 @@ async function startPrince() {
                                 ).toLowerCase() === "public"
                                     ? "public"
                                     : "private";
+                            const connectedAt = new Date().toLocaleString("en-NG", {
+                                timeZone: "Africa/Lagos",
+                                dateStyle: "full",
+                                timeStyle: "short",
+                            });
                             const connectionMsg = `
-*${getSetting("BOT_NAME", botName)} 𝐂𝐎𝐍𝐍𝐄𝐂𝐓𝐄𝐃*
+🟣 *HAYWHY MDX — ONLINE*
 
-𝐏𝐫𝐞𝐟𝐢𝐱       : *[ ${getSetting("PREFIX", botPrefix)} ]*
-𝐏𝐥𝐮𝐠𝐢𝐧𝐬      : *${totalCommands.toString()}*
-𝐌𝐨𝐝𝐞        : *${md}*
-𝐎𝐰𝐧𝐞𝐫       : *${ownerNumber}*
-𝐓𝐮𝐭𝐨𝐫𝐢𝐚𝐥𝐬     : *${config.YT}*
-𝐔𝐩𝐝𝐚𝐭𝐞𝐬      : *${newsletterUrl}*
+*Status:* Connected and ready
+*Date & Time:* ${connectedAt} (Lagos)
+*Prefix:* [ ${getSetting("PREFIX", botPrefix)} ]
+*Total Commands:* ${totalCommands}
+*Language:* English
+*Mode:* ${md}
+*Owner:* ${ownerName || "Not set"}
+
+*Tutorials:* ${config.YT}
+*Updates:* ${newsletterUrl}
 
 > *${botFooter}*`;
 
-                            await Prince.sendMessage(
-                                Prince.user.id,
+                            const ownerJid = String(ownerNumber || "").replace(/\\D/g, "") + "@s.whatsapp.net";
+                            if (String(ownerNumber || "").replace(/\\D/g, "")) {
+                                await Prince.sendMessage(
+                                    ownerJid,
                                 {
                                     text: connectionMsg,
                                     ...createContext(
