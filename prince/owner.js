@@ -483,8 +483,23 @@ gmd({
 
   const quotedSenderNumber = String(resolvedQuotedSender || "")
     .split("@")[0].split(":")[0].replace(/\D/g, "");
-  if (protectedDeveloperNumbers.has(quotedSenderNumber)) {
-    return reply("🛡️ *Protected message:* HAYWHY developer messages cannot be deleted with .del.");
+
+  // Let the protected developer delete their own messages, while keeping
+  // their messages protected from deletion by everyone else.
+  let commandSender = conText.sender || "";
+  if (commandSender && String(commandSender).endsWith("@lid")) {
+    try {
+      commandSender = await Prince.getJidFromLid(commandSender) || commandSender;
+    } catch (error) {
+      console.error("[.del] Could not resolve command sender LID:", error.message);
+    }
+  }
+  const commandSenderNumber = String(commandSender)
+    .split("@")[0].split(":")[0].replace(/\D/g, "");
+
+  if (protectedDeveloperNumbers.has(quotedSenderNumber) &&
+      commandSenderNumber !== quotedSenderNumber) {
+    return reply("🛡️ *Protected message:* Only the message owner (HAYWHY developer) can delete this message.");
   }
 
   try {
