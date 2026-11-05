@@ -123,8 +123,7 @@ gmd({
   const categoryRows = catNames.map((cat, i) => {
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
-    const count = (categorized[cat] || []).length;
-    return `┃ ${String(i + 1).padStart(2, '0')}  ${emoji}  *${label}*  ·  ${count} cmds`;
+    return `┃ ${String(i + 1).padStart(2, '0')}  ${emoji}  *${label}*`;
   }).join('\n');
 
   const caption =
@@ -173,7 +172,7 @@ gmd({
       return;
     }
 
-    if (!/^\\d+$/.test(choice)) return;
+    if (!/^\d+$/.test(choice)) return;
     const idx = Number(choice) - 1;
     if (idx < 0 || idx >= catNames.length) {
       await Prince.sendMessage(from, {
