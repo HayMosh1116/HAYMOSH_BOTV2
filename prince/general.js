@@ -124,28 +124,28 @@ gmd({
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
     const count = categorized[cat]?.length || 0;
-    return `┃  ${String(i + 1).padStart(2, '0')}  ${emoji}  *${label}*  ·  ${count} cmds`;
+    return `_┃➠_ ${String(i + 1).padStart(2, '0')}. ${emoji}  *${label}*  ·  ${count} cmds`;
   }).join('\n');
 
   const caption =
     `╭━━━〔 👾 *H A Y W H Y  M D X* 〕━━━╮\n` +
     `┃       ⚡ *COMMAND CENTRE* ⚡\n` +
     `┣━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
-    `┃ 👑 Developer : *${ownerName}*\n` +
-    `┃ ⚙️ Prefix    : *${botPrefix}*\n` +
-    `┃ 📚 Commands  : *${totalCmds}*\n` +
-    `┃ 🗂️ Sections  : *${catNames.length}*\n` +
-    `┃ 🟢 Uptime    : ${uptime}\n` +
-    `┃ 🕒 ${time}  ·  📅 ${date}\n` +
+    `_┃➠_ 👑 Developer : *${ownerName}*\n` +
+    `_┃➠_ ⚙️ Prefix    : *${botPrefix}*\n` +
+    `_┃➠_ 📚 Commands  : *${totalCmds}*\n` +
+    `_┃➠_ 🗂️ Sections  : *${catNames.length}*\n` +
+    `_┃➠_ 🟢 Uptime    : ${uptime}\n` +
+    `_┃➠_ 🕒 ${time}  ·  📅 ${date}\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
     `       ✦ *EXPLORE COMMANDS* ✦\n` +
     `${categoryRows}\n\n` +
     `╭━━〔 🎮 *MENU CONTROLS* 〕━━╮\n` +
-    `┃ ↳ Reply with a section number\n` +
-    `┃ ↳ Reply *0* to close the menu\n` +
-    `┃ ↳ *${botPrefix}allmenu* · Full directory\n` +
+    `_┃➠_ Reply with a section number\n` +
+    `_┃➠_ Reply *0* to close the menu\n` +
+    `_┃➠_ *${botPrefix}allmenu* · Full directory\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n` +
-    `> *BUILT DIFFERENT. POWERED BY HAYWHY.* 😎`;
+    `> _ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖_`;
 
   const menuMsg = await Prince.sendMessage(from, {
     image: { url: botPic },
@@ -192,7 +192,7 @@ gmd({
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
     const commandRows = cmds.map((cmd, i) =>
-      `┃ ${String(i + 1).padStart(2, '0')}  ▸  ${smallCaps(cmd)}`
+      `_┃➠_ ${String(i + 1).padStart(2, '0')}. ${smallCaps(cmd)}`
     ).join('\n');
     const submenu =
       `╭━━━〔 ${emoji} *${label}* 〕━━━╮\n` +
@@ -242,14 +242,14 @@ gmd({
     `╭━━━━━━━━〔 👾 *HAYWHY MDX* 〕━━━━━━━━╮\n` +
     `┃          ⚡ *THE COMPLETE INDEX*\n` +
     `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
-    `┃ 📚 Total commands  : *${totalCmds}*\n` +
-    `┃ 🗂️ Command sections: *${catNames.length}*\n` +
-    `┃ 🔑 Command prefix  : *${botPrefix}*\n` +
-    `┃ 📅 Directory date  : *${date}*\n` +
+    `_┃➠_ 📚 Total commands  : *${totalCmds}*\n` +
+    `_┃➠_ 🗂️ Command sections: *${catNames.length}*\n` +
+    `_┃➠_ 🔑 Command prefix  : *${botPrefix}*\n` +
+    `_┃➠_ 📅 Directory date  : *${date}*\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
     `Every command, neatly arranged by category.\n` +
     `Use *${botPrefix}command* to run any command.\n` +
-    `> *ENGINEERED BY 👾 DEV-HAYWHY 🤖* 😎`;
+    `> _ᴘᴏᴡᴇʀᴇᴅ ʙʏ 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖_`;
 
   await Prince.sendMessage(from, {
     image: { url: botPic },
@@ -263,10 +263,10 @@ gmd({
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
     const rows = cmds.map((cmd, i) =>
-      `┃ ${String(i + 1).padStart(2, '0')}  ▸  ${smallCaps(cmd)}`
+      `_┃➠_ ${String(i + 1).padStart(2, '0')}. ${smallCaps(cmd)}`
     ).join('\n');
     return `╭━━〔 ${emoji} *${label}* · ${String(index + 1).padStart(2, '0')} 〕━━╮\n` +
-      `┃ *${cmds.length} COMMANDS*\n` +
+      `_┃➠_ *${cmds.length} COMMANDS*\n` +
       `┣━━━━━━━━━━━━━━━━━━━━━━┫\n` +
       `${rows}\n` +
       `╰━━━━━━━━━━━━━━━━━━━━━━╯`;
@@ -288,8 +288,8 @@ gmd({
 
   for (let i = 0; i < pages.length; i++) {
     const footer = i === pages.length - 1
-      ? `\n\n╭━━〔 🧭 *END OF DIRECTORY* 〕━━╮\n┃ Run *${botPrefix}menu* for the\n┃ interactive command centre.\n╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n> *HAYWHY MDX · PAGE ${i + 1}/${pages.length}* 💜`
-      : `\n\n> *HAYWHY MDX · PAGE ${i + 1}/${pages.length}*  ➜ NEXT PAGE`;
+      ? `\n\n╭━━〔 🧭 *END OF DIRECTORY* 〕━━╮\n_┃➠_ Run *${botPrefix}menu* for the\n_┃➠_ interactive command centre.\n╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n> _HAYWHY MDX · PAGE ${i + 1}/${pages.length}_ 💜`
+      : `\n\n> _HAYWHY MDX · PAGE ${i + 1}/${pages.length}_  ➜ NEXT PAGE`;
     await Prince.sendMessage(from, {
       text: pages[i] + footer,
       contextInfo: getContextInfo(null, newsletterJid, botName),
