@@ -2,6 +2,7 @@ const { gmd, commands, config, getContextInfo, uploadToImgBB, getSetting, setSet
 const fs = require("fs");
 const fsA = require('node:fs');
 const { S_WHATSAPP_NET, downloadMediaMessage } = require("prince-baileys");
+const mediaCache = require("../mayel/mediaCache");
 const Jimp = require("jimp");
 const path = require("path");
 const { exec, spawn } = require('node:child_process');
@@ -1859,76 +1860,86 @@ gmd({
 
 
 // Shared view-once reveal used by .vv / .wow / .vv2.
-// Handles viewOnceMessage, viewOnceMessageV2 (used for most videos),
-// viewOnceMessageV2Extension (voice notes) and inline viewOnce flags, then
-// downloads into memory and sends the media as a fresh, normal message.
+// Prefer the original-message cache because WhatsApp may strip mediaKey
+// from quoted view-once messages. Fall back only when the quoted key remains.
 async function revealViewOnce(Prince, conText, targets) {
-    const { mek, reply, quoted, react, botName, isSuperUser } = conText;
-    if (!quoted || (Array.isArray(quoted) && !quoted.length)) return reply(`Please reply to/quote a ViewOnce message`);
-    if (!isSuperUser) return reply(`Owner Only Command!`);
+    const { mek, reply, react, botName, isSuperUser } = conText;
+    if (!isSuperUser) return reply("❌ Owner Only Command!");
 
-    let inner = quoted;
-    for (let i = 0; i < 5; i++) {
-        const next = inner?.ephemeralMessage?.message || inner?.viewOnceMessage?.message ||
-            inner?.viewOnceMessageV2?.message || inner?.viewOnceMessageV2Extension?.message;
-        if (!next) break;
-        inner = next;
+    const ctx =
+        mek.message?.extendedTextMessage?.contextInfo ||
+        mek.message?.imageMessage?.contextInfo ||
+        mek.message?.videoMessage?.contextInfo ||
+        mek.message?.audioMessage?.contextInfo ||
+        {};
+    const quotedId = ctx.stanzaId;
+    if (!quotedId || !ctx.quotedMessage) {
+        return reply("❌ Please reply directly to a View Once image, video, or audio message.");
     }
-    const mediaType = ["imageMessage", "videoMessage", "audioMessage"].find((t) => inner?.[t]);
-    if (!mediaType) return reply('Please reply to a view once media message.');
-    const media = inner[mediaType];
+
+    const unwrapped = mediaCache.unwrapMessage(ctx.quotedMessage);
+    if (!unwrapped.type || !["imageMessage", "videoMessage", "audioMessage"].includes(unwrapped.type)) {
+        return reply("❌ The quoted message is not a supported View Once image, video, or audio.");
+    }
 
     try {
-        const ctx = mek.message?.extendedTextMessage?.contextInfo || {};
-        const buffer = await downloadMediaMessage(
-            { key: { remoteJid: mek.key.remoteJid, id: ctx.stanzaId, participant: ctx.participant, fromMe: false }, message: { [mediaType]: media } },
-            "buffer", {},
-            { reuploadRequest: Prince.updateMediaMessage }
-        );
-        if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("Media could not be downloaded (it may have expired)");
+        let entry = await mediaCache.getOrWait(quotedId);
 
-        const caption = `${media.caption ? media.caption + "\n\n" : ""}> *REVEALED BY ${botName}*`;
-        let msg;
-        if (mediaType === "imageMessage") msg = { image: buffer, caption, mimetype: media.mimetype || "image/jpeg" };
-        else if (mediaType === "videoMessage") msg = { video: buffer, caption, mimetype: media.mimetype || "video/mp4" };
-        else msg = { audio: buffer, ptt: !!media.ptt, mimetype: media.mimetype || "audio/ogg; codecs=opus" };
+        // Recovery fallback for quoted messages that still retain their media key.
+        if (!entry && mediaCache.hasMediaKey(unwrapped.media)) {
+            entry = await mediaCache.prefetch(Prince, {
+                key: {
+                    remoteJid: conText.from,
+                    id: quotedId,
+                    participant: ctx.participant,
+                    fromMe: false,
+                },
+                message: { [unwrapped.type]: unwrapped.media },
+            });
+        }
 
-        // Normalise "number:device@s.whatsapp.net" -> "number@s.whatsapp.net";
-        // sending to the device-suffixed id shows "Waiting for this message".
-        const selfJid = Prince.user?.id ? Prince.user.id.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
+        if (!entry) {
+            return reply("⚠️ I couldn't recover that media. It may have expired or was not cached when it arrived.");
+        }
+
+        const caption = unwrapped.type === "audioMessage"
+            ? undefined
+            : `${entry.media.caption ? entry.media.caption + "\\n\\n" : ""}> *REVEALED BY ${botName || "HAYWHY MDX"}*`;
+        const content = mediaCache.toSendContent(entry, caption);
+
+        const selfJid = Prince.user?.id
+            ? Prince.user.id.split(":")[0].split("@")[0] + "@s.whatsapp.net"
+            : null;
         const sent = new Set();
-        for (const t of targets(conText.from, selfJid)) {
-            if (!t || sent.has(t)) continue;
-            sent.add(t);
-            await Prince.sendMessage(t, msg);
+        for (const target of targets(conText.from, selfJid)) {
+            if (!target || sent.has(target)) continue;
+            sent.add(target);
+            await Prince.sendMessage(target, content);
         }
         await react("✅");
-    } catch (e) {
-        console.error("Error in vv command:", e);
-        reply(`Error: ${e.message}`);
+    } catch (error) {
+        console.error("View-once reveal error:", error);
+        await react("❌");
+        return reply(`❌ Couldn't reveal that media: ${error.message || "Unknown error"}`);
     }
 }
 
-gmd({ 
-  pattern: "vv2", 
-  aliases: ['‎2', 'reveal2', 'wow2', 'lol2'],
+gmd({
+  pattern: "vv2",
+  aliases: ["‎2", "reveal2", "wow2", "lol2"],
   react: "🙄",
   category: "owner",
-  description: "Reveal View Once Media"
+  description: "Reveal View Once image, video, or audio to bot DM",
 }, async (from, Prince, conText) => {
-    const { mek, reply, quoted, react, botName, isSuperUser } = conText;
-
-    return revealViewOnce(Prince, conText, (from, self) => [self]);
+    return revealViewOnce(Prince, conText, (_chat, self) => [self]);
 });
 
-gmd({ 
-  pattern: "vv", 
-  aliases: ['‎', 'reveal', 'wow', 'lol'],
+gmd({
+  pattern: "vv",
+  aliases: ["‎", "reveal", "wow", "lol"],
   react: "🙄",
   category: "owner",
-  description: "Reveal View Once Media"
+  description: "Reveal View Once image, video, or audio in chat and bot DM",
 }, async (from, Prince, conText) => {
-    const { mek, reply, quoted, react, botName, isSuperUser } = conText;
-
-    return revealViewOnce(Prince, conText, (from, self) => [from, self]);
+    return revealViewOnce(Prince, conText, (chat, self) => [chat, self]);
 });
