@@ -1048,8 +1048,8 @@ gmd(
         return reply(
           `⚠️ *Please choose an option*
           
-* ${command("1")}*  — Continue to final confirmation
-* ${command("2")}*  — Cancel
+*${command("1")}* — Continue to final confirmation
+*${command("2")}* — Cancel
 
 _No action has been taken._`
         );
