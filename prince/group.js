@@ -255,6 +255,95 @@ gmd(
   },
 );
 
+
+gmd(
+  {
+    pattern: "savecontact",
+    aliases: ["savec", "sc"],
+    react: "📇",
+    category: "general",
+    description: "Save the contact of the person whose message you replied to",
+  },
+  async (from, Prince, conText) => {
+    const { reply, react, mek, isGroup, quotedUser, groupInfo } = conText;
+    const quotedContext =
+      mek?.message?.extendedTextMessage?.contextInfo ||
+      mek?.message?.imageMessage?.contextInfo ||
+      mek?.message?.videoMessage?.contextInfo ||
+      mek?.message?.documentWithCaptionMessage?.message?.documentMessage?.contextInfo;
+
+    if (!quotedContext?.stanzaId || !quotedUser) {
+      return reply(
+        "📇 *SAVE CONTACT*\n\nReply directly to the person's message with *.savecontact* to receive their WhatsApp contact card."
+      );
+    }
+
+    try {
+      let targetJid = quotedUser;
+      let displayName = "";
+
+      if (isGroup) {
+        const meta = groupInfo || await Prince.groupMetadata(from);
+        const participant = (meta?.participants || []).find((p) => {
+          const ids = [p.id, p.pn, p.phoneNumber, p.jid, p.lid].filter(Boolean);
+          return ids.some((id) =>
+            String(id).split("@")[0].split(":")[0] ===
+            String(quotedUser).split("@")[0].split(":")[0]
+          );
+        });
+
+        if (!participant) {
+          return reply("❌ I couldn't identify that group member. Please reply to their message again.");
+        }
+
+        targetJid = participant.pn || participant.phoneNumber || participant.id || quotedUser;
+        displayName = participant.notify || participant.name || participant.verifiedName || "";
+      } else {
+        // In a private chat, the replied-to contact is the other person in the chat.
+        targetJid = from;
+        const saved = Prince.store?.contacts?.get?.(targetJid);
+        displayName = saved?.notify || saved?.name || saved?.verifiedName || "";
+      }
+
+      if (String(targetJid).endsWith("@lid")) {
+        try {
+          targetJid = await Prince.getJidFromLid(targetJid) || targetJid;
+        } catch (error) {
+          console.error("[savecontact] LID resolution failed:", error.message);
+        }
+      }
+
+      const number = participantPhone({ pn: targetJid, phoneNumber: targetJid, jid: targetJid, id: targetJid });
+      if (!number) {
+        return reply("❌ I couldn't retrieve a phone number for that contact. WhatsApp may be hiding their number.");
+      }
+
+      const safeName = escapeVCard(displayName || number);
+      const vcard = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        `FN:${safeName}`,
+        `N:${safeName};;;;`,
+        `TEL;TYPE=CELL;TYPE=VOICE;waid=${number}:${number}`,
+        "END:VCARD",
+      ].join("\\r\\n");
+
+      await Prince.sendMessage(from, {
+        contacts: {
+          displayName: displayName || number,
+          contacts: [{ vcard }],
+        },
+      }, { quoted: mek });
+
+      await react("✅");
+    } catch (error) {
+      console.error("Save contact error:", error);
+      await react("❌");
+      return reply("❌ Failed to create that contact card. Please try again.");
+    }
+  },
+);
+
 gmd(
   {
     pattern: "demote",
