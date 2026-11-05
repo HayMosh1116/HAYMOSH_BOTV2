@@ -709,7 +709,7 @@ async function startPrince() {
             console.error("❌ Error reading Taskflow folder:", error.message);
         }
 
-        console.log("✅ Plugin Files Loaded");
+        console.log(`✅ Plugin Files Loaded (${commands.filter((command) => command.pattern).length} commands)`);
 
         const processCommandMessage = async (ms, receivedAt) => {
             if (!ms?.message || !ms?.key) return;
@@ -1129,11 +1129,16 @@ async function startPrince() {
                     : null;
 
                 if (gmd) {
-                    const currentMode = getSetting(
-                        "BOT_MODE",
-                        config.MODE || "private",
+                    const currentMode = String(
+                        process.env.BOT_MODE || getSetting("BOT_MODE", config.MODE || "public"),
                     ).toLowerCase();
                     if (currentMode === "private" && !isSuperUser) {
+                        console.warn(`[COMMAND] Blocked private-mode command .${cmd} from ${sender || from}`);
+                        await Prince.sendMessage(
+                            from,
+                            { text: "🔒 This bot is currently in private mode. Set BOT_MODE=public or use the configured owner account." },
+                            { quoted: ms },
+                        );
                         return;
                     }
 

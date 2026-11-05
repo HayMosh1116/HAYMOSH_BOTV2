@@ -36,6 +36,11 @@
       "value": "2349122761580",
       "required": true
     },
+    "BOT_MODE": {
+      "description": "Command access mode: public or private",
+      "value": "public",
+      "required": false
+    },
     "MONGODB_URI": {
       "description": "MongoDB connection URI for the bot database",
       "required": false

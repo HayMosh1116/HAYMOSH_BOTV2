@@ -15,7 +15,7 @@ module.exports = {
     CAPTION : process.env.CAPTION || '©️2026 HAYWHY_MDX',
     VERSION: process.env.VERSION || '4.0.0',
     BOT_PIC : process.env.BOT_PIC || 'https://i.ibb.co/VWY5xDWK/n-BNii-QTEQy.jpg',            
-    MODE: process.env.MODE || "public",
+    MODE: process.env.BOT_MODE || process.env.MODE || "public",
     PM_PERMIT: process.env.PM_PERMIT || 'false',
     WARN_COUNT : process.env.WARN_COUNT || '4',
     TIME_ZONE: process.env.TIME_ZONE || "Africa/Douala",
