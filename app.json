@@ -4,7 +4,7 @@
   "logo": "https://raw.githubusercontent.com/Mayelprince/url/main/menun.jpg",
   "keywords": ["whatsapp", "bot", "prince-md", "baileys", "multi-device"],
   "repository": "https://github.com/HayMosh1116/HAYMOSH_BOTV2",
-  "stack": "heroku-22",
+  "stack": "heroku-24",
   "buildpacks": [
     {
       "url": "heroku/nodejs"
