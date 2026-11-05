@@ -959,7 +959,7 @@ gmd(
     aliases: ["terminategc", "destroygc", "nukegc"],
     react: "💀",
     category: "group",
-    description: "Terminate group - removes members while the bot stays.",
+    description: "Carefully remove other removable members while the bot stays.",
   },
   async (from, Prince, conText) => {
     const {
@@ -977,11 +977,14 @@ gmd(
       botPrefix,
     } = conText;
 
-    if (!isGroup) return reply("❌ This command only works in groups!");
-    if (!isSuperUser) return reply("❌ Owner Only Command!");
-    if (!isBotAdmin) return reply("❌ Bot is not an admin in this group!");
+    const prefix = botPrefix || ".";
+    const command = (suffix = "") => `${prefix}killgc${suffix ? ` ${suffix}` : ""}`;
+
+    if (!isGroup) return reply("❌ This command only works inside a group.");
+    if (!isSuperUser) return reply("🔒 *OWNER ACCESS ONLY*\nThis command is restricted to the bot owner.");
+    if (!isBotAdmin) return reply("⚠️ I need to be a group admin before I can remove members.");
     if (!isAdmin && !isSuperAdmin)
-      return reply("❌ You must be an admin to use this command!");
+      return reply("⚠️ You must be a group admin to use this command.");
 
     const confirmationKey = `${from}:${sender}`;
     const now = Date.now();
@@ -991,30 +994,64 @@ gmd(
     const confirmation = killGcConfirmations.get(confirmationKey);
     const response = String(conText.args?.[0] || "").trim().toLowerCase();
 
-    // Anyone who starts the flow must explicitly choose 1 to proceed.
-    // Choosing 2 cancels at either stage; unrelated input never advances it.
     if (!confirmation) {
+      let groupName = "this group";
+      try {
+        const metadata = await Prince.groupMetadata(from);
+        groupName = metadata.subject || groupName;
+      } catch (error) {
+        console.warn("killgc could not read group name:", error.message);
+      }
+
       killGcConfirmations.set(confirmationKey, {
         step: 1,
         expiresAt: now + KILLGC_CONFIRM_TTL,
       });
       await react("⚠️");
       return reply(
-        `⚠️ *GROUP TERMINATION — CONFIRMATION 1/2*\n\nThis will remove the other removable members from this group while the bot stays.\n\nReply with *${botPrefix}killgc 1* to proceed.\nReply with *${botPrefix}killgc 2* to cancel.\n\n_This confirmation expires in 60 seconds._`
+        `╭━━━〔 💀 *${botName || "HAYWHY"} • GROUP CLEANUP* 〕━━━╮
+┃
+┃  ⚠️ *DANGEROUS ACTION*
+┃  Group: *${groupName}*
+┃
+┃  This will remove other removable
+┃  members while the bot stays.
+┃
+┃  This action cannot be undone.
+┃
+┣━━━━━━━━━━━━━━━━━━━━
+┃  *CONFIRMATION 1 OF 2*
+┃
+┃  Reply with:
+┃  *${command("1")}*  → Continue
+┃  *${command("2")}*  → Cancel
+┃
+╰━━━━━━━━━━━━━━━━━━━━
+⏳ You have *60 seconds* to choose.`
       );
     }
 
     if (response === "2" || response === "cancel") {
       killGcConfirmations.delete(confirmationKey);
       await react("❎");
-      return reply("❎ *Cancelled.* No group members were removed.");
+      return reply(
+        `╭━━━〔 ❎ *CLEANUP CANCELLED* 〕━━━╮
+┃ No members were removed.
+┃ Your group remains unchanged.
+╰━━━━━━━━━━━━━━━━━━━━`
+      );
     }
 
     if (confirmation.step === 1) {
       if (response !== "1") {
         await react("⚠️");
         return reply(
-          `⚠️ Please choose one option:\n\n*${botPrefix}killgc 1* — proceed to the final confirmation.\n*${botPrefix}killgc 2* — cancel.\n\n_No action has been taken._`
+          `⚠️ *Please choose an option*
+          
+* ${command("1")}*  — Continue to final confirmation
+* ${command("2")}*  — Cancel
+
+_No action has been taken._`
         );
       }
 
@@ -1022,53 +1059,89 @@ gmd(
         step: 2,
         expiresAt: now + KILLGC_CONFIRM_TTL,
       });
-      await react("⚠️");
+      await react("🚨");
       return reply(
-        `🚨 *FINAL CONFIRMATION — 2/2*\n\nYou are about to remove the other removable members from this group. This cannot be undone automatically.\n\nTo confirm, type exactly: *${botPrefix}killgc DELETE*\nTo cancel, type: *${botPrefix}killgc 2*\n\n_The final confirmation expires in 60 seconds._`
+        `╭━━━〔 🚨 *FINAL SAFETY CHECK* 〕━━━╮
+┃
+┃  You are one step away from
+┃  removing the other removable
+┃  members from this group.
+┃
+┃  *This may remove many people.*
+┃
+┣━━━━━━━━━━━━━━━━━━━━
+┃  To execute, type exactly:
+┃  *${command("DELETE")}*
+┃
+┃  To stop safely:
+┃  *${command("2")}*
+┃
+╰━━━━━━━━━━━━━━━━━━━━
+⏳ Final confirmation expires in *60 seconds*.`
       );
     }
 
     if (response !== "delete") {
       await react("⚠️");
       return reply(
-        `🚨 Final confirmation is still pending.\n\nType exactly *${botPrefix}killgc DELETE* to execute, or *${botPrefix}killgc 2* to cancel.\n\n_No action has been taken._`
+        `🚨 *Final confirmation is still waiting.*
+
+Type *${command("DELETE")}* to execute.
+Type *${command("2")}* to cancel.
+
+_No members have been removed._`
       );
     }
 
     killGcConfirmations.delete(confirmationKey);
 
     try {
+      const meta = await Prince.groupMetadata(from);
+      const participants = meta.participants || [];
+      const botJid = Prince.user?.id?.split(":")[0] + "@s.whatsapp.net";
+      const membersToRemove = participants
+        .filter((p) => p.id !== botJid && p.id !== sender && !isProtectedDeveloper(p))
+        .map((p) => p.id);
+
       await Prince.sendMessage(
         from,
         {
-          text: `💀 *Group termination confirmed.*\n\n_All removable members will be removed. The bot will remain in this group._\n\n⚠️ _Using this command frequently might lead to WhatsApp bans._`,
+          text: `╭━━━〔 💀 *GROUP CLEANUP STARTED* 〕━━━╮
+┃ Group: *${meta.subject || "Current group"}*
+┃ Members queued: *${membersToRemove.length}*
+┃ Bot status: *Staying in group*
+╰━━━━━━━━━━━━━━━━━━━━
+⚠️ _Please wait while WhatsApp processes the removals._`,
           contextInfo: getContextInfo(sender, newsletterJid, botName),
         },
         { quoted: mek },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const meta = await Prince.groupMetadata(from);
-      const participants = meta.participants;
-      const botJid = Prince.user?.id?.split(":")[0] + "@s.whatsapp.net";
-
-      const membersToRemove = participants
-        .filter((p) => p.id !== botJid && p.id !== sender && !isProtectedDeveloper(p))
-        .map((p) => p.id);
-
       if (membersToRemove.length > 0) {
         await Prince.groupParticipantsUpdate(from, membersToRemove, "remove");
       }
 
-      await reply("✅ Group cleanup completed. The bot remains in this group.");
+      await reply(
+        `╭━━━〔 ✅ *GROUP CLEANUP FINISHED* 〕━━━╮
+┃ Group: *${meta.subject || "Current group"}*
+┃ Members processed: *${membersToRemove.length}*
+┃ Bot status: *Still in the group* 💜
+╰━━━━━━━━━━━━━━━━━━━━`
+      );
     } catch (error) {
+      console.error("killgc execution error:", error);
       await react("❌");
-      await reply(`❌ Failed to terminate group: ${error.message}`);
+      await reply(
+        `╭━━━〔 ❌ *CLEANUP FAILED* 〕━━━╮
+┃ WhatsApp could not complete
+┃ the group cleanup.
+┃
+┃ Error: ${error.message || "Unknown error"}
+╰━━━━━━━━━━━━━━━━━━━━`
+      );
     }
   },
 );
-
 gmd(
   {
     pattern: "accept",
