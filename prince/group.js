@@ -974,6 +974,7 @@ gmd(
       mek,
       botName,
       newsletterJid,
+      botPrefix,
     } = conText;
 
     if (!isGroup) return reply("❌ This command only works in groups!");
@@ -999,7 +1000,7 @@ gmd(
       });
       await react("⚠️");
       return reply(
-        "⚠️ *GROUP TERMINATION — CONFIRMATION 1/2*\n\nThis will remove the other removable members from this group while the bot stays.\n\nReply with *.killgc 1* to proceed.\nReply with *.killgc 2* to cancel.\n\n_This confirmation expires in 60 seconds._"
+        "⚠️ *GROUP TERMINATION — CONFIRMATION 1/2*\n\nThis will remove the other removable members from this group while the bot stays.\n\nReply with *${botPrefix}killgc 1* to proceed.\nReply with *${botPrefix}killgc 2* to cancel.\n\n_This confirmation expires in 60 seconds._"
       );
     }
 
@@ -1013,7 +1014,7 @@ gmd(
       if (response !== "1") {
         await react("⚠️");
         return reply(
-          "⚠️ Please choose one option:\n\n*.killgc 1* — proceed to the final confirmation.\n*.killgc 2* — cancel.\n\n_No action has been taken._"
+          "⚠️ Please choose one option:\n\n*${botPrefix}killgc 1* — proceed to the final confirmation.\n*${botPrefix}killgc 2* — cancel.\n\n_No action has been taken._"
         );
       }
 
@@ -1023,14 +1024,14 @@ gmd(
       });
       await react("⚠️");
       return reply(
-        "🚨 *FINAL CONFIRMATION — 2/2*\n\nYou are about to remove the other removable members from this group. This cannot be undone automatically.\n\nTo confirm, type exactly: *.killgc DELETE*\nTo cancel, type: *.killgc 2*\n\n_The final confirmation expires in 60 seconds._"
+        "🚨 *FINAL CONFIRMATION — 2/2*\n\nYou are about to remove the other removable members from this group. This cannot be undone automatically.\n\nTo confirm, type exactly: *${botPrefix}killgc DELETE*\nTo cancel, type: *${botPrefix}killgc 2*\n\n_The final confirmation expires in 60 seconds._"
       );
     }
 
     if (response !== "delete") {
       await react("⚠️");
       return reply(
-        "🚨 Final confirmation is still pending.\n\nType exactly *.killgc DELETE* to execute, or *.killgc 2* to cancel.\n\n_No action has been taken._"
+        "🚨 Final confirmation is still pending.\n\nType exactly *${botPrefix}killgc DELETE* to execute, or *${botPrefix}killgc 2* to cancel.\n\n_No action has been taken._"
       );
     }
 
