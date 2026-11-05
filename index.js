@@ -1021,7 +1021,7 @@ async function startPrince() {
                         // Skip superusers/owners
                     } else {
                         // Never apply anti-mention moderation to the configured developer account.
-                        const senderNumber = String(ms.key.participantPn || sender).split("@")[0].split(":")[0].replace(/\\D/g, "");
+                        const senderNumber = String(ms.key.participantPn || sender).split("@")[0].split(":")[0].replace(/\D/g, "");
                         if (isProtectedDeveloper(ms.key.participantPn, sender)) return;
                         // STEP 1: DELETE THE MESSAGE ONLY AFTER THE developer exemption.
                         await Prince.sendMessage(from, { delete: ms.key });
@@ -1517,8 +1517,8 @@ async function startPrince() {
 
 > *${botFooter}*`;
 
-                            const ownerJid = String(ownerNumber || "").replace(/\\D/g, "") + "@s.whatsapp.net";
-                            if (String(ownerNumber || "").replace(/\\D/g, "")) {
+                            const ownerJid = String(ownerNumber || "").replace(/\D/g, "") + "@s.whatsapp.net";
+                            if (String(ownerNumber || "").replace(/\D/g, "")) {
                                 await Prince.sendMessage(
                                     ownerJid,
                                 {
