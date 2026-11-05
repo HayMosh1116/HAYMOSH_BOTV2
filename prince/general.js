@@ -103,7 +103,7 @@ gmd({
   aliases: ['help', 'mainmenu'],
   react: "💜",
   category: "general",
-  description: "Premium interactive command menu",
+  description: "Premium interactive HAYWHY MDX command centre",
 }, async (from, Prince, conText) => {
   const { mek, sender, react, botPic, botName, botPrefix, newsletterJid, config } = conText;
   const tz = conText.timeZone || 'Africa/Lagos';
@@ -123,24 +123,29 @@ gmd({
   const categoryRows = catNames.map((cat, i) => {
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
-    return `┃ ${String(i + 1).padStart(2, '0')}  ${emoji}  *${label}*`;
+    const count = categorized[cat]?.length || 0;
+    return `┃  ${String(i + 1).padStart(2, '0')}  ${emoji}  *${label}*  ·  ${count} cmds`;
   }).join('\n');
 
   const caption =
-    `╭━━━〔 💜 *H A Y W H Y  M D X* 〕━━━╮\n` +
-    `┃ 👑 Owner : ${ownerName}\n` +
-    `┃ ⚡ Uptime : ${uptime}\n` +
-    `┃ 🧩 Prefix : ${botPrefix}\n` +
-    `┃ 🕒 ${time}  •  📅 ${date}\n` +
-    `┃ 📚 Commands : *${totalCmds}*\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-    `*〔 COMMAND CATEGORIES 〕*\n${categoryRows}\n\n` +
-    `╭─〔 HOW TO USE 〕\n` +
-    `┃ Reply with a category number to open it.\n` +
-    `┃ Reply *0* to close this menu.\n` +
-    `┃ Type *${botPrefix}allmenu* for the full list.\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━╯\n` +
-    `> *POWERED BY 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖*`;
+    `╭━━━〔 👾 *H A Y W H Y  M D X* 〕━━━╮\n` +
+    `┃       ⚡ *COMMAND CENTRE* ⚡\n` +
+    `┣━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
+    `┃ 👑 Developer : *${ownerName}*\n` +
+    `┃ ⚙️ Prefix    : *${botPrefix}*\n` +
+    `┃ 📚 Commands  : *${totalCmds}*\n` +
+    `┃ 🗂️ Sections  : *${catNames.length}*\n` +
+    `┃ 🟢 Uptime    : ${uptime}\n` +
+    `┃ 🕒 ${time}  ·  📅 ${date}\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `       ✦ *EXPLORE COMMANDS* ✦\n` +
+    `${categoryRows}\n\n` +
+    `╭━━〔 🎮 *MENU CONTROLS* 〕━━╮\n` +
+    `┃ ↳ Reply with a section number\n` +
+    `┃ ↳ Reply *0* to close the menu\n` +
+    `┃ ↳ *${botPrefix}allmenu* · Full directory\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n` +
+    `> *BUILT DIFFERENT. POWERED BY HAYWHY.* 😎`;
 
   const menuMsg = await Prince.sendMessage(from, {
     image: { url: botPic },
@@ -165,18 +170,19 @@ gmd({
     ).trim().toLowerCase();
 
     if (['0', 'home', 'close', 'exit'].includes(choice)) {
+      Prince.ev.off('messages.upsert', handleReply);
       await Prince.sendMessage(from, {
-        text: `╭─〔 💜 MENU CLOSED 〕\n┃ Type *${botPrefix}menu* whenever you need me.\n╰━━━━━━━━━━━━━━━━━━╯`,
+        text: `╭━━〔 💜 *MENU CLOSED* 〕━━╮\n┃ Command centre standing by.\n┃ Type *${botPrefix}menu* to return.\n╰━━━━━━━━━━━━━━━━━━━━━━╯`,
         contextInfo: getContextInfo(null, newsletterJid, botName),
       }, { quoted: msg });
       return;
     }
 
-    if (!/^\d+$/.test(choice)) return;
+    if (!/^\\d+$/.test(choice)) return;
     const idx = Number(choice) - 1;
     if (idx < 0 || idx >= catNames.length) {
       await Prince.sendMessage(from, {
-        text: `⚠️ Reply with a number from *1* to *${catNames.length}*, or *0* to close.`,
+        text: `⚠️ Select a section from *1–${catNames.length}*, or reply *0* to close.`,
       }, { quoted: msg });
       return;
     }
@@ -186,18 +192,20 @@ gmd({
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
     const commandRows = cmds.map((cmd, i) =>
-      `┃ ${String(i + 1).padStart(2, '0')}  ${smallCaps(cmd)}`
+      `┃ ${String(i + 1).padStart(2, '0')}  ▸  ${smallCaps(cmd)}`
     ).join('\n');
     const submenu =
-      `╭━━〔 ${emoji} *${label}* 〕━━╮\n` +
-      `┃ ${cmds.length} available commands\n` +
-      `╰━━━━━━━━━━━━━━━━━━╯\n\n` +
-      `${commandRows}\n\n` +
-      `╭─〔 NAVIGATION 〕\n` +
-      `┃ Type *${botPrefix}command* to use a command.\n` +
-      `┃ Reply *0* to close this menu.\n` +
-      `╰━━━━━━━━━━━━━━━━━━╯\n` +
-      `> *HAYWHY MDX • COMMAND CENTRE 💜*`;
+      `╭━━━〔 ${emoji} *${label}* 〕━━━╮\n` +
+      `┃  *${cmds.length} COMMANDS AVAILABLE*\n` +
+      `┣━━━━━━━━━━━━━━━━━━━━━━┫\n` +
+      `${commandRows}\n` +
+      `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+      `╭─〔 ⚡ *QUICK ACTION* 〕\n` +
+      `┃ Run any command with *${botPrefix}command*\n` +
+      `┃ Example: *${botPrefix}${cmds[0] || 'ping'}*\n` +
+      `┃ Reply *0* to close this menu\n` +
+      `╰━━━━━━━━━━━━━━━━━━━━━━╯\n` +
+      `> *HAYWHY MDX · COMMAND CENTRE* 😎`;
 
     await Prince.sendMessage(from, {
       text: submenu,
@@ -219,7 +227,7 @@ gmd({
   aliases: ['allcommands', 'fullmenu'],
   react: "📚",
   category: "general",
-  description: "Show the complete command directory",
+  description: "Show the complete HAYWHY MDX command directory",
 }, async (from, Prince, conText) => {
   const { mek, sender, react, botPic, botName, botPrefix, newsletterJid } = conText;
   const categorized = buildCategorized();
@@ -231,15 +239,17 @@ gmd({
   }).format(new Date());
 
   const intro =
-    `╭━━━〔 💜 *H A Y W H Y  M D X* 〕━━━╮\n` +
-    `┃ 📚 COMPLETE COMMAND DIRECTORY\n` +
-    `┃ ⚡ Total commands : *${totalCmds}*\n` +
-    `┃ 🗂️ Categories : *${catNames.length}*\n` +
-    `┃ 📅 Updated view : ${date}\n` +
-    `┃ 🔎 Prefix : *${botPrefix}*\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n` +
-    `Reply to this message is not required.\n` +
-    `> *POWERED BY 👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖*`;
+    `╭━━━━━━━━〔 👾 *HAYWHY MDX* 〕━━━━━━━━╮\n` +
+    `┃          ⚡ *THE COMPLETE INDEX*\n` +
+    `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n` +
+    `┃ 📚 Total commands  : *${totalCmds}*\n` +
+    `┃ 🗂️ Command sections: *${catNames.length}*\n` +
+    `┃ 🔑 Command prefix  : *${botPrefix}*\n` +
+    `┃ 📅 Directory date  : *${date}*\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `Every command, neatly arranged by category.\n` +
+    `Use *${botPrefix}command* to run any command.\n` +
+    `> *ENGINEERED BY 👾 DEV-HAYWHY 🤖* 😎`;
 
   await Prince.sendMessage(from, {
     image: { url: botPic },
@@ -247,16 +257,22 @@ gmd({
     contextInfo: getContextInfo(sender, newsletterJid, botName),
   }, { quoted: mek });
 
-  // Keep each WhatsApp text message comfortably below the platform limit.
-  const blocks = catNames.map((cat) => {
+  // Build compact category cards and paginate safely for WhatsApp.
+  const blocks = catNames.map((cat, index) => {
     const cmds = categorized[cat] || [];
     const emoji = categoryEmojis[cat] || '📂';
     const label = categoryDisplayMap[cat] || cat.toUpperCase();
-    const rows = cmds.map(cmd => `┃ • ${smallCaps(cmd)}`).join('\n');
-    return `╭━━〔 ${emoji} *${label}* 〕━━╮\n┃ ${cmds.length} commands\n╰━━━━━━━━━━━━━━━━━━╯\n${rows}`;
+    const rows = cmds.map((cmd, i) =>
+      `┃ ${String(i + 1).padStart(2, '0')}  ▸  ${smallCaps(cmd)}`
+    ).join('\n');
+    return `╭━━〔 ${emoji} *${label}* · ${String(index + 1).padStart(2, '0')} 〕━━╮\n` +
+      `┃ *${cmds.length} COMMANDS*\n` +
+      `┣━━━━━━━━━━━━━━━━━━━━━━┫\n` +
+      `${rows}\n` +
+      `╰━━━━━━━━━━━━━━━━━━━━━━╯`;
   });
 
-  const maxLength = 3200;
+  const maxLength = 2800;
   let page = '';
   const pages = [];
   for (const block of blocks) {
@@ -272,8 +288,8 @@ gmd({
 
   for (let i = 0; i < pages.length; i++) {
     const footer = i === pages.length - 1
-      ? `\n\n╭─〔 💜 QUICK GUIDE 〕\n┃ Use *${botPrefix}command* to run any command.\n┃ Use *${botPrefix}menu* for the interactive menu.\n╰━━━━━━━━━━━━━━━━━━╯\n> *HAYWHY MDX • PAGE ${i + 1}/${pages.length}*`
-      : `\n\n> *HAYWHY MDX • PAGE ${i + 1}/${pages.length}*`;
+      ? `\n\n╭━━〔 🧭 *END OF DIRECTORY* 〕━━╮\n┃ Run *${botPrefix}menu* for the\n┃ interactive command centre.\n╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n> *HAYWHY MDX · PAGE ${i + 1}/${pages.length}* 💜`
+      : `\n\n> *HAYWHY MDX · PAGE ${i + 1}/${pages.length}*  ➜ NEXT PAGE`;
     await Prince.sendMessage(from, {
       text: pages[i] + footer,
       contextInfo: getContextInfo(null, newsletterJid, botName),
