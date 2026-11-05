@@ -344,7 +344,7 @@ gmd(
     aliases: ["songlyrics", "getlyrics"],
     category: "search",
     react: "🎵",
-    description: "Get song lyrics",
+    description: "Search for song lyrics",
   },
   async (from, Prince, conText) => {
     const {
@@ -360,32 +360,91 @@ gmd(
       PrinceApiKey,
     } = conText;
 
-    if (!q) {
+    if (!q || !q.trim()) {
       await react("❌");
-      return reply("Please provide a song name");
+      return reply("🎵 Please provide a song title or artist name.\nExample: .lyrics Calm Down Rema");
     }
 
     try {
-      const apiUrl = `${PrinceTechApi}/api/search/lyricsv2?apikey=${PrinceApiKey}&query=${encodeURIComponent(q)}`;
-      const res = await axios.get(apiUrl, { timeout: 60000 });
+      let track = null;
+      let providerError = null;
 
-      if (!res.data?.success || !res.data?.result) {
-        await react("❌");
-        return reply("No lyrics found. Please try a different song.");
+      // Try the configured PrinceTech lyrics service first.
+      try {
+        const response = await axios.get(
+          `${String(PrinceTechApi || "").replace(/\\/+$/, "")}/api/search/lyricsv2`,
+          {
+            params: { apikey: PrinceApiKey, query: q.trim() },
+            timeout: 15000,
+          },
+        );
+
+        const result = response.data?.result;
+        if (response.data?.success && result && typeof result.lyrics === "string" && result.lyrics.trim()) {
+          track = {
+            artist: result.artist || "Unknown artist",
+            title: result.title || q.trim(),
+            lyrics: result.lyrics.trim(),
+          };
+        }
+      } catch (error) {
+        providerError = error;
+        console.warn("PrinceTech lyrics provider failed; trying LRCLIB:", error.message);
       }
 
-      const { artist, title, lyrics } = res.data.result;
+      // Public fallback: LRCLIB does not require an API key.
+      if (!track) {
+        const fallback = await axios.get("https://lrclib.net/api/search", {
+          params: { q: q.trim() },
+          timeout: 20000,
+          headers: {
+            "User-Agent": "HAYWHY_MDX/1.0 (https://github.com/HayMosh1116/HAYMOSH_BOTV2)",
+          },
+        });
 
-      let txt = `*${botName} 𝐋𝐘𝐑𝐈𝐂𝐒*\n\n`;
-      txt += `🎤 *Artist:* ${artist || "Unknown"}\n`;
-      txt += `🎵 *Title:* ${title || "Unknown"}\n\n`;
-      txt += `${lyrics}\n\n`;
-      txt += `> *${botFooter}*`;
+        const results = Array.isArray(fallback.data) ? fallback.data : [];
+        const match = results.find((item) =>
+          !item.instrumental &&
+          (typeof item.plainLyrics === "string" && item.plainLyrics.trim() ||
+           typeof item.syncedLyrics === "string" && item.syncedLyrics.trim())
+        );
+
+        if (match) {
+          const rawLyrics = match.plainLyrics || match.syncedLyrics || "";
+          const cleanLyrics = rawLyrics
+            .replace(/^\\s*\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,3})?\\]\\s?/gm, "")
+            .trim();
+
+          if (cleanLyrics) {
+            track = {
+              artist: match.artistName || "Unknown artist",
+              title: match.trackName || q.trim(),
+              lyrics: cleanLyrics,
+            };
+          }
+        }
+      }
+
+      if (!track) {
+        await react("❌");
+        return reply("🔎 I couldn't find lyrics for that song. Try the song title together with the artist's name.");
+      }
+
+      const message =
+        `╭━━━〔 🎵 *${botName || "HAYWHY"} • LYRICS* 〕━━━╮
+┃ 🎶 *Title:* ${track.title}
+┃ 🎤 *Artist:* ${track.artist}
+╰━━━━━━━━━━━━━━━━━━━━
+
+${track.lyrics}
+
+━━━━━━━━━━━━━━━━━━━━
+> *${botFooter || botName || "HAYWHY_MDX"}*`;
 
       await Prince.sendMessage(
         from,
         {
-          text: txt,
+          text: message,
           contextInfo: getContextInfo(sender, newsletterJid, botName),
         },
         { quoted: mek },
@@ -393,13 +452,12 @@ gmd(
 
       await react("✅");
     } catch (error) {
-      console.error("Lyrics search error:", error);
+      console.error("Lyrics search error:", error?.response?.data || error?.stack || error);
       await react("❌");
-      return reply("Failed to get lyrics. Please try again.");
+      return reply("❌ The lyrics services are temporarily unavailable. Please try again shortly.");
     }
   },
 );
-
 gmd(
   {
     pattern: "happymod",
