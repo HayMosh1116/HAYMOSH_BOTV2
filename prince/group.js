@@ -214,12 +214,13 @@ gmd(
     description: "Create a contact card from a replied-to WhatsApp message",
   },
   async (from, Prince, conText) => {
-    const { reply, react, mek, quotedUser, groupInfo, q } = conText;
+    const { reply, react, mek, quotedUser, mentionedJid, groupInfo, q } = conText;
+    const target = mentionedJid?.[0] || quotedUser;
 
-    if (!quotedUser) {
+    if (!target) {
       await react("❌");
       return reply(
-        "📇 *SAVE CONTACT*\n\nReply to the person's message with *.savecontact* to use their available name, or *.savecontact Haywhy* to choose a custom name.\n\nWorks in private chats and groups."
+        "📇 *SAVE CONTACT*\\n\\nReply to a person's message with *.savecontact*, or tag them with *.savecontact @member*. Add a name after the tag to use a custom name, e.g. *.savecontact @member Haywhy*.\\n\\nWorks in private chats and groups."
       );
     }
 
@@ -248,7 +249,7 @@ gmd(
       }
 
       // Text after the command overrides the contact's displayed name.
-      const customName = String(q || "").trim();
+      const customName = String(q || "").replace(/@\\d+/g, " ").replace(/\\s+/g, " ").trim();
       const availableName =
         participant?.notify ||
         participant?.name ||
