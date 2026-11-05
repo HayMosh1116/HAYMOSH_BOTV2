@@ -855,7 +855,7 @@ async function startPrince() {
                             ms.message.videoMessage.caption
                           ? ms.message.videoMessage.caption
                           : "";
-            const activePrefix = getSetting("PREFIX", botPrefix);
+            const activePrefix = process.env.PREFIX || getSetting("PREFIX", botPrefix);
             const isCommand = body.startsWith(activePrefix);
             const command = isCommand
                 ? body
