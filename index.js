@@ -123,7 +123,8 @@ function isProtectedDeveloper(...ids) {
 const app = express();
 botNetwork.installNetworkApi(app);
 let Prince;
-botNetwork.startNetworkClient(() => ({ connected: Boolean(Prince?.user), botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
+let whatsappConnected = false;
+botNetwork.startNetworkClient(() => ({ connected: whatsappConnected, botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
 
 logger.level = "silent";
 
@@ -154,7 +155,7 @@ process.on("warning", warning => addHeartbeatEvent("Server warning", warning?.me
 addHeartbeatEvent("Heartbeat page enabled", "Your personal bot status page is ready.");
 
 app.get("/heartbeat", (req, res) => {
-    const connected = Boolean(Prince?.user);
+    const connected = whatsappConnected;
     const botDisplayName = getSetting("BOT_NAME", botName) || "Your Bot";
     const prefixDisplay = getSetting("PREFIX", botPrefix) || ".";
     const ownerDisplayName = ownerName || "Not set";
@@ -191,10 +192,10 @@ app.get("/heartbeat", (req, res) => {
 <div class="footer">Last checked: ${escapeHeartbeat(checkedAt)} · This page refreshes automatically.</div></div></body></html>`);
 });
 app.get("/healthz", (req, res) => {
-    res.status(Prince ? 200 : 503).json({
-        ok: Boolean(Prince),
+    res.status(whatsappConnected ? 200 : 503).json({
+        ok: whatsappConnected,
         service: "haymosh-bot",
-        whatsapp: Prince ? "connected" : "disconnected",
+        whatsapp: whatsappConnected ? "connected" : "disconnected",
         uptime: Math.floor(process.uptime()),
         version: botVersion,
     });
@@ -1126,7 +1127,7 @@ async function startPrince() {
                 const handled = await botNetwork.handleCommand(
                     cmd,
                     async (message) => Prince.sendMessage(from, { text: message }, { quoted: ms }),
-                    () => ({ connected: Boolean(Prince?.user), botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion })
+                    () => ({ connected: whatsappConnected, botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion })
                 );
                 if (handled) return;
             }
@@ -1482,10 +1483,12 @@ async function startPrince() {
             const { connection, lastDisconnect } = update;
             if (connection) devPingConnectionStatus = connection;
             if (connection === "connecting") {
+                whatsappConnected = false;
                 heartbeatConnection = "Connecting";
                 addHeartbeatEvent("WhatsApp is reconnecting", "The bot is trying to connect to WhatsApp.", "warning");
             }
             if (connection === "open") {
+                whatsappConnected = true;
                 heartbeatConnection = "Connected";
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
                 botAlerts.connectionOpened(
@@ -1503,11 +1506,17 @@ async function startPrince() {
             }
             if (connection === "close") {
                 startInProgress = false;
+                whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
-                const closeCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                const disconnectDetail = "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ".";
+                const closeError = lastDisconnect?.error;
+                const closeCode = new Boom(closeError)?.output?.statusCode;
+                const closeMessage = closeError?.message || closeError?.output?.payload?.message || "no error message";
+                const disconnectDetail = "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ". Reason: " + closeMessage;
+                console.error("WhatsApp connection closed:", JSON.stringify({ code: closeCode || null, message: closeMessage }));
                 addHeartbeatEvent("WhatsApp is reconnecting", disconnectDetail, "warning");
                 botAlerts.connectionClosed(disconnectDetail, Prince, ownerNumber);
+                // Do not let the stale socket make Railway's health endpoint look connected.
+                Prince = null;
             }
 
             if (connection === "connecting") {
