@@ -70,14 +70,14 @@ async function notifyDeveloperConnection(socket, configuredOwnerNumber, configur
   }
   const stamp = new Date().toLocaleString("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "short" });
   const message = [
-    "🟣 *HAYWHY MDX — NEW BOT CONNECTION*",
-    "",
-    "*Customer:* " + String(configuredOwnerName || "Not provided"),
-    "*WhatsApp:* +" + customerNumber,
-    "*Status:* Connected and online",
-    "*Time:* " + stamp + " (Lagos)",
-    "",
-    "_This alert was sent because the bot owner enabled DEVELOPER_ALERTS=true._",
+    "🟣 *HAYWHY MDX*",
+    "*NEW BOT CONNECTION*",
+    "━━━━━━━━━━━━━━━━━━",
+    "👤 *Customer:* " + String(configuredOwnerName || "Not provided"),
+    "📱 *WhatsApp:* +" + customerNumber,
+    "🟢 *Status:* Connected & Online",
+    "🕒 *Time:* " + stamp + " (Lagos)",
+    "━━━━━━━━━━━━━━━━━━",
   ].join("\n");
   try {
     await socket.sendMessage(destination + "@s.whatsapp.net", { text: message });
