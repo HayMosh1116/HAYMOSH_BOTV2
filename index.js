@@ -1537,6 +1537,8 @@ async function startPrince() {
                                 },
                             );
                         }
+                        }
+
                         try {
                             await Prince.newsletterFollow(newsletterJid);
                         } catch (err) {}
