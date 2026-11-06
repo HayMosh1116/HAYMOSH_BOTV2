@@ -211,6 +211,9 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 50;
 const RECONNECT_DELAY = 5000;
 let isShuttingDown = false;
+let reconnectTimer = null;
+let startInProgress = false;
+let shutdownHandlersRegistered = false;
 
 // Group metadata cache: fetching it from WhatsApp on every group message was
 // a major source of slow replies. Entries expire after 15 minutes and are
@@ -236,6 +239,8 @@ async function resolveJidFromLid(jid) {
 }
 
 async function startPrince() {
+    if (isShuttingDown || startInProgress) return;
+    startInProgress = true;
     try {
         let version;
         try {
@@ -1497,6 +1502,7 @@ async function startPrince() {
                 );
             }
             if (connection === "close") {
+                startInProgress = false;
                 heartbeatConnection = "Disconnected";
                 const closeCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
                 const disconnectDetail = "The bot is trying to connect to WhatsApp again. Disconnect code: " + (closeCode || "not provided") + ".";
@@ -1506,11 +1512,11 @@ async function startPrince() {
 
             if (connection === "connecting") {
                 console.log("🕗 Connecting Bot...");
-                reconnectAttempts = 0;
             }
 
             if (connection === "open") {
                 console.log("✅ Connection Instance is Online");
+                startInProgress = false;
                 reconnectAttempts = 0;
 
                 setTimeout(async () => {
@@ -1596,17 +1602,17 @@ async function startPrince() {
                     process.exit(1);
                 } else if (reason === DisconnectReason.connectionClosed) {
                     console.log("Connection closed, reconnecting...");
-                    setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
+                    scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionLost) {
                     console.log("Connection lost from server, reconnecting...");
-                    setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
+                    scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionReplaced || reason === 405) {
                     if (isShuttingDown) {
                         console.log("Connection replaced during shutdown — not reconnecting.");
                         return;
                     }
                     console.log("Connection replaced (405) — waiting 60s for old session to expire...");
-                    setTimeout(() => reconnectWithRetry(), 60000);
+                    scheduleReconnect(60000);
                 } else if (reason === DisconnectReason.loggedOut) {
                     console.log(
                         "Device logged out, delete session and scan again",
@@ -1619,15 +1625,15 @@ async function startPrince() {
                     process.exit(1);
                 } else if (reason === DisconnectReason.restartRequired) {
                     console.log("Restart required, restarting...");
-                    setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
+                    scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.timedOut) {
                     console.log("Connection timed out, reconnecting...");
-                    setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY * 2);
+                    scheduleReconnect(RECONNECT_DELAY * 2);
                 } else {
                     console.log(
                         `Unknown disconnect reason: ${reason}, attempting reconnection...`,
                     );
-                    setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
+                    scheduleReconnect(RECONNECT_DELAY);
                 }
             }
         });
@@ -1801,16 +1807,21 @@ _We'll miss you!_`;
             setTimeout(() => process.exit(0), 2000);
         };
 
-        process.on("SIGINT", cleanup);
-        process.on("SIGTERM", cleanup);
+        if (!shutdownHandlersRegistered) {
+            process.on("SIGINT", cleanup);
+            process.on("SIGTERM", cleanup);
+            shutdownHandlersRegistered = true;
+        }
     } catch (error) {
+        startInProgress = false;
         addHeartbeatEvent("Bot startup failed", error?.message || error, "error");
         console.error("Socket initialization error:", error);
-        setTimeout(() => reconnectWithRetry(), RECONNECT_DELAY);
+        scheduleReconnect(RECONNECT_DELAY);
     }
 }
 
-async function reconnectWithRetry() {
+function scheduleReconnect(requestedDelay = RECONNECT_DELAY) {
+    if (isShuttingDown || reconnectTimer || startInProgress) return;
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         console.error("Max reconnection attempts reached. Exiting...");
         process.exit(1);
@@ -1818,7 +1829,7 @@ async function reconnectWithRetry() {
 
     reconnectAttempts++;
     const delay = Math.min(
-        RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1),
+        Math.max(requestedDelay, RECONNECT_DELAY) * Math.pow(2, reconnectAttempts - 1),
         300000,
     );
 
@@ -1826,12 +1837,13 @@ async function reconnectWithRetry() {
         `Reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms...`,
     );
 
-    setTimeout(async () => {
+    reconnectTimer = setTimeout(async () => {
+        reconnectTimer = null;
         try {
             await startPrince();
         } catch (error) {
             console.error("Reconnection failed:", error);
-            reconnectWithRetry();
+            scheduleReconnect(RECONNECT_DELAY);
         }
     }, delay);
 }
@@ -1840,6 +1852,6 @@ setTimeout(async () => {
     try { await require("./mayel/cloudSync").restore(require("./mayel/gmdSudoUtil").db); } catch (e) { console.error("[CLOUD]", e.message); }
     startPrince().catch((err) => {
         console.error("Initialization error:", err);
-        reconnectWithRetry();
+        scheduleReconnect(RECONNECT_DELAY);
     });
 }, 5000);
