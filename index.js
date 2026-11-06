@@ -129,7 +129,9 @@ botNetwork.startNetworkClient(() => ({ connected: whatsappConnected, botName: ge
 logger.level = "silent";
 
 app.use(express.static("mayel"));
-app.get("/", (req, res) => res.sendFile(__dirname + "/mayel/prince.html"));
+// Keep the platform health URL free of missing-file errors. The heartbeat page
+// is generated below and is the canonical dashboard for this deployment.
+app.get("/", (req, res) => res.redirect("/heartbeat"));
 const heartbeatEvents = [];
 let heartbeatConnection = "Starting";
 let heartbeatLastError = null;
