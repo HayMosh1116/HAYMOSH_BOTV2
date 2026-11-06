@@ -284,10 +284,9 @@ async function startPrince() {
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 10000,
-            // Do not mark the linked WhatsApp account permanently online.
-            // This keeps normal phone notifications enabled while the bot is
-            // connected as a companion device.
-            markOnlineOnConnect: false,
+            // Publish the bot as online while the WhatsApp socket is connected.
+            // This matches the bot dashboard and the expected WhatsApp presence.
+            markOnlineOnConnect: true,
             syncFullHistory: false,
             generateHighQualityLinkPreview: false,
             patchMessageBeforeSending: (message) => {
@@ -1493,6 +1492,11 @@ async function startPrince() {
                 whatsappConnected = true;
                 heartbeatConnection = "Connected";
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
+                try {
+                    await Prince.sendPresenceUpdate("available");
+                } catch (presenceError) {
+                    console.warn("WhatsApp online presence update failed:", presenceError?.message || presenceError);
+                }
                 botAlerts.connectionOpened(
                     Prince,
                     ownerNumber,
