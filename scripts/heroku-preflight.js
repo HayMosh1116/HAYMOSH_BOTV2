@@ -92,6 +92,20 @@ if (pkg) {
   } else {
     add("warning", "WhatsApp dependency", `prince-baileys source is unusual: ${musicDependency}`, "Confirm that fresh Heroku builds can fetch this source without credentials.");
   }
+
+  const sharpRuntimePackages = {
+    "@img/sharp-linux-x64": "0.34.5",
+    "@img/sharp-libvips-linux-x64": "1.2.4",
+  };
+  const optionalDependencies = pkg.optionalDependencies || {};
+  for (const [name, version] of Object.entries(sharpRuntimePackages)) {
+    if (optionalDependencies[name] !== version) {
+      add("error", "Sharp Linux runtime", `${name}@${version} is not declared as an optional dependency.`, `Add ${name}@${version} to optionalDependencies so Linux x64 deployments can load sharp.`);
+    }
+  }
+  if (Object.entries(sharpRuntimePackages).every(([name, version]) => optionalDependencies[name] === version)) {
+    add("ok", "Sharp Linux runtime", "Sharp Linux x64 and libvips runtime packages are explicitly declared.");
+  }
 }
 
 if (lock && pkg) {
