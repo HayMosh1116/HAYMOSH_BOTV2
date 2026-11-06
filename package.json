@@ -11,6 +11,7 @@
     "start": "node index.js",
     "dev": "node index.js",
     "test": "node test/ytAudio.test.js && node test/musicProviders.test.js",
+    "preflight:heroku": "node scripts/heroku-preflight.js",
     "stop": "pm2 stop princemd",
     "restart": "pm2 restart princemd"
   },

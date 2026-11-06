@@ -153,6 +153,26 @@ The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata.
 
 ---
 
+## 🧪 Heroku Deployment Preflight
+
+Run the preflight before creating or redeploying a Heroku app:
+
+```bash
+npm run preflight:heroku
+```
+
+It checks the required deployment files, `Procfile`, Node engine, pinned `prince-baileys` source, `package-lock.json`, Heroku manifest, Git revision, and whether a clean `npm ci` is possible. Errors block deployment and include a corrective action. Warnings are reported separately.
+
+To check an existing Heroku app's live Config Vars, install and authenticate the Heroku CLI, then run:
+
+```bash
+npm run preflight:heroku -- --app YOUR_HEROKU_APP_NAME
+```
+
+The live check verifies that `SESSION_ID` and `OWNER_NUMBER` are configured without printing their secret values. You can also set `HEROKU_APP_NAME` instead of passing `--app`. Use `--skip-install` to omit the npm dry run or `--json` for CI tooling.
+
+---
+
 ## 🌍 Connect
 
 <div align="center">
