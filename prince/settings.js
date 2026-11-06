@@ -18,6 +18,40 @@ function isSettingEnabled(val) {
   return v === "true" || v === "on" || v === "1" || v === "yes" || v === "warn" || v === "kick" || v === "delete";
 }
 
+
+gmd(
+  {
+    pattern: "set",
+    aliases: ["funwords", "setfunwords"],
+    react: "⚙️",
+    category: "owner",
+    description: "Configure words for Fun Moderation",
+  },
+  async (from, Prince, conText) => {
+    const { q, reply, isSuperUser } = conText;
+    if (!isSuperUser) return reply("❌ Owner Only Command!");
+    const input = String(q || "").trim();
+    const current = String(getSetting("FUN_MODERATION_WORDS", "") || "");
+    if (input.toLowerCase() === "list") {
+      const words = current.split(",").map(word => word.trim()).filter(Boolean);
+      return reply(words.length
+        ? "🛡️ *FUN MODERATION WORDS*\\n\\n" + words.map((word, index) => `${index + 1}. ${word}`).join("\\n")
+        : "ℹ️ No Fun Moderation words have been configured.");
+    }
+    if (input.toLowerCase() === "clear") {
+      setSetting("FUN_MODERATION_WORDS", "");
+      return reply("✅ Fun Moderation word list cleared.");
+    }
+    if (!input) {
+      return reply("🛡️ *FUN MODERATION SETUP*\\n\\nUse:\\n• .set word1,word2,word3\\n• .set list\\n• .set clear\\n\\nAt 4 warnings, the bot asks for owner/admin approval. It never removes or blocks automatically.");
+    }
+    const words = [...new Set(input.split(",").map(word => word.trim().toLowerCase()).filter(Boolean))];
+    if (!words.length) return reply("❌ Enter at least one word separated by commas.");
+    setSetting("FUN_MODERATION_WORDS", words.join(","));
+    return reply("✅ Fun Moderation words saved:\\n" + words.map((word, index) => `${index + 1}. ${word}`).join("\\n"));
+  },
+);
+
 gmd(
   {
     pattern: "setautolikestatus",
