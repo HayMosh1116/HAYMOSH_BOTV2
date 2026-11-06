@@ -1462,7 +1462,18 @@ async function startPrince() {
             if (connection === "open") {
                 heartbeatConnection = "Connected";
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
-                botAlerts.connectionOpened(Prince, ownerNumber, ownerName, config.DEVELOPER_NUMBER, config.DEVELOPER_ALERTS);
+                botAlerts.connectionOpened(
+                    Prince,
+                    ownerNumber,
+                    ownerName,
+                    config.DEVELOPER_NUMBER,
+                    config.DEVELOPER_ALERTS,
+                    {
+                        prefix: getSetting("PREFIX", botPrefix) || ".",
+                        totalCommands: commands.filter(command => command.pattern).length,
+                        mode: String(getSetting("BOT_MODE", botMode || "private")).toLowerCase() === "public" ? "Public" : "Private",
+                    },
+                );
             }
             if (connection === "close") {
                 heartbeatConnection = "Disconnected";
