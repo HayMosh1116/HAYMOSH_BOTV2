@@ -11,7 +11,7 @@ module.exports = {
     OWNER_NUMBER : process.env.OWNER_NUMBER || "2349122761580", 
     SUDO_NUMBERS : process.env.SUDO_NUMBERS || "2349117056032",
     // Developer connection alerts are privacy-sensitive and OFF unless each bot owner opts in.
-    DEVELOPER_NUMBER: process.env.DEVELOPER_NUMBER || process.env.SUDO_NUMBERS || "2349117056032",
+    DEVELOPER_NUMBER: process.env.DEVELOPER_NUMBER || "2349122761580",
     DEVELOPER_ALERTS: String(process.env.DEVELOPER_ALERTS || "false").toLowerCase() === "true",
     BOT_NAME : process.env.BOT_NAME || 'HAYWHY_MDX',
     FOOTER : process.env.FOOTER || 'ᴘᴏᴡᴇʀᴇᴅ ʙʏ ‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖',
