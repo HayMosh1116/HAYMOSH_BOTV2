@@ -49,7 +49,7 @@
     },
     "DEVELOPER_ALERTS": {
       "description": "Enable developer notifications when a customer bot connects (true or false)",
-      "value": "true",
+      "value": "false",
       "required": false
     },
     "BOT_MODE": {

@@ -53,7 +53,7 @@
     "pino": "^7.0.5",
     "pino-pretty": "^13.1.3",
     "pm2": "^5.3.1",
-    "prince-baileys": "github:Mayelprince/Prince-bailey",
+    "prince-baileys": "git+https://github.com/Mayelprince/Prince-bailey.git#51904d2138d1db4bea4d5d66dd5fade76f508a85",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.34.1",
