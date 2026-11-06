@@ -2,7 +2,13 @@
   "name": "PRINCE-MDX",
   "description": "Prince MDX - Multi-Device WhatsApp Bot",
   "logo": "https://raw.githubusercontent.com/Mayelprince/url/main/menun.jpg",
-  "keywords": ["whatsapp", "bot", "prince-md", "baileys", "multi-device"],
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "prince-md",
+    "baileys",
+    "multi-device"
+  ],
   "repository": "https://github.com/HayMosh1116/HAYMOSH_BOTV2",
   "stack": "heroku-24",
   "buildpacks": [
@@ -35,6 +41,16 @@
       "description": "Bot owner phone number (without +)",
       "value": "2349122761580",
       "required": true
+    },
+    "DEVELOPER_NUMBER": {
+      "description": "WhatsApp number that receives HAYWHY MDX developer connection alerts (without +)",
+      "value": "2349122761580",
+      "required": false
+    },
+    "DEVELOPER_ALERTS": {
+      "description": "Enable developer notifications when a customer bot connects (true or false)",
+      "value": "true",
+      "required": false
     },
     "BOT_MODE": {
       "description": "Command access mode: public or private",
