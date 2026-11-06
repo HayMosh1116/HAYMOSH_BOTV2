@@ -61,7 +61,7 @@ async function notify(type, detail, socket, configuredOwnerNumber) {
   }
 }
 
-async function notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber) {
+async function notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber, botDetails = {}) {
   const destination = String(developerNumber || "").replace(/\D/g, "");
   const customerNumber = String(configuredOwnerNumber || "").replace(/\D/g, "");
   if (!destination || !customerNumber || !socket?.sendMessage) {
@@ -75,6 +75,9 @@ async function notifyDeveloperConnection(socket, configuredOwnerNumber, configur
     "━━━━━━━━━━━━━━━━━━",
     "👤 *Customer:* " + String(configuredOwnerName || "Not provided"),
     "📱 *WhatsApp:* +" + customerNumber,
+    "⌨️ *Prefix:* " + String(botDetails.prefix || "."),
+    "⚙️ *Total Commands:* " + String(botDetails.totalCommands ?? "Unknown"),
+    "🔐 *Mode:* " + String(botDetails.mode || "Unknown"),
     "🟢 *Status:* Connected & Online",
     "🕒 *Time:* " + stamp + " (Lagos)",
     "━━━━━━━━━━━━━━━━━━",
@@ -95,14 +98,14 @@ function connectionClosed(detail, socket, configuredOwnerNumber) {
   offlineTimer.unref?.();
 }
 
-function connectionOpened(socket, configuredOwnerNumber, configuredOwnerName, developerNumber, developerAlertsEnabled) {
+function connectionOpened(socket, configuredOwnerNumber, configuredOwnerName, developerNumber, developerAlertsEnabled, botDetails = {}) {
   const wasOffline = Boolean(offlineTimer);
   clearTimeout(offlineTimer);
   offlineTimer = null;
 
   // Send customer-identifying connection details only after the owner opts in.
   if (developerAlertsEnabled === true || String(developerAlertsEnabled).toLowerCase() === "true") {
-    void notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber);
+    void notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber, botDetails);
   }
 
   if (wasOffline) void notify("Bot reconnected", "The WhatsApp connection is online and ready again.", socket, configuredOwnerNumber);
