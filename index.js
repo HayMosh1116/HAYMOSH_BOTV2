@@ -973,7 +973,7 @@ async function startPrince() {
                 }
             }
             if (isCommand && command === "confirm") {
-                const action = body.slice(activePrefix.length).trim().split(/\\s+/).slice(1).join(" ");
+                const action = body.slice(activePrefix.length).trim().split(/\s+/).slice(1).join(" ");
                 await funModeration.confirmAction({
                     chat: from, action, actor: standardizeJid(sender), isGroup, isAdmin, isSuperUser, isBotAdmin, Prince,
                     reply: message => Prince.sendMessage(from, { text: message }, { quoted: ms })
