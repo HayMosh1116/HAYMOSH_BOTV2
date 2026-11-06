@@ -960,6 +960,27 @@ async function startPrince() {
             ];
             const isDevs = botDevs.some((j) => senderIds.has(digitsOf(j)));
 
+            // Fun Moderation counts configured words and waits for explicit approval.
+            const funModeration = require("./prince/funmoderation");
+            if (!ms.key.fromMe && !isCommand) {
+                try {
+                    await funModeration.checkMessage({
+                        chat: from, sender: standardizeJid(sender), body,
+                        isGroup, isAdmin, isSuperUser, isBotAdmin, Prince, quoted: ms
+                    });
+                } catch (error) {
+                    console.error("[Fun Moderation] Message check failed:", error);
+                }
+            }
+            if (isCommand && command === "confirm") {
+                const action = body.slice(activePrefix.length).trim().split(/\\s+/).slice(1).join(" ");
+                await funModeration.confirmAction({
+                    chat: from, action, isGroup, isAdmin, isSuperUser, isBotAdmin, Prince,
+                    reply: message => Prince.sendMessage(from, { text: message }, { quoted: ms })
+                });
+                return;
+            }
+
             const activeAutoBlock = String(
                 getSetting("AUTO_BLOCK", config.AUTO_BLOCK || ""),
             ).trim();
