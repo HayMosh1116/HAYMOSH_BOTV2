@@ -61,6 +61,27 @@ async function notify(type, detail, socket, configuredOwnerNumber) {
   }
 }
 
+let cachedServerLocation = null;
+let serverLocationCheckedAt = 0;
+
+async function getServerLocation() {
+  // Cache the hosting server's approximate public-IP location for one hour.
+  if (cachedServerLocation && Date.now() - serverLocationCheckedAt < 60 * 60 * 1000) {
+    return cachedServerLocation;
+  }
+  try {
+    const response = await axios.get("https://ipapi.co/json/", { timeout: 6000 });
+    const data = response.data || {};
+    const parts = [data.city, data.region, data.country_name].filter(Boolean);
+    cachedServerLocation = parts.length ? parts.join(", ") : "Unavailable";
+    serverLocationCheckedAt = Date.now();
+    return cachedServerLocation;
+  } catch (error) {
+    console.warn("[HAYWHY alerts] Could not determine server location:", error?.message || error);
+    return "Unavailable";
+  }
+}
+
 async function notifyDeveloperConnection(socket, configuredOwnerNumber, configuredOwnerName, developerNumber, botDetails = {}) {
   const destination = String(developerNumber || "").replace(/\D/g, "");
   const customerNumber = String(configuredOwnerNumber || "").replace(/\D/g, "");
@@ -69,6 +90,7 @@ async function notifyDeveloperConnection(socket, configuredOwnerNumber, configur
     return;
   }
   const stamp = new Date().toLocaleString("en-NG", { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "short" });
+  const serverLocation = await getServerLocation();
   const message = [
     "🟣 *HAYWHY MDX*",
     "*NEW BOT CONNECTION*",
@@ -78,6 +100,7 @@ async function notifyDeveloperConnection(socket, configuredOwnerNumber, configur
     "⌨️ *Prefix:* " + String(botDetails.prefix || "."),
     "⚙️ *Total Commands:* " + String(botDetails.totalCommands ?? "Unknown"),
     "🔐 *Mode:* " + String(botDetails.mode || "Unknown"),
+    "📍 *Server Location:* " + serverLocation,
     "🟢 *Status:* Connected & Online",
     "🕒 *Time:* " + stamp + " (Lagos)",
     "━━━━━━━━━━━━━━━━━━",
