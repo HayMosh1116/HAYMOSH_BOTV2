@@ -1471,9 +1471,6 @@ async function startPrince() {
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
             const receivedAt = performance.now();
-            for (const m of messages) {
-                console.log(`[MSG] upsert type=${type} from=${m?.key?.remoteJid} fromMe=${!!m?.key?.fromMe} content=${m?.message ? Object.keys(m.message)[0] : "none(undecrypted)"}`);
-            }
             // Preserve ordinary dispatch; also inspect every ping in a batch.
             // History synchronization must not resurrect old developer triggers.
             const selected = messages.filter((message, index) =>
