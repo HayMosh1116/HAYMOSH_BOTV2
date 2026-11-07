@@ -334,15 +334,30 @@ function formatBytes(bytes) {
 
 async function loadSession() {
     try {
-        if (fs.existsSync(sessionPath)) {
-            fs.unlinkSync(sessionPath);
-        }
-
         if (!config.SESSION_ID || typeof config.SESSION_ID !== 'string') {
             throw new Error("❌ SESSION_ID is missing or invalid");
         }
 
         const id = config.SESSION_ID;
+
+        // Keep the live auth state (creds + signal keys) across restarts when it
+        // was created from this same SESSION_ID. Overwriting it with the original
+        // snapshot causes "Bad MAC" decrypt errors. A changed SESSION_ID resets it.
+        const idHash = require('crypto').createHash('sha256').update(id).digest('hex');
+        const markerPath = path.join(sessionDir, ".session_id_hash");
+        if (fs.existsSync(sessionPath) && fs.existsSync(markerPath) &&
+            fs.readFileSync(markerPath, "utf8").trim() === idHash) {
+            console.log("📡 Session      : ♻️ Reusing saved session state");
+            return;
+        }
+        if (fs.existsSync(sessionDir)) {
+            for (const f of fs.readdirSync(sessionDir)) {
+                fs.rmSync(path.join(sessionDir, f), { recursive: true, force: true });
+            }
+        } else {
+            fs.mkdirSync(sessionDir, { recursive: true });
+        }
+        fs.writeFileSync(markerPath, idHash);
 
         if (id.startsWith("HAYWHY_MDX!")) {
             try {
