@@ -1608,13 +1608,12 @@ async function startPrince() {
                 console.log(`Connection closed due to: ${reason}`);
 
                 if (reason === DisconnectReason.badSession) {
-                    console.log("Bad session file, delete it and scan again");
-                    try {
-                        await fs.remove(__dirname + "/mayel/session");
-                    } catch (e) {
-                        console.error("Failed to remove session:", e);
-                    }
-                    process.exit(1);
+                    // Code 500 also covers transient "Stream Errored (ack)" drops.
+                    // Never wipe the saved keys for it: that forces a restore from
+                    // the stale SESSION_ID snapshot and causes Bad MAC / no replies.
+                    // A genuinely bad session is fixed by setting a new SESSION_ID.
+                    console.log("Connection error 500, reconnecting (session kept)...");
+                    scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionClosed) {
                     console.log("Connection closed, reconnecting...");
                     scheduleReconnect(RECONNECT_DELAY);
