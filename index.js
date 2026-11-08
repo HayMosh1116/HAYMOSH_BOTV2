@@ -115,10 +115,7 @@ const {
     AUTO_BIO: autoBio,
 } = config;
 const PORT = process.env.PORT || 5000;
-function isProtectedDeveloper(...ids) {
-    const owner = String(ownerNumber || config.OWNER_NUMBER || "").replace(/\D/g, "");
-    return !!owner && ids.some(id => String(id || "").split("@")[0].split(":")[0].replace(/\D/g, "") === owner);
-}
+const { isProtectedDeveloper } = require("./mayel/developerProtection");
 
 const app = express();
 botNetwork.installNetworkApi(app);
