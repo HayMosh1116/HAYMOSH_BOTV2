@@ -1033,7 +1033,7 @@ async function startPrince() {
                 antiMentionSetting !== 'false' &&
                 !ms.key.fromMe &&
                 !isAdmin &&
-                String(ms.key.participantPn || sender).split('@')[0].split(':')[0].replace(/\D/g, '') !== '2349122761580' &&
+                !isProtectedDeveloper(ms.key.participantPn, sender) &&
                 type === 'groupStatusMentionMessage'
             ) {
                 try {
