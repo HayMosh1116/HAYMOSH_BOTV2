@@ -1,9 +1,5 @@
 const { gmd, getContextInfo, getGroupSetting, setGroupSetting, toMentionJid, mentionTag } = require("../mayel");
-const config = require("../config");
-function isProtectedDeveloper(p) {
-  const owner = String(config.OWNER_NUMBER || "").replace(/\D/g, "");
-  return !!owner && [p?.id, p?.pn, p?.phoneNumber, p?.jid].some(v => String(v || "").split("@")[0].split(":")[0].replace(/\D/g, "") === owner);
-}
+const { isProtectedDeveloper } = require("../mayel/developerProtection");
 
 // Destructive group termination requires two fresh confirmations after the
 // initial command. Keys include both group and sender to isolate sessions.
@@ -498,7 +494,6 @@ gmd(
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
     const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
     if (isProtectedDeveloper(participant)) return reply("🛡️ The HAYWHY developer is protected from group actions.");
-    if (String(participant.pn || participant.phoneNumber || participant.id).split("@")[0].split(":")[0].replace(/\D/g, "") === "2349122761580") return reply("🛡️ The HAYWHY developer is protected from group actions.");
 
     const ownerJid = (conText.ownerNumber || "").replace(/\D/g, '');
     const botJidNum = (Prince.user?.id || "").split(":")[0];
