@@ -1,4 +1,5 @@
 const { gmd, getSetting, setSetting, getGroupSetting, setGroupSetting, resetAllGroupSettings, getAllGroupSettings, clearAllSudo, getAllUsersNotes, deleteNoteById, updateNoteById, deleteAllNotes, getSudoNumbers, resetSetting, resetAllSettings } = require("../mayel");
+const { isSecretSettingKey } = require("../mayel/secretSettings");
 
 function parseBooleanInput(input) {
   if (!input) return null;
@@ -437,13 +438,16 @@ gmd(
     description: "Get a specific setting value",
   },
   async (from, Prince, conText) => {
-    const { q, reply, react, isSuperUser } = conText;
+    const { q, reply, react, isSuperUser, isGroup } = conText;
     if (!isSuperUser) return reply("❌ Owner Only Command!");
     if (!q) return reply("❌ Please provide a setting key!\nExample: .getsetting PREFIX");
+    if (isGroup) return reply("🔒 For privacy, use .getsetting in a private chat with the bot.");
     try {
-      const value = getSetting(q.toUpperCase().trim());
+      const key = q.toUpperCase().trim();
+      if (isSecretSettingKey(key)) return reply("🔒 Credentials must be configured as environment secrets and cannot be read from bot settings.");
+      const value = getSetting(key);
       await react("✅");
-      await reply(`⚙️ *${q.toUpperCase()}:* ${value || "Not Set"}`);
+      await reply(`⚙️ *${key}:* ${value || "Not Set"}`);
     } catch (error) {
       await reply(`❌ Error: ${error.message}`);
     }
@@ -459,22 +463,24 @@ gmd(
     description: "Set any setting (key value)",
   },
   async (from, Prince, conText) => {
-    const { q, reply, react, isSuperUser } = conText;
+    const { q, reply, react, isSuperUser, isGroup } = conText;
     if (!isSuperUser) return reply("❌ Owner Only Command!");
-    if (!q || !q.includes(" ")) {
+    if (isGroup) return reply("🔒 For privacy, use .setsetting in a private chat with the bot.");
+    const match = String(q || "").trim().match(/^(\S+)\s+([\s\S]+)$/);
+    if (!match) {
       return reply("❌ Please provide key and value!\nExample: .setsetting PREFIX !");
     }
     try {
-      const parts = q.split(" ");
-      const key = parts[0].toUpperCase();
-      const value = parts.slice(1).join(" ");
+      const key = match[1].toUpperCase();
+      const value = match[2].trim();
+      if (isSecretSettingKey(key)) return reply("🔒 Credentials must be configured as environment secrets, not bot settings.");
       const current = getSetting(key);
       if (current === value) {
-        return reply(`⚠️ *${key}* is already set to: *${value}*`);
+        return reply(`⚠️ *${key}* is already set. The value was not echoed.`);
       }
       setSetting(key, value);
       await react("✅");
-      await reply(`✅ *${key}* set to: *${value}*`);
+      await reply(`✅ *${key}* updated. The value was not echoed.`);
     } catch (error) {
       await reply(`❌ Error: ${error.message}`);
     }
@@ -895,8 +901,10 @@ gmd(
     if (!isSuperUser) return reply("❌ Owner Only Command!");
     try {
       resetAllGroupSettings(from);
+      const { db } = require("../mayel/gmdSudoUtil");
+      db.prepare("DELETE FROM user_warnings WHERE group_jid = ?").run(from);
       await react("✅");
-      await reply(`✅ All settings for this group have been reset to defaults.\n\n*Cleared:*\n▸ Welcome message\n▸ Goodbye message\n▸ Group events\n▸ Antilink\n▸ Antilink warnings`);
+      await reply(`✅ Group settings and active warning counts reset to defaults. Warning audit history is retained.`);
     } catch (error) {
       await reply(`❌ Error: ${error.message}`);
     }
@@ -915,16 +923,20 @@ gmd(
     const { q, reply, react, isSuperUser } = conText;
     if (!isSuperUser) return reply("❌ Owner Only Command!");
     if (q !== "confirm") {
-      return reply(`⚠️ *WARNING: This will reset EVERYTHING!*\n\n*Will be cleared:*\n▸ All bot settings\n▸ All sudo numbers\n▸ All group settings\n▸ All antilink warnings\n\nTo confirm, type: *.resetdb confirm*`);
+      return reply(`⚠️ *WARNING: This will reset EVERYTHING!*\n\n*Will be cleared:*\n▸ All bot settings\n▸ All sudo numbers\n▸ All group settings\n▸ Active warning counts\n▸ User notes\n\nWarning audit history is retained.\n\nTo confirm, type: *.resetdb confirm*`);
     }
     try {
       resetAllSettings();
       clearAllSudo();
       const { db } = require("../mayel/gmdSudoUtil");
-      db.prepare("DELETE FROM group_settings").run();
-      db.prepare("DELETE FROM user_notes").run();
+      const clearDb = db.transaction(() => {
+        db.prepare("DELETE FROM group_settings").run();
+        db.prepare("DELETE FROM user_warnings").run();
+        db.prepare("DELETE FROM user_notes").run();
+      });
+      clearDb();
       await react("✅");
-      await reply(`✅ Database has been completely reset to defaults.\n\nAll settings, sudo numbers, group configurations, and user notes have been cleared.`);
+      await reply(`✅ Database reset complete. Settings, sudo numbers, group settings, active warning counts, and notes were cleared; warning audit history is retained.`);
     } catch (error) {
       await reply(`❌ Error: ${error.message}`);
     }

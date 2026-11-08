@@ -10,6 +10,7 @@ const util = require("util");
 const zlib = require("zlib");
 const sharp = require('sharp');
 const config = require('../config');
+const { decodeSessionArchive, writeAuthFiles } = require('./sessionPayload');
 const FormData = require('form-data');
 const { fromBuffer } = require('file-type');
 const fs = require('fs');
@@ -339,74 +340,63 @@ async function loadSession() {
         }
 
         const id = config.SESSION_ID;
-
-        // Keep the live auth state (creds + signal keys) across restarts when it
-        // was created from this same SESSION_ID. Overwriting it with the original
-        // snapshot causes "Bad MAC" decrypt errors. A changed SESSION_ID resets it.
         const idHash = require('crypto').createHash('sha256').update(id).digest('hex');
         const markerPath = path.join(sessionDir, ".session_id_hash");
+        const invalidatedPath = path.join(__dirname, ".session-invalidated");
+        if (fs.existsSync(invalidatedPath) && fs.readFileSync(invalidatedPath, "utf8").trim() === idHash) {
+            throw new Error("This SESSION_ID was logged out by WhatsApp. Generate and configure a new session token.");
+        }
         if (fs.existsSync(sessionPath) && fs.existsSync(markerPath) &&
             fs.readFileSync(markerPath, "utf8").trim() === idHash) {
             console.log("📡 Session      : ♻️ Reusing saved session state");
             return;
         }
-        if (fs.existsSync(sessionDir)) {
-            for (const f of fs.readdirSync(sessionDir)) {
-                fs.rmSync(path.join(sessionDir, f), { recursive: true, force: true });
+
+        let files;
+        if (id.startsWith("HAYWHY_MDX2!")) {
+            files = decodeSessionArchive(id);
+        } else if (id.startsWith("HAYWHY_MDX!") || id.startsWith("PRINCE-MDX!")) {
+            const separator = id.indexOf('!');
+            const encoded = id.slice(separator + 1);
+            if (!encoded || encoded.includes('...') || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+                throw new Error("Invalid legacy HAYWHY/PRINCE-MDX session encoding");
             }
-        } else {
-            fs.mkdirSync(sessionDir, { recursive: true });
-        }
-        fs.writeFileSync(markerPath, idHash);
-
-        if (id.startsWith("HAYWHY_MDX!")) {
-            try {
-                const [header, b64data] = id.split('!');
-
-                if (header !== "HAYWHY_MDX" || !b64data) {
-                    throw new Error("❌ Invalid session format. Expected 'HAYWHY_MDX!.....'");
-                }
-
-                const cleanB64 = b64data.replace('...', '');
-                const compressedData = Buffer.from(cleanB64, 'base64');
-                const decompressedData = require('zlib').gunzipSync(compressedData);
-
-                if (!fs.existsSync(sessionDir)) {
-                    fs.mkdirSync(sessionDir, { recursive: true });
-                }
-
-                fs.writeFileSync(sessionPath, decompressedData, "utf8");
-                console.log("📡 Session      : 🔑 Retrieved from PRINCE Session");
-
-            } catch (e) {
-                console.error("📡 Session      : ❌ Error processing PRINCE MDX session:", e.message);
+            const creds = zlib.gunzipSync(Buffer.from(encoded, 'base64'));
+            const parsedCreds = JSON.parse(creds.toString('utf8'));
+            if (!parsedCreds || typeof parsedCreds !== 'object' || Array.isArray(parsedCreds)) {
+                throw new Error("Legacy session credentials are invalid");
             }
+            files = new Map([['creds.json', creds]]);
         } else if (id.startsWith("PRINCE-MD~")) {
-            const [header, b64data] = id.split('~');
-
-            if (header !== "PRINCE-MD" || !b64data) {
-                throw new Error("❌ Invalid session format. Expected 'PRINCE-MD~.....'");
+            const encoded = id.slice("PRINCE-MD~".length);
+            if (!encoded || encoded.includes('...') || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+                throw new Error("Invalid legacy PRINCE-MD session encoding");
             }
-
-            const cleanB64 = b64data.replace('...', '');
-            const compressedData = Buffer.from(cleanB64, 'base64');
-            let decompressedData;
+            const compressedData = Buffer.from(encoded, 'base64');
+            let creds;
             try {
-                decompressedData = zlib.gunzipSync(compressedData);
+                creds = zlib.gunzipSync(compressedData);
             } catch (gzipErr) {
-                const rawData = compressedData.slice(10);
-                decompressedData = zlib.inflateRawSync(rawData);
+                creds = zlib.inflateRawSync(compressedData.slice(10));
             }
-
-            if (!fs.existsSync(sessionDir)) {
-                fs.mkdirSync(sessionDir, { recursive: true });
+            const parsedCreds = JSON.parse(creds.toString('utf8'));
+            if (!parsedCreds || typeof parsedCreds !== 'object' || Array.isArray(parsedCreds)) {
+                throw new Error("Legacy session credentials are invalid");
             }
-
-            fs.writeFileSync(sessionPath, decompressedData, "utf8");
-            console.log("✅ Session File Loaded");
+            files = new Map([['creds.json', creds]]);
         } else {
-            throw new Error("❌ Invalid session format. Expected 'PRINCE-MD~...' or 'PRINCE-MDX!...'");
+            throw new Error("Invalid session format. Expected HAYWHY_MDX2!, HAYWHY_MDX!, PRINCE-MDX!, or PRINCE-MD~");
         }
+
+        // Never destroy a usable local auth state until the replacement token
+        // has been fully decoded and validated. writeAuthFiles restores creds
+        // and all Signal keys with private file permissions.
+        writeAuthFiles(files, sessionDir);
+        fs.writeFileSync(markerPath, idHash, { mode: 0o600 });
+        if (fs.existsSync(invalidatedPath)) fs.rmSync(invalidatedPath, { force: true });
+        console.log(files.size > 1
+            ? "📡 Session      : 🔑 Retrieved credentials and Signal keys"
+            : "📡 Session      : 🔑 Retrieved legacy credentials (Signal keys are unavailable)");
 
     } catch (e) {
         console.error("❌ Session Error:", e.message);

@@ -408,7 +408,6 @@ function resetWarnings(groupJid, userJid) {
   userJid = warnKey(userJid);
   try {
     db.prepare("DELETE FROM user_warnings WHERE group_jid = ? AND user_jid = ?").run(groupJid, userJid);
-    db.prepare("DELETE FROM warning_log WHERE group_jid = ? AND user_jid = ?").run(groupJid, userJid);
     return true;
   } catch (e) {
     console.error("[WARNINGS][RESET_ERROR]:", e);

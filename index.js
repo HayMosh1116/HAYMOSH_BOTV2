@@ -116,7 +116,7 @@ const {
 } = config;
 const PORT = process.env.PORT || 5000;
 function isProtectedDeveloper(...ids) {
-    const owner = String(ownerNumber || config.OWNER_NUMBER || "2349122761580").replace(/\D/g, "");
+    const owner = String(ownerNumber || config.OWNER_NUMBER || "").replace(/\D/g, "");
     return !!owner && ids.some(id => String(id || "").split("@")[0].split(":")[0].replace(/\D/g, "") === owner);
 }
 
@@ -205,8 +205,6 @@ app.get("/healthz", (req, res) => {
 app.listen(PORT, () => console.log(`Server Running on Port: ${PORT}`));
 
 const sessionDir = path.join(__dirname, "mayel", "session");
-
-loadSession();
 
 let store;
 let autoBioInterval;
@@ -583,7 +581,6 @@ async function startPrince() {
                     // Temporary per-member mute: remove messages until the saved expiry.
                     const mutedJid = message.key.participant || message.key.senderPn;
                     const mutedNumber = String(message.key.participantPn || message.key.senderPn || mutedJid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
-                    const developerNumber = String(ownerNumber || "2349122761580").replace(/\D/g, "");
                     if (mutedJid && !isProtectedDeveloper(message.key.participantPn, message.key.senderPn, mutedJid)) {
                         const muteKey = "BANMUTE:" + mutedJid;
                         const savedMute = getGroupSetting(chatJid, muteKey, null);
@@ -1632,6 +1629,11 @@ async function startPrince() {
                         "Device logged out, delete session and scan again",
                     );
                     try {
+                        const configuredSession = String(config.SESSION_ID || "");
+                        if (configuredSession) {
+                            const sessionHash = require("crypto").createHash("sha256").update(configuredSession).digest("hex");
+                            fs.writeFileSync(path.join(__dirname, "mayel", ".session-invalidated"), sessionHash, { mode: 0o600 });
+                        }
                         await fs.remove(__dirname + "/mayel/session");
                     } catch (e) {
                         console.error("Failed to remove session:", e);
@@ -1863,6 +1865,12 @@ function scheduleReconnect(requestedDelay = RECONNECT_DELAY) {
 }
 
 setTimeout(async () => {
+    try {
+        await loadSession();
+    } catch (error) {
+        console.error("Session initialization failed; WhatsApp will not connect until SESSION_ID is corrected:", error?.message || error);
+        return;
+    }
     try { await require("./mayel/cloudSync").restore(require("./mayel/gmdSudoUtil").db); } catch (e) { console.error("[CLOUD]", e.message); }
     startPrince().catch((err) => {
         console.error("Initialization error:", err);

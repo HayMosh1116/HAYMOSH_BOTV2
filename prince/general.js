@@ -8,6 +8,7 @@ const { gmd, commands, monospace, formatBytes, getContextInfo } = require("../ma
       more = String.fromCharCode(8206), 
       readmore = more.repeat(4001),
       ram = `${formatBytes(freeMemoryBytes)}/${formatBytes(totalMemoryBytes)}`;
+const { respondToPing } = require('../mayel/ping');
 
 
 // ─── small caps map ────────────────────────────────────────────────────────────
@@ -341,23 +342,9 @@ gmd({
 // ─── .ping ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "ping",
-  react: "🧨",
   category: "general",
   description: "Check bot response speed",
-}, async (from, Prince, conText) => {
-    const { mek, react } = conText;
-    const PING_EMOJIS = ["👑","⚡","🚀","🤖","💙","✨","🌸","🩵","💫","🎉","🔥","💎","🌟","⭐","🏆"];
-    const pick = () => PING_EMOJIS[Math.floor(Math.random() * PING_EMOJIS.length)];
-    const startTime = process.hrtime();
-    // Measure the real round trip instead of adding a random delay to the result.
-    const elapsed = process.hrtime(startTime);
-    const ms = ((elapsed[0] * 1e9 + elapsed[1]) / 1e6).toFixed(2);
-    const e1 = pick(), e2 = pick();
-    await Prince.sendMessage(from, {
-      text: `${e1} *𝐏๏፝֟ƞ̽g* ${ms} *𝐌ʂ* ${e2}`,
-    }, { quoted: mek });
-    await react("🧨");
-});
+}, respondToPing);
 
 // ─── pair-link ────────────────────────────────────────────────────────────────────
 gmd({ 

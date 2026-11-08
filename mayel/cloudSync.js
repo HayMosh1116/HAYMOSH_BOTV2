@@ -2,6 +2,7 @@
 // Heroku wipes local files on every restart, so every change is mirrored to
 // MongoDB and restored into SQLite before the bot connects to WhatsApp.
 const config = require("../config");
+const { filterSafeBotSettingRows } = require("./secretSettings");
 
 const TABLES = ["bot_settings", "group_settings", "sudo_users", "user_notes", "user_warnings", "warning_log", "player_stats", "admin_action_logs", "tournaments", "tournament_players"];
 let client = null;
@@ -75,8 +76,9 @@ async function restore(database) {
       for (const d of docs) {
         const t = d.table;
         if (!TABLES.includes(t) || !tableExists(t) || !Array.isArray(d.rows)) continue;
+        const rows = t === "bot_settings" ? filterSafeBotSettingRows(d.rows) : d.rows;
         db.prepare(`DELETE FROM ${t}`).run();
-        for (const row of d.rows) {
+        for (const row of rows) {
           const cols = Object.keys(row);
           if (!cols.length) continue;
           db.prepare(
@@ -105,7 +107,8 @@ async function pushNow() {
     for (const t of TABLES) {
       if (!tableExists(t)) continue;
       const rows = db.prepare(`SELECT * FROM ${t}`).all();
-      await c.replaceOne({ _id: docId(t) }, { _id: docId(t), bot: botKey(), table: t, rows, updatedAt: new Date() }, { upsert: true });
+      const safeRows = t === "bot_settings" ? filterSafeBotSettingRows(rows) : rows;
+      await c.replaceOne({ _id: docId(t) }, { _id: docId(t), bot: botKey(), table: t, rows: safeRows, updatedAt: new Date() }, { upsert: true });
     }
   } catch (e) {
     console.error("[CLOUD][SAVE_ERROR]:", explain(e));

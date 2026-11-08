@@ -1,2 +1,11 @@
 node_modules/
 mayel/temp/bin/
+.env
+.env.*
+!.env.example
+mayel/session/
+mayel/.session-invalidated
+mayel/*.db
+mayel/*.db-*
+mayel/*.sqlite
+mayel/*.sqlite-*

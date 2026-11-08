@@ -114,8 +114,8 @@ cd HAYMOSH_BOT
 # 2. Install dependencies
 npm install
 
-# 3. Add your Session ID to config.js
-# SESSION_ID = "your_session_id_here"
+# 3. Set SESSION_ID in your host's environment variables
+# Paste the complete token privately; do not commit it to source control.
 
 # 4. Start the bot
 node index.js
@@ -125,18 +125,23 @@ node index.js
 
 ## ⚙️ Configuration
 
-Edit `config.js` with your details:
+Set these values in your hosting provider's environment configuration (or a private, ignored `.env` file):
 
-```js
-SESSION_ID = "your_session_id"   // From the session generator above
-OWNER_NUMBER = "2349122761580"   // Your WhatsApp number (with country code)
-BOT_NAME = "HAYMOSH_BOT"        // Bot display name
-PREFIX = "."                     // Command prefix
-MODE = "public"                  // public / private
-# Optional hybrid .play provider settings:
-JAMENDO_CLIENT_ID = ""            // Jamendo developer client ID; enables rights-gated Jamendo audio
-MUSICBRAINZ_USER_AGENT = "HAYMOSH_BOT/1.0 (contact@example.com)" // identify metadata requests
+```env
+SESSION_ID=HAYWHY_MDX2!<complete-generated-token>
+OWNER_NUMBER=<your-WhatsApp-number-with-country-code>
+SUDO_NUMBERS=
+BOT_NAME=HAYMOSH_BOT
+PREFIX=.
+BOT_MODE=public
+PRINCE_API_KEY=<provider-key-if-using-PrinceTech-backed-commands>
+DEVELOPER_ALERTS=false
+DEVELOPER_NUMBER=<optional-alert-recipient>
+JAMENDO_CLIENT_ID=<optional-public-client-id>
+MUSICBRAINZ_USER_AGENT=HAYMOSH_BOT/1.0 (contact@example.com)
 ```
+
+`OWNER_NUMBER` and `SUDO_NUMBERS` have no privileged built-in defaults; configure the owner explicitly. Treat `SESSION_ID`, `PRINCE_API_KEY`, and database URLs as secrets. Developer connection alerts are disabled unless you opt in with `DEVELOPER_ALERTS=true`.
 
 The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata. If `JAMENDO_CLIENT_ID` is configured, Jamendo is used only when its API marks a matching track as downloadable. Otherwise the bot falls back to the existing strict YouTube/SoundCloud verification path and will not send low-confidence, remix, or cover matches.
 
@@ -146,7 +151,7 @@ The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata.
 
 | Requirement | Version |
 |-------------|---------|
-| Node.js | `>= 18.x` |
+| Node.js | `22.x` |
 | npm | `>= 8.x` |
 | WhatsApp | Active account |
 | Session ID | [Generate here ↗](https://haymoshmdx-production-2ed6.up.railway.app/) |

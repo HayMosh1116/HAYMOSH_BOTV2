@@ -832,6 +832,7 @@ gmd(
           const currentPlayer = state.playerOrder[state.currentTurnIdx];
           if (playerJid !== currentPlayer) return; // silent ignore — not your turn
         }
+        resetInactivityTimeout();
 
         // ── Validation ───────────────────────────────────────────────────
         if (txt.length < MIN_LEN) {
@@ -911,22 +912,26 @@ gmd(
       }
     };
 
-    // ── Global inactivity timeout (10 min) ─────────────────────────────────
-    state.timeout = setTimeout(() => {
-      if (!games.has(from)) return;
-      endGame(Prince, from);
-      sendMsg(
-        `╭━━━━━━━━━━━━━━━╮\n` +
-        `│ ⌛ *GAME TIMED OUT*\n` +
-        `├━━━━━━━━━━━━━━━┤\n` +
-        `│ No activity for 10 minutes.\n` +
-        `├━━━━━━━━━━━━━━━┤\n` +
-        `│ 📊 *FINAL SCORES:*\n` +
-        `${buildBoard()}\n` +
-        `│ 📝 Chain: ${state.wordCount} words\n` +
-        `╰━━━━━━━━━━━━━━━╯`
-      );
-    }, 10 * 60 * 1000);
+    // ── Global inactivity timeout (10 min since the latest message) ────────
+    const resetInactivityTimeout = () => {
+      if (state.timeout) clearTimeout(state.timeout);
+      state.timeout = setTimeout(() => {
+        if (!games.has(from)) return;
+        endGame(Prince, from);
+        sendMsg(
+          `╭━━━━━━━━━━━━━━━╮\n` +
+          `│ ⌛ *GAME TIMED OUT*\n` +
+          `├━━━━━━━━━━━━━━━┤\n` +
+          `│ No activity for 10 minutes.\n` +
+          `├━━━━━━━━━━━━━━━┤\n` +
+          `│ 📊 *FINAL SCORES:*\n` +
+          `${buildBoard()}\n` +
+          `│ 📝 Chain: ${state.wordCount} words\n` +
+          `╰━━━━━━━━━━━━━━━╯`
+        );
+      }, 10 * 60 * 1000);
+    };
+    resetInactivityTimeout();
 
     // ════════════════════════════════════════════════════════════════════════
     // DM MODE — 1v1 vs Bot

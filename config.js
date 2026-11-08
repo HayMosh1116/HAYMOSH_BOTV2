@@ -8,8 +8,10 @@ module.exports = {
     SESSION_ID: process.env.SESSION_ID || '',
     PREFIX: process.env.PREFIX || ".",
     OWNER_NAME: process.env.OWNER_NAME || "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩ ",
-    OWNER_NUMBER : process.env.OWNER_NUMBER || "2349122761580", 
-    SUDO_NUMBERS : process.env.SUDO_NUMBERS || "2349117056032",
+    // Privileged identities must be set explicitly; never authorize a built-in number.
+    OWNER_NUMBER : process.env.OWNER_NUMBER || "",
+    SUDO_NUMBERS : process.env.SUDO_NUMBERS || "",
+    PRINCE_API_KEY: process.env.PRINCE_API_KEY || '',
     // Developer connection alerts are privacy-sensitive and OFF unless each bot owner opts in.
     DEVELOPER_NUMBER: process.env.DEVELOPER_NUMBER || "2349122761580",
     DEVELOPER_ALERTS: String(process.env.DEVELOPER_ALERTS || "false").toLowerCase() === "true",

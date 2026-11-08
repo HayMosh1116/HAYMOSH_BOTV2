@@ -29,7 +29,7 @@ const isAnyLink = (message) => {
 
 const emojis = ['💘', '💝', '💖', '💗', '💓', '💞', '💕', '💟', '❣️', '💔', '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍'];
 
-const PrinceApiKey = 'prince_api_56yjJ568dte4';
+const PrinceApiKey = config.PRINCE_API_KEY;
 const PrinceTechApi = 'https://api.princetechn.com';
 
 async function PrinceAutoReact(emoji, ms, Prince) {

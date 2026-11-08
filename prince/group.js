@@ -1,7 +1,7 @@
 const { gmd, getContextInfo, getGroupSetting, setGroupSetting, toMentionJid, mentionTag } = require("../mayel");
 const config = require("../config");
 function isProtectedDeveloper(p) {
-  const owner = String(config.OWNER_NUMBER || "2349122761580").replace(/\D/g, "");
+  const owner = String(config.OWNER_NUMBER || "").replace(/\D/g, "");
   return !!owner && [p?.id, p?.pn, p?.phoneNumber, p?.jid].some(v => String(v || "").split("@")[0].split(":")[0].replace(/\D/g, "") === owner);
 }
 
