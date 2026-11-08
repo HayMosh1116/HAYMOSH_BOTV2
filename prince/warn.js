@@ -1,8 +1,8 @@
 // .warn / .resetwarn / .warnings — warnings are saved per group in the
 // settings database (user_warnings), which is backed up online automatically.
 const { gmd, toMentionJid, mentionTag } = require("../mayel");
-const config = require("../config");
-const isDeveloper = (jid) => String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "") === String(config.OWNER_NUMBER || "2349122761580").replace(/\D/g, "");
+const { isProtectedDeveloper } = require("../mayel/developerProtection");
+const isDeveloper = (...ids) => isProtectedDeveloper(...ids);
 const { addWarning, getUserWarnings, resetWarnings, getGroupWarnings, getWarningHistory } = require("../mayel/gmdSudoUtil");
 const MAX_WARNS = 3;
 
