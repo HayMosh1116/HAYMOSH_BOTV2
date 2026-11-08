@@ -69,7 +69,6 @@ gmd({
     [p.id, p.pn, p.phoneNumber].some(id => id && String(id).split("@")[0].split(":")[0] === number)
   );
   if (!participant) return reply("❌ That member is not in this group.");
-  if (isProtectedDeveloper(participant.id, participant.pn, participant.phoneNumber)) return reply("🛡️ The HAYWHY developer cannot be unmuted by this command.");
   const targetJid = participant.id || participant.pn || participant.phoneNumber;
   const key = "BANMUTE:" + targetJid;
   if (!getGroupSetting(from, key, null)) return reply("ℹ️ That member is not temporarily muted.");
