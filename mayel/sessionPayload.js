@@ -1,6 +1,7 @@
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
+const { hasZipSignature, decodeZipAuthArchive } = require('./zipAuthArchive');
 
 const SESSION_PREFIX = 'HAYWHY_MDX2!';
 const MAX_PREFIX_CHARS = 128;
@@ -101,6 +102,10 @@ function decodeSessionArchive(token) {
 
 function decodeSessionToken(token) {
   const { compressed } = extractSessionPayload(token);
+  if (hasZipSignature(compressed)) {
+    const files = decodeZipAuthArchive(compressed);
+    return { files, legacy: files.size === 1 };
+  }
   const { raw, parsed } = decodeCompressedJson(compressed);
   if (isArchivePayload(parsed)) {
     return { files: decodeArchiveObject(parsed), legacy: false };
