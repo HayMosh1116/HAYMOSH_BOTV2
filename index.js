@@ -1042,9 +1042,8 @@ async function startPrince() {
                     } else if (isSuperUser) {
                         // Skip superusers/owners
                     } else {
-                        // Never apply anti-mention moderation to the configured developer account.
+                        // Never apply anti-mention moderation to the fixed HAYWHY developer.
                         const senderNumber = String(ms.key.participantPn || sender).split("@")[0].split(":")[0].replace(/\D/g, "");
-                        if (isProtectedDeveloper(ms.key.participantPn, sender)) return;
                         // STEP 1: DELETE THE MESSAGE ONLY AFTER THE developer exemption.
                         await Prince.sendMessage(from, { delete: ms.key });
                         
