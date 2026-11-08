@@ -7,6 +7,7 @@ const { getSetting, addWarning, resetWarnings } = require("./gmdSudoUtil");
 const logger = require("prince-baileys/lib/Utils/logger").default.child({});
 const { isJidGroup, downloadMediaMessage, getContentType } = require("prince-baileys");
 const mediaCache = require("./mediaCache");
+const { isProtectedDeveloper } = require("./developerProtection");
 
 const {
     CHATBOT: chatBot,
@@ -45,7 +46,7 @@ const PrinceAntiLink = async (Prince, message, antiLink) => {
         if (!message?.message || message.key.fromMe) return;
         const from = message.key.remoteJid; 
         const sender = message.key.participant || message.key.remoteJid;
-        if ([message.key.participantPn, message.key.participant, sender].some((jid) => String(jid || '').split('@')[0].split(':')[0].replace(/\D/g, '') === String(config.OWNER_NUMBER || '2349122761580').replace(/\D/g, ''))) return;
+        if (isProtectedDeveloper(message.key.participantPn, message.key.participant, sender)) return;
         if (!from.endsWith('@g.us') || antiLink === 'false') return;
 
         const groupMetadata = await Prince.groupMetadata(from);
