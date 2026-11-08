@@ -7,10 +7,9 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const path = require("path");
 const util = require("util");
-const zlib = require("zlib");
 const sharp = require('sharp');
 const config = require('../config');
-const { decodeSessionArchive, writeAuthFiles } = require('./sessionPayload');
+const { decodeSessionToken, writeAuthFiles } = require('./sessionPayload');
 const FormData = require('form-data');
 const { fromBuffer } = require('file-type');
 const fs = require('fs');
@@ -352,41 +351,7 @@ async function loadSession() {
             return;
         }
 
-        let files;
-        if (id.startsWith("HAYWHY_MDX2!")) {
-            files = decodeSessionArchive(id);
-        } else if (id.startsWith("HAYWHY_MDX!") || id.startsWith("PRINCE-MDX!")) {
-            const separator = id.indexOf('!');
-            const encoded = id.slice(separator + 1);
-            if (!encoded || encoded.includes('...') || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
-                throw new Error("Invalid legacy HAYWHY/PRINCE-MDX session encoding");
-            }
-            const creds = zlib.gunzipSync(Buffer.from(encoded, 'base64'));
-            const parsedCreds = JSON.parse(creds.toString('utf8'));
-            if (!parsedCreds || typeof parsedCreds !== 'object' || Array.isArray(parsedCreds)) {
-                throw new Error("Legacy session credentials are invalid");
-            }
-            files = new Map([['creds.json', creds]]);
-        } else if (id.startsWith("PRINCE-MD~")) {
-            const encoded = id.slice("PRINCE-MD~".length);
-            if (!encoded || encoded.includes('...') || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
-                throw new Error("Invalid legacy PRINCE-MD session encoding");
-            }
-            const compressedData = Buffer.from(encoded, 'base64');
-            let creds;
-            try {
-                creds = zlib.gunzipSync(compressedData);
-            } catch (gzipErr) {
-                creds = zlib.inflateRawSync(compressedData.slice(10));
-            }
-            const parsedCreds = JSON.parse(creds.toString('utf8'));
-            if (!parsedCreds || typeof parsedCreds !== 'object' || Array.isArray(parsedCreds)) {
-                throw new Error("Legacy session credentials are invalid");
-            }
-            files = new Map([['creds.json', creds]]);
-        } else {
-            throw new Error("Invalid session format. Expected HAYWHY_MDX2!, HAYWHY_MDX!, PRINCE-MDX!, or PRINCE-MD~");
-        }
+        const { files, legacy } = decodeSessionToken(id);
 
         // Never destroy a usable local auth state until the replacement token
         // has been fully decoded and validated. writeAuthFiles restores creds
@@ -394,9 +359,9 @@ async function loadSession() {
         writeAuthFiles(files, sessionDir);
         fs.writeFileSync(markerPath, idHash, { mode: 0o600 });
         if (fs.existsSync(invalidatedPath)) fs.rmSync(invalidatedPath, { force: true });
-        console.log(files.size > 1
+        console.log(!legacy && files.size > 1
             ? "📡 Session      : 🔑 Retrieved credentials and Signal keys"
-            : "📡 Session      : 🔑 Retrieved legacy credentials (Signal keys are unavailable)");
+            : "📡 Session      : 🔑 Retrieved credentials without Signal keys");
 
     } catch (e) {
         console.error("❌ Session Error:", e.message);

@@ -4,10 +4,10 @@ const zlib = require('node:zlib');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { SESSION_PREFIX, decodeSessionArchive, writeAuthFiles } = require('../mayel/sessionPayload');
+const { SESSION_PREFIX, decodeSessionArchive, decodeSessionToken, writeAuthFiles } = require('../mayel/sessionPayload');
 
-function token(files) {
-  return SESSION_PREFIX + zlib.gzipSync(Buffer.from(JSON.stringify({ version: 2, files }))).toString('base64');
+function token(files, prefix = SESSION_PREFIX) {
+  return prefix + zlib.gzipSync(Buffer.from(JSON.stringify({ version: 2, files }))).toString('base64');
 }
 function entry(filePath, value) {
   return { path: filePath, data: Buffer.from(value).toString('base64') };
@@ -22,9 +22,31 @@ test('decodes full credentials and Signal-key file set', () => {
   assert.equal(JSON.parse(session.get('keys/app-state-sync-key-1.json').toString()).keyData, 'fixture');
 });
 
-test('rejects unsupported, malformed, missing-credentials and traversal payloads', () => {
-  assert.throws(() => decodeSessionArchive('wrong-prefix'), /Invalid session format/);
-  assert.throws(() => decodeSessionArchive(SESSION_PREFIX + 'not_base64'), /encoding/);
+test('accepts arbitrary prefixes for versioned archives and legacy credentials', () => {
+  const archive = token([
+    entry('creds.json', JSON.stringify({ registered: true })),
+    entry('keys/session-key.json', JSON.stringify({ keyData: 'fixture' })),
+  ], 'A different generator v9!');
+  const decodedArchive = decodeSessionToken(archive);
+  assert.equal(decodedArchive.legacy, false);
+  assert.equal(decodedArchive.files.has('keys/session-key.json'), true);
+
+  const creds = Buffer.from(JSON.stringify({ registered: true }));
+  const gzipToken = `vendor with spaces!${zlib.gzipSync(creds).toString('base64')}`;
+  const gzipResult = decodeSessionToken(gzipToken);
+  assert.equal(gzipResult.legacy, true);
+  assert.equal(gzipResult.files.has('creds.json'), true);
+
+  const deflateToken = `another-generator~${zlib.deflateRawSync(creds).toString('base64')}`;
+  const deflateResult = decodeSessionToken(deflateToken);
+  assert.equal(deflateResult.legacy, true);
+  assert.equal(JSON.parse(deflateResult.files.get('creds.json').toString()).registered, true);
+});
+
+test('rejects missing delimiters, unsafe prefixes, malformed, incomplete and traversal payloads', () => {
+  assert.throws(() => decodeSessionArchive('wrong-prefix'), /Invalid session/);
+  assert.throws(() => decodeSessionToken(`${'x'.repeat(129)}!${zlib.gzipSync(Buffer.from('{}')).toString('base64')}`), /prefix/);
+  assert.throws(() => decodeSessionArchive(`${SESSION_PREFIX}not_base64`), /encoding/);
   assert.throws(() => decodeSessionArchive(token([entry('../creds.json', '{}')])), /invalid file entry/);
   assert.throws(() => decodeSessionArchive(token([entry('keys/key-1.json', '{}')])), /missing creds\.json/);
   assert.throws(() => decodeSessionArchive(token([
