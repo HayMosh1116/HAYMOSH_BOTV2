@@ -141,7 +141,7 @@ JAMENDO_CLIENT_ID=<optional-public-client-id>
 MUSICBRAINZ_USER_AGENT=HAYMOSH_BOT/1.0 (contact@example.com)
 ```
 
-The session handler accepts any non-empty prefix followed by `!` or `~`, including `CYPHER-X:~`. It supports the versioned gzip archive, legacy compressed credential tokens, and unencrypted ZIP auth archives. ZIPs should contain `creds.json` and any Baileys `keys/*.json` files at the root or under one shared enclosing folder. Encrypted and ZIP64 archives are not supported.
+The session handler accepts any non-empty prefix followed by `!` or `~`, including `CYPHER-X:~`. It supports the versioned gzip archive, legacy compressed credential tokens, and unencrypted ZIP auth archives. Standard or URL-safe base64 may be padded, unpadded, or line-wrapped. ZIPs should contain `creds.json` and any Baileys `keys/*.json` files at the root or under one shared enclosing folder. Encrypted and ZIP64 archives are not supported.
 
 `OWNER_NUMBER` and `SUDO_NUMBERS` have no privileged built-in defaults; configure the owner explicitly. Treat `SESSION_ID`, `PRINCE_API_KEY`, and database URLs as secrets. Developer connection alerts are disabled unless you opt in with `DEVELOPER_ALERTS=true`.
 

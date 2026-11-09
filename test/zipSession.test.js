@@ -22,16 +22,27 @@ function traversalToken() {
   return `CYPHER-X:~${archive.toString('base64')}`;
 }
 
+const authEntries = [
+  ['auth_info_baileys/creds.json', JSON.stringify({ registered: true })],
+  ['auth_info_baileys/keys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
+];
+
 test('decodes a Cypher-X ZIP token and restores nested Signal-key files', () => {
-  const token = cypherToken([
-    ['auth_info_baileys/creds.json', JSON.stringify({ registered: true })],
-    ['auth_info_baileys/keys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
-  ]);
-  const decoded = decodeSessionToken(token);
+  const decoded = decodeSessionToken(cypherToken(authEntries));
   assert.equal(decoded.legacy, false);
   assert.deepEqual([...decoded.files.keys()].sort(), ['creds.json', 'keys/pre-key-1.json']);
   assert.equal(JSON.parse(decoded.files.get('creds.json').toString()).registered, true);
   assert.equal(JSON.parse(decoded.files.get('keys/pre-key-1.json').toString()).keyData, 'fixture');
+});
+
+test('accepts URL-safe, unpadded and line-wrapped base64 ZIP tokens', () => {
+  const original = cypherToken(authEntries);
+  const [prefix, encoded] = original.split('~', 2);
+  const urlSafeUnpadded = encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const wrapped = urlSafeUnpadded.match(/.{1,64}/g).join('\n');
+  const decoded = decodeSessionToken(`${prefix}~${wrapped}`);
+  assert.equal(decoded.files.size, 2);
+  assert.equal(decoded.files.has('creds.json'), true);
 });
 
 test('rejects unsafe or incomplete ZIP auth archives', () => {
@@ -39,6 +50,7 @@ test('rejects unsafe or incomplete ZIP auth archives', () => {
   assert.throws(() => decodeSessionToken(cypherToken([
     ['keys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
   ])), /missing creds\.json/);
+  assert.throws(() => decodeSessionToken('CYPHER-X:~AAAA==='), /encoding is invalid/);
 });
 
 test('rejects ZIP entries larger than the auth-file bound before extraction', () => {

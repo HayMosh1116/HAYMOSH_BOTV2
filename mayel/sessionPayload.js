@@ -5,12 +5,28 @@ const { hasZipSignature, decodeZipAuthArchive } = require('./zipAuthArchive');
 
 const SESSION_PREFIX = 'HAYWHY_MDX2!';
 const MAX_PREFIX_CHARS = 128;
-const MAX_TOKEN_BYTES = 8 * 1024 * 1024;
+const MAX_TOKEN_BYTES = 16 * 1024 * 1024;
 const MAX_FILES = 2000;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
-const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const BASE64_RE = /^(?:[A-Za-z0-9+/_-]{4})*(?:[A-Za-z0-9+/_-]{2}==?|[A-Za-z0-9+/_-]{3}=?)?$/;
+
+function decodeBase64(encoded, maxBytes, description) {
+  if (typeof encoded !== 'string' || Buffer.byteLength(encoded, 'utf8') > maxBytes) {
+    throw new Error(`${description} exceeds the allowed size`);
+  }
+  const compact = encoded.replace(/[\t\n\r ]/g, '');
+  if (!compact || !BASE64_RE.test(compact) || /[=].*[^=]/.test(compact) || compact.length % 4 === 1) {
+    throw new Error(`${description} encoding is invalid`);
+  }
+  const unpadded = compact.replace(/=+$/, '');
+  const normalized = unpadded.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - unpadded.length % 4) % 4);
+  if (!BASE64_RE.test(normalized)) throw new Error(`${description} encoding is invalid`);
+  const decoded = Buffer.from(normalized, 'base64');
+  if (decoded.toString('base64') !== normalized) throw new Error(`${description} encoding is invalid`);
+  return decoded;
+}
 
 function extractSessionPayload(token) {
   if (typeof token !== 'string' || token.length === 0) {
@@ -22,12 +38,7 @@ function extractSessionPayload(token) {
     throw new Error('Invalid session token prefix or delimiter');
   }
   const encoded = token.slice(separator + 1);
-  if (!encoded || Buffer.byteLength(encoded, 'utf8') > MAX_TOKEN_BYTES ||
-      encoded.length % 4 !== 0 || !BASE64_RE.test(encoded)) {
-    throw new Error('Session token encoding is invalid or too large');
-  }
-  const compressed = Buffer.from(encoded, 'base64');
-  if (compressed.toString('base64') !== encoded) throw new Error('Session token encoding is invalid');
+  const compressed = decodeBase64(encoded, MAX_TOKEN_BYTES, 'Session token');
   return { compressed };
 }
 
@@ -68,11 +79,16 @@ function decodeArchiveObject(parsed) {
         !/^[A-Za-z0-9._/-]+\.json$/.test(entry.path) ||
         entry.path.split('/').some(part => !part || part === '.' || part === '..') ||
         entry.path.includes('\\') || files.has(entry.path) ||
-        entry.data.length % 4 !== 0 || !BASE64_RE.test(entry.data)) {
+        !BASE64_RE.test(entry.data)) {
       throw new Error('Session archive contains an invalid file entry');
     }
-    const data = Buffer.from(entry.data, 'base64');
-    if (data.toString('base64') !== entry.data || data.length > MAX_FILE_BYTES) {
+    let data;
+    try {
+      data = decodeBase64(entry.data, MAX_FILE_BYTES * 2, 'Session archive file');
+    } catch (error) {
+      throw new Error('Session archive contains an invalid or oversized file');
+    }
+    if (data.length > MAX_FILE_BYTES) {
       throw new Error('Session archive contains an invalid or oversized file');
     }
     totalBytes += data.length;
