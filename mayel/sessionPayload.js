@@ -120,7 +120,7 @@ function decodeSessionToken(token) {
   const { compressed } = extractSessionPayload(token);
   if (hasZipSignature(compressed)) {
     const files = decodeZipAuthArchive(compressed);
-    return { files, legacy: files.size === 1 };
+    return { files, legacy: false };
   }
   const { raw, parsed } = decodeCompressedJson(compressed);
   if (isArchivePayload(parsed)) {

@@ -186,6 +186,20 @@ function decodeZipAuthArchive(buffer) {
     }
   }
   if (!files.has('creds.json')) throw new Error('ZIP session archive is missing creds.json');
+  const normalizedFiles = new Map();
+  for (const [name, data] of files) {
+    const relativePath = name.startsWith('keys/') ? name.slice('keys/'.length) : name;
+    if (!relativePath || relativePath.includes('/') || normalizedFiles.has(relativePath)) {
+      throw new Error('ZIP session auth files do not match the supported Baileys layout');
+    }
+    normalizedFiles.set(relativePath, data);
+  }
+  const creds = JSON.parse(normalizedFiles.get('creds.json').toString('utf8'));
+  if (!creds || typeof creds !== 'object' || Array.isArray(creds)) {
+    throw new Error('ZIP session credentials must be a JSON object');
+  }
+  files.clear();
+  for (const [name, data] of normalizedFiles) files.set(name, data);
   return files;
 }
 

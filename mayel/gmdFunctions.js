@@ -359,9 +359,11 @@ async function loadSession() {
         writeAuthFiles(files, sessionDir);
         fs.writeFileSync(markerPath, idHash, { mode: 0o600 });
         if (fs.existsSync(invalidatedPath)) fs.rmSync(invalidatedPath, { force: true });
-        console.log(!legacy && files.size > 1
-            ? "📡 Session      : 🔑 Retrieved credentials and Signal keys"
-            : "📡 Session      : 🔑 Retrieved credentials without Signal keys");
+        const additionalAuthFiles = [...files.keys()].filter(file => file !== 'creds.json').length;
+        console.log(`📡 Session      : 🔑 Imported creds.json and ${additionalAuthFiles} additional auth file(s)${legacy ? ' from a legacy token' : ' from an archive token'}`);
+        if (additionalAuthFiles === 0) {
+            console.warn("⚠️ Session token contains no additional Signal-key files; WhatsApp may reject or fail to decrypt this session.");
+        }
 
     } catch (e) {
         console.error("❌ Session Error:", e.message);

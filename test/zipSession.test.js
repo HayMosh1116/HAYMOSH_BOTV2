@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const AdmZip = require('adm-zip');
-const { decodeSessionToken } = require('../mayel/sessionPayload');
+const { useMultiFileAuthState } = require('prince-baileys');
+const { decodeSessionToken, writeAuthFiles } = require('../mayel/sessionPayload');
 
 function zipBuffer(entries) {
   const archive = new AdmZip();
@@ -24,15 +28,41 @@ function traversalToken() {
 
 const authEntries = [
   ['auth_info_baileys/creds.json', JSON.stringify({ registered: true })],
-  ['auth_info_baileys/keys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
+  ['auth_info_baileys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
 ];
 
-test('decodes a Cypher-X ZIP token and restores nested Signal-key files', () => {
+test('decodes a Cypher-X ZIP token with the Baileys flat auth-file layout', () => {
   const decoded = decodeSessionToken(cypherToken(authEntries));
   assert.equal(decoded.legacy, false);
-  assert.deepEqual([...decoded.files.keys()].sort(), ['creds.json', 'keys/pre-key-1.json']);
+  assert.deepEqual([...decoded.files.keys()].sort(), ['creds.json', 'pre-key-1.json']);
   assert.equal(JSON.parse(decoded.files.get('creds.json').toString()).registered, true);
-  assert.equal(JSON.parse(decoded.files.get('keys/pre-key-1.json').toString()).keyData, 'fixture');
+  assert.equal(JSON.parse(decoded.files.get('pre-key-1.json').toString()).keyData, 'fixture');
+});
+
+test('classifies a credential-only ZIP as an archive, not a legacy token', () => {
+  const decoded = decodeSessionToken(cypherToken([
+    ['creds.json', JSON.stringify({ registered: true })],
+  ]));
+  assert.equal(decoded.legacy, false);
+  assert.equal(decoded.files.size, 1);
+});
+
+test('flattens a keys/ ZIP folder into filenames readable by the bot Baileys fork', async () => {
+  const decoded = decodeSessionToken(cypherToken([
+    ['auth_info_baileys/creds.json', JSON.stringify({ registered: true })],
+    ['auth_info_baileys/keys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
+  ]));
+  assert.equal(decoded.files.has('pre-key-1.json'), true);
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'haywhy-cypher-session-'));
+  try {
+    writeAuthFiles(decoded.files, directory);
+    const { state } = await useMultiFileAuthState(directory);
+    const keys = await state.keys.get('pre-key', ['1']);
+    assert.deepEqual(keys['1'], { keyData: 'fixture' });
+    assert.equal(state.creds.registered, true);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('accepts URL-safe, unpadded and line-wrapped base64 ZIP tokens', () => {
@@ -45,11 +75,14 @@ test('accepts URL-safe, unpadded and line-wrapped base64 ZIP tokens', () => {
   assert.equal(decoded.files.has('creds.json'), true);
 });
 
-test('rejects unsafe or incomplete ZIP auth archives', () => {
+test('rejects unsafe, incomplete, or invalid credential ZIP archives', () => {
   assert.throws(() => decodeSessionToken(traversalToken()), /unsafe path/);
   assert.throws(() => decodeSessionToken(cypherToken([
-    ['keys/pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
+    ['pre-key-1.json', JSON.stringify({ keyData: 'fixture' })],
   ])), /missing creds\.json/);
+  assert.throws(() => decodeSessionToken(cypherToken([
+    ['creds.json', JSON.stringify([])],
+  ])), /credentials must be a JSON object/);
   assert.throws(() => decodeSessionToken('CYPHER-X:~AAAA==='), /encoding is invalid/);
 });
 
