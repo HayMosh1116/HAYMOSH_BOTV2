@@ -135,10 +135,12 @@ if (app) {
   else add("ok", "Heroku stack", "app.json targets heroku-24.");
   if (!app.buildpacks?.some((item) => String(item.url || "").includes("heroku/nodejs"))) add("error", "buildpack", "app.json does not declare the Heroku Node.js buildpack.", "Add the heroku/nodejs buildpack.");
   else add("ok", "buildpack", "Heroku Node.js buildpack is configured.");
-  for (const key of ["SESSION_ID", "OWNER_NUMBER"]) {
-    if (!app.env?.[key]?.required) add("error", "app Config Vars", `${key} is not marked required in app.json.`, `Mark ${key} as required and configure it before deployment.`);
-    else add("ok", "app Config Vars", `${key} is marked required.`);
-  }
+  if (app.env?.SESSION_ID?.required) add("error", "app Config Vars", "SESSION_ID must be optional because first-time QR login is supported.", "Mark SESSION_ID as optional in app.json.");
+  else add("ok", "app Config Vars", "SESSION_ID is optional; QR login is available when it is unset.");
+  if (!app.env?.OWNER_NUMBER?.required) add("error", "app Config Vars", "OWNER_NUMBER is not marked required in app.json.", "Mark OWNER_NUMBER as required and configure it before deployment.");
+  else add("ok", "app Config Vars", "OWNER_NUMBER is marked required.");
+  if (app.env?.WA_AUTH_DIR) add("ok", "app Config Vars", "WA_AUTH_DIR is available for a persistent volume path.");
+  else add("warning", "app Config Vars", "WA_AUTH_DIR is not declared in app.json.", "Declare WA_AUTH_DIR as optional if the host provides persistent mounted storage.");
 }
 
 if (!skipInstall) {
@@ -177,10 +179,12 @@ function checkLiveApp() {
     add("error", "live Heroku app", `Heroku returned invalid JSON: ${error.message}`, "Retry after authenticating the Heroku CLI.");
     return;
   }
-  for (const key of ["SESSION_ID", "OWNER_NUMBER"]) {
-    if (!String(config[key] || "").trim()) add("error", "live Config Vars", `${key} is missing or empty on ${appName}.`, `Set it with: heroku config:set ${key}=... --app ${appName}`);
-    else add("ok", "live Config Vars", `${key} is configured on ${appName}.`);
-  }
+  if (String(config.SESSION_ID || "").trim()) add("ok", "live Config Vars", "SESSION_ID is configured.");
+  else add("warning", "live Config Vars", `SESSION_ID is empty on ${appName}; first login uses a pairing code if PAIRING_NUMBER is set, otherwise a QR.`, "Set PAIRING_NUMBER for code login, or scan the QR printed in the hosting logs using WhatsApp → Linked devices.");
+  if (!String(config.WA_AUTH_DIR || "").trim()) add("warning", "live Config Vars", "WA_AUTH_DIR is not configured; auth files use the local default directory and may be lost on hosts with ephemeral filesystems.", "Set WA_AUTH_DIR to a dedicated mounted persistent-volume path if your host supports one.");
+  else add("ok", "live Config Vars", "WA_AUTH_DIR is configured.");
+  if (!String(config.OWNER_NUMBER || "").trim()) add("error", "live Config Vars", `OWNER_NUMBER is missing or empty on ${appName}.`, `Set it with: heroku config:set OWNER_NUMBER=... --app ${appName}`);
+  else add("ok", "live Config Vars", "OWNER_NUMBER is configured.");
   if (config.BOT_MODE && !["public", "private"].includes(String(config.BOT_MODE).toLowerCase())) add("error", "live Config Vars", `BOT_MODE=${config.BOT_MODE} is invalid.`, "Set BOT_MODE to public or private.");
   else add("ok", "live Config Vars", `BOT_MODE is ${config.BOT_MODE ? String(config.BOT_MODE).toLowerCase() : "not set (app default applies)"}.`);
   if (config.DEVELOPER_ALERTS && !["true", "false"].includes(String(config.DEVELOPER_ALERTS).toLowerCase())) add("error", "live Config Vars", `DEVELOPER_ALERTS=${config.DEVELOPER_ALERTS} is invalid.`, "Set DEVELOPER_ALERTS to true or false.");

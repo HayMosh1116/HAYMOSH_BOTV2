@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "node --test test/ytAudio.test.js test/musicProviders.test.js test/sessionPayload.test.js test/zipSession.test.js test/ping.test.js test/messageDispatch.test.js test/messageStore.test.js test/commandRegistry.test.js tests/devping.test.js",
+    "test": "node --test test/ytAudio.test.js test/musicProviders.test.js test/sessionPayload.test.js test/sessionBootstrap.test.js test/pairingCode.test.js test/zipSession.test.js test/ping.test.js test/messageDispatch.test.js test/messageStore.test.js test/commandRegistry.test.js tests/devping.test.js",
     "preflight:heroku": "node scripts/heroku-preflight.js",
     "stop": "pm2 stop princemd",
     "restart": "pm2 restart princemd"

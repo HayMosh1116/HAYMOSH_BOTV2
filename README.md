@@ -15,11 +15,11 @@
 
 ---
 
-## 🔑 Get Your Session ID
+## 🔑 Connect WhatsApp
 
 <div align="center">
 
-> **You need a Session ID to run the bot. Click the button below to generate yours:**
+> **A generated Session ID is optional.** You can use the generator below, or deploy without `SESSION_ID` and pair directly from your bot's hosting logs.
 
 <br/>
 
@@ -27,13 +27,11 @@
 
 <br/>
 
-| Step | Action |
-|------|--------|
-| 1️⃣ | Click the **Get Session ID** button above |
-| 2️⃣ | Scan the QR code with your WhatsApp |
-| 3️⃣ | Copy the generated Session ID |
-| 4️⃣ | Paste it into your `config.js` as `SESSION_ID` |
-| 5️⃣ | Deploy and enjoy! 🚀 |
+| Option | Action |
+|--------|--------|
+| Pairing code | Set `PAIRING_NUMBER` to the WhatsApp number in international format; enter the temporary code printed in hosting logs under WhatsApp → Linked devices → Link with phone number. |
+| Direct QR | Omit `PAIRING_NUMBER` (and `SESSION_ID`), then scan the displayed QR in WhatsApp → Linked devices. |
+| Session token | Use the generator, then set the full token as the optional `SESSION_ID` environment variable. |
 
 </div>
 
@@ -114,8 +112,10 @@ cd HAYMOSH_BOT
 # 2. Install dependencies
 npm install
 
-# 3. Set SESSION_ID in your host's environment variables
-# Paste the complete token privately; do not commit it to source control.
+# 3. SESSION_ID is optional. Without it, use PAIRING_NUMBER for a code,
+# or leave both unset to scan the QR printed in hosting logs.
+# Never share the temporary code, QR, or logs containing them.
+# On hosts with mounted persistent storage, set WA_AUTH_DIR to a dedicated path.
 
 # 4. Start the bot
 node index.js
@@ -128,7 +128,12 @@ node index.js
 Set these values in your hosting provider's environment configuration (or a private, ignored `.env` file):
 
 ```env
-SESSION_ID=CYPHER-X:~<complete-generated-ZIP-session-token>
+# Optional: omit this to pair directly from the QR printed in hosting logs.
+# SESSION_ID=CYPHER-X:~<complete-generated-ZIP-session-token>
+# Optional: set your WhatsApp number in international format for a pairing code.
+# PAIRING_NUMBER=2349123456789
+# Optional: use a dedicated mounted volume path, outside the bot source tree.
+# WA_AUTH_DIR=/data/whatsapp-auth
 OWNER_NUMBER=<your-WhatsApp-number-with-country-code>
 SUDO_NUMBERS=
 BOT_NAME=HAYMOSH_BOT
@@ -141,9 +146,11 @@ JAMENDO_CLIENT_ID=<optional-public-client-id>
 MUSICBRAINZ_USER_AGENT=HAYMOSH_BOT/1.0 (contact@example.com)
 ```
 
-The session handler accepts any non-empty prefix followed by `!` or `~`, including `CYPHER-X:~`. It supports the versioned gzip archive, legacy compressed credential tokens, and unencrypted ZIP auth archives. Standard or URL-safe base64 may be padded, unpadded, or line-wrapped. ZIPs should contain `creds.json` and Baileys auth JSON files, normally as flat filenames such as `pre-key-1.json`, at the root or under one shared enclosing folder. An optional `keys/` directory is flattened on import. Encrypted and ZIP64 archives are not supported.
+`SESSION_ID` is optional. If it is unset and no local auth exists, the bot requests a pairing code when `PAIRING_NUMBER` is valid; otherwise it prints a scannable QR in hosting logs. Enter the code in WhatsApp → Linked devices → Link with phone number, or scan the QR there. Baileys saves credentials locally after linking. The default auth directory is `mayel/session`. Set `WA_AUTH_DIR` to a dedicated directory outside the source tree when your host provides a mounted persistent volume. If the host discards local files on restart and has no persistent volume, you may need to pair again after a restart or redeploy.
 
-`OWNER_NUMBER` and `SUDO_NUMBERS` have no privileged built-in defaults; configure the owner explicitly. Treat `SESSION_ID`, `PRINCE_API_KEY`, and database URLs as secrets. Developer connection alerts are disabled unless you opt in with `DEVELOPER_ALERTS=true`.
+When a token is used, the session handler accepts any non-empty prefix followed by `!` or `~`, including `CYPHER-X:~`. It supports the versioned gzip archive, legacy compressed credential tokens, and unencrypted ZIP auth archives. Standard or URL-safe base64 may be padded, unpadded, or line-wrapped. ZIPs should contain `creds.json` and Baileys auth JSON files, normally as flat filenames such as `pre-key-1.json`, at the root or under one shared enclosing folder. An optional `keys/` directory is flattened on import. Encrypted and ZIP64 archives are not supported.
+
+`OWNER_NUMBER` and `SUDO_NUMBERS` have no privileged built-in defaults; configure the owner explicitly. Treat `SESSION_ID`, the live QR code, `PRINCE_API_KEY`, and database URLs as secrets. Developer connection alerts are disabled unless you opt in with `DEVELOPER_ALERTS=true`.
 
 The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata. If `JAMENDO_CLIENT_ID` is configured, Jamendo is used only when its API marks a matching track as downloadable. Otherwise the bot falls back to the existing strict YouTube/SoundCloud verification path and will not send low-confidence, remix, or cover matches.
 
@@ -156,7 +163,7 @@ The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata.
 | Node.js | `22.x` |
 | npm | `>= 8.x` |
 | WhatsApp | Active account |
-| Session ID | [Generate here ↗](https://haymoshmdx-production-2ed6.up.railway.app/) |
+| WhatsApp login | Use a first-run pairing code or QR from hosting logs, or optionally [generate a Session ID ↗](https://haymoshmdx-production-2ed6.up.railway.app/) |
 
 ---
 
@@ -176,7 +183,7 @@ To check an existing Heroku app's live Config Vars, install and authenticate the
 npm run preflight:heroku -- --app YOUR_HEROKU_APP_NAME
 ```
 
-The live check verifies that `SESSION_ID` and `OWNER_NUMBER` are configured without printing their secret values. You can also set `HEROKU_APP_NAME` instead of passing `--app`. Use `--skip-install` to omit the npm dry run or `--json` for CI tooling.
+The live check treats `SESSION_ID` as optional, verifies `OWNER_NUMBER` without printing it, and warns when `WA_AUTH_DIR` is unset. You can also set `HEROKU_APP_NAME` instead of passing `--app`. Use `--skip-install` to omit the npm dry run or `--json` for CI tooling.
 
 ---
 

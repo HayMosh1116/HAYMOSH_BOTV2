@@ -5,7 +5,10 @@ module.exports = {
     // Online database link (MongoDB Atlas). Keeps settings safe across restarts.
     // Paste your link between the quotes. Keep this GitHub repo PRIVATE.
     MONGODB_URI: process.env.MONGODB_URI || '',
+    // Optional: use a generated token, or omit it to start first-time QR login.
     SESSION_ID: process.env.SESSION_ID || '',
+    // Optional: international phone number for pairing-code login instead of QR.
+    PAIRING_NUMBER: process.env.PAIRING_NUMBER || '',
     PREFIX: process.env.PREFIX || ".",
     OWNER_NAME: process.env.OWNER_NAME || "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖⁩ ",
     // Privileged identities must be set explicitly; never authorize a built-in number.

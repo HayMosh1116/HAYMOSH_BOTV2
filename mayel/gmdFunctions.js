@@ -10,8 +10,7 @@ const os = require("os");
 const crypto = require("crypto");
 const util = require("util");
 const sharp = require('sharp');
-const config = require('../config');
-const { decodeSessionToken, writeAuthFiles } = require('./sessionPayload');
+const { loadSession } = require('./sessionBootstrap');
 const { gmdStore } = require('./messageStore');
 const FormData = require('form-data');
 const { fromBuffer } = require('file-type');
@@ -36,10 +35,6 @@ function resolveFfmpegPath() {
 
 const ffmpegPath = resolveFfmpegPath();
 ffmpeg.setFfmpegPath(ffmpegPath);
-
-const sessionDir = path.join(__dirname, "session");
-const sessionPath = path.join(sessionDir, "creds.json");
-
 
 async function stickerToImage(webpData, options = {}) {
     try {
@@ -326,45 +321,6 @@ function formatBytes(bytes) {
     return bytes.toFixed(2) + ' bytes';
   }
     }
-
-async function loadSession() {
-    try {
-        if (!config.SESSION_ID || typeof config.SESSION_ID !== 'string') {
-            throw new Error("❌ SESSION_ID is missing or invalid");
-        }
-
-        const id = config.SESSION_ID;
-        const idHash = require('crypto').createHash('sha256').update(id).digest('hex');
-        const markerPath = path.join(sessionDir, ".session_id_hash");
-        const invalidatedPath = path.join(__dirname, ".session-invalidated");
-        if (fs.existsSync(invalidatedPath) && fs.readFileSync(invalidatedPath, "utf8").trim() === idHash) {
-            throw new Error("This SESSION_ID was logged out by WhatsApp. Generate and configure a new session token.");
-        }
-        if (fs.existsSync(sessionPath) && fs.existsSync(markerPath) &&
-            fs.readFileSync(markerPath, "utf8").trim() === idHash) {
-            console.log("📡 Session      : ♻️ Reusing saved session state");
-            return;
-        }
-
-        const { files, legacy } = decodeSessionToken(id);
-
-        // Never destroy a usable local auth state until the replacement token
-        // has been fully decoded and validated. writeAuthFiles restores creds
-        // and all Signal keys with private file permissions.
-        writeAuthFiles(files, sessionDir);
-        fs.writeFileSync(markerPath, idHash, { mode: 0o600 });
-        if (fs.existsSync(invalidatedPath)) fs.rmSync(invalidatedPath, { force: true });
-        const additionalAuthFiles = [...files.keys()].filter(file => file !== 'creds.json').length;
-        console.log(`📡 Session      : 🔑 Imported creds.json and ${additionalAuthFiles} additional auth file(s)${legacy ? ' from a legacy token' : ' from an archive token'}`);
-        if (additionalAuthFiles === 0) {
-            console.warn("⚠️ Session token contains no additional Signal-key files; WhatsApp may reject or fail to decrypt this session.");
-        }
-
-    } catch (e) {
-        console.error("❌ Session Error:", e.message);
-        throw e;
-    }
-}
 
 const runtime = (seconds) => {
         seconds = Number(seconds)

@@ -24,8 +24,16 @@
   },
   "env": {
     "SESSION_ID": {
-      "description": "Your WhatsApp session ID (starts with HAYWHY_MDX! )",
-      "required": true
+      "description": "Optional imported WhatsApp session token. Omit to connect by scanning the QR shown in hosting logs.",
+      "required": false
+    },
+    "WA_AUTH_DIR": {
+      "description": "Optional dedicated path for Baileys auth files; use a mounted persistent volume when the host supports one.",
+      "required": false
+    },
+    "PAIRING_NUMBER": {
+      "description": "Optional WhatsApp number in international format to receive a pairing code instead of using the QR.",
+      "required": false
     },
     "PREFIX": {
       "description": "Bot command prefix",

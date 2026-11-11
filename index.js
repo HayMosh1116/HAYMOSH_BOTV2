@@ -69,10 +69,12 @@ const {
     StickerTypes,
 } = require("wa-sticker-formatter");
 const pino = require("pino");
+const qrcodeTerminal = require("qrcode-terminal");
 const config = require("./config");
 const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./mayel/devPing");
 const botNetwork = require("./mayel/botNetwork");
 const botAlerts = require("./mayel/alerts");
+const { normalizePairingNumber, requestPairingCode } = require("./mayel/pairingCode");
 const axios = require("axios");
 // Keep third-party command APIs from hanging forever or buffering unbounded responses.
 axios.defaults.timeout = 60000;
@@ -206,7 +208,7 @@ app.get("/healthz", (req, res) => {
 });
 app.listen(PORT, () => console.log(`Server Running on Port: ${PORT}`));
 
-const sessionDir = path.join(__dirname, "mayel", "session");
+const { authDir: sessionDir } = require("./mayel/authDir");
 
 let store;
 let autoBioInterval;
@@ -1499,8 +1501,14 @@ async function startPrince() {
         });
 
         Prince.ev.on("connection.update", async (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr } = update;
             if (connection) devPingConnectionStatus = connection;
+            if (qr) {
+                const message = "SESSION_ID is optional: scan this QR in WhatsApp → Linked devices. Treat the QR and these logs as secrets.";
+                console.log(`\n📲 ${message}\n`);
+                qrcodeTerminal.generate(qr, { small: true });
+                addHeartbeatEvent("QR login required", "Scan the QR code shown in the hosting logs using WhatsApp → Linked devices.", "warning");
+            }
             if (connection === "connecting") {
                 whatsappConnected = false;
                 heartbeatConnection = "Connecting";
@@ -1636,7 +1644,7 @@ async function startPrince() {
                     // Code 500 also covers transient "Stream Errored (ack)" drops.
                     // Never wipe the saved keys for it: that forces a restore from
                     // the stale SESSION_ID snapshot and causes Bad MAC / no replies.
-                    // A genuinely bad session is fixed by setting a new SESSION_ID.
+                    // A genuinely bad session needs a fresh session token or QR login.
                     console.log("Connection error 500, reconnecting (session kept)...");
                     scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionClosed) {
@@ -1653,16 +1661,14 @@ async function startPrince() {
                     console.log("Connection replaced (405) — waiting 60s for old session to expire...");
                     scheduleReconnect(60000);
                 } else if (reason === DisconnectReason.loggedOut) {
-                    console.log(
-                        "Device logged out, delete session and scan again",
-                    );
+                    console.log("Device logged out; local auth will be cleared for a fresh QR login.");
                     try {
                         const configuredSession = String(config.SESSION_ID || "");
                         if (configuredSession) {
                             const sessionHash = require("crypto").createHash("sha256").update(configuredSession).digest("hex");
                             fs.writeFileSync(path.join(__dirname, "mayel", ".session-invalidated"), sessionHash, { mode: 0o600 });
                         }
-                        await fs.remove(__dirname + "/mayel/session");
+                        await fs.remove(sessionDir);
                     } catch (e) {
                         console.error("Failed to remove session:", e);
                     }
@@ -1681,6 +1687,22 @@ async function startPrince() {
                 }
             }
         });
+
+        const pairingNumber = normalizePairingNumber(config.PAIRING_NUMBER);
+        if (String(config.PAIRING_NUMBER || "").trim() && !pairingNumber) {
+            console.warn("PAIRING_NUMBER is invalid; QR login remains available. Use 6–15 international digits.");
+        }
+        if (pairingNumber && !state.creds.registered) {
+            try {
+                const pairingCode = await requestPairingCode(Prince, state.creds, pairingNumber);
+                if (pairingCode) {
+                    console.log(`\n🔐 WhatsApp pairing code: ${pairingCode}\nEnter it in WhatsApp → Linked devices → Link with phone number. Treat this code and the logs as secrets.\n`);
+                    addHeartbeatEvent("Pairing code ready", "Enter the temporary code in WhatsApp → Linked devices to link this bot.", "warning");
+                }
+            } catch (error) {
+                console.warn("Pairing-code request failed; QR login remains available:", error?.message || error);
+            }
+        }
 
         Prince.ev.on("group-participants.update", async (update) => {
             try {
@@ -1898,7 +1920,7 @@ setTimeout(async () => {
     try {
         await loadSession();
     } catch (error) {
-        console.error("Session initialization failed; WhatsApp will not connect until SESSION_ID is corrected:", error?.message || error);
+        console.error("WhatsApp auth initialization failed; check WA_AUTH_DIR and SESSION_ID if configured:", error?.message || error);
         return;
     }
     try { await require("./mayel/cloudSync").restore(require("./mayel/gmdSudoUtil").db); } catch (e) { console.error("[CLOUD]", e.message); }
