@@ -52,6 +52,17 @@ function tableExists(name) {
   return !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
 }
 
+async function readTableRowsYielding(name, yieldEvery = 500) {
+  const rows = [];
+  let count = 0;
+  for (const row of db.prepare(`SELECT * FROM ${name}`).iterate()) {
+    rows.push(row);
+    count += 1;
+    if (count % yieldEvery === 0) await new Promise((resolve) => setImmediate(resolve));
+  }
+  return rows;
+}
+
 async function restore(database) {
   db = database;
   if (!uri()) {
@@ -106,7 +117,7 @@ async function pushNow() {
     const c = await connect();
     for (const t of TABLES) {
       if (!tableExists(t)) continue;
-      const rows = db.prepare(`SELECT * FROM ${t}`).all();
+      const rows = await readTableRowsYielding(t);
       const safeRows = t === "bot_settings" ? filterSafeBotSettingRows(rows) : rows;
       await c.replaceOne({ _id: docId(t) }, { _id: docId(t), bot: botKey(), table: t, rows: safeRows, updatedAt: new Date() }, { upsert: true });
     }

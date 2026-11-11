@@ -1211,13 +1211,13 @@ gmd({ pattern: "riddle", aliases: ["daily-riddle"], react: "🧩", category: "ga
   startExtraAnswerGame(from, Prince, c, "riddle", () => rand(EXTRA_GAME_DATA.riddle), "solved the riddle!");
 });
 
-gmd({ pattern: "truth", aliases: ["truthgame"], react: "🗣️", category: "games",
+gmd({ pattern: "truthgame", aliases: ["truthprompt"], react: "🗣️", category: "games",
   description: "Get a truth question." }, async (from, Prince, c) => {
   const prompt = rand(EXTRA_GAME_DATA.truth);
   await c.reply(`🗣️ *TRUTH*\n\n${prompt}\n\nAnswer honestly!`);
 });
 
-gmd({ pattern: "dare", aliases: ["daregame"], react: "😈", category: "games",
+gmd({ pattern: "daregame", aliases: ["dareprompt"], react: "😈", category: "games",
   description: "Get a dare." }, async (from, Prince, c) => {
   const prompt = rand(EXTRA_GAME_DATA.dare);
   await c.reply(`😈 *DARE*\n\n${prompt}`);

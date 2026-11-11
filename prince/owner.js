@@ -410,7 +410,7 @@ _In a group:_ *.antidelete on/off/default*
 
 gmd({
   pattern: "del",
-  aliases: ["delete", "dlt", "remove"],
+  aliases: ["delete", "dlt"],
   react: "🗑️",
   category: "owner",
   description: "Delete a quoted message in groups or private chats",
@@ -1614,7 +1614,7 @@ gmd({
 
 gmd({
   pattern: "whois",
-  aliases: ['profile'],
+  aliases: ['userprofile'],
   react: "👀",
   category: "owner",
   description: "Get someone's full profile details.",

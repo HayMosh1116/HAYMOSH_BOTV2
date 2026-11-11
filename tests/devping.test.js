@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing, uptimeText } = require('../mayel/devPing');
+const { createMessageDeduplicator, extractMessageText } = require('../mayel/messageDispatch');
 const developer = '2349122761580@s.whatsapp.net';
 const message = (chat, id = 'ping', extra = {}) => ({ key: { id, remoteJid: chat, ...extra }, message: { conversation: 'devping' } });
 function socket() { const calls = []; return { calls, sendMessage: async (...args) => { calls.push(args); } }; }
@@ -78,16 +79,17 @@ function wire() {
   let listener; const dispatched = [];
   vm.runInNewContext(source.slice(start, end), {
     Prince: { ev: { on: (_, handler) => { listener = handler; } } }, performance,
-    isUniversalDevPing, processCommandMessage: async ms => dispatched.push(ms.key.id), console,
+    incomingMessageDeduplicator: createMessageDeduplicator(),
+    processCommandMessage: async ms => dispatched.push(ms.key.id), console,
   });
   return { listener, dispatched };
 }
-test('main listener handles every live ping in a batch without changing other command selection', async () => {
+test('main listener handles every live message in a batch', async () => {
   const { listener, dispatched } = wire();
   await listener({ type: 'notify', messages: [{ key: { id: 'menu' }, message: { conversation: '!menu' } }, message(developer, 'a'), message(developer, 'b')] });
   assert.deepEqual(dispatched, ['menu', 'a', 'b']);
 });
-test('history replay does not trigger universal ping', async () => {
+test('history replay does not dispatch commands or trigger universal ping', async () => {
   const { listener, dispatched } = wire(); await listener({ type: 'append', messages: [message(developer)] }); assert.deepEqual(dispatched, []);
 });
 
@@ -100,7 +102,7 @@ function dispatcher({ mode = 'private', prefix = '!', groupInfo = null, resolved
   const start = source.indexOf('        const processCommandMessage = async (ms, receivedAt) => {');
   const end = source.indexOf('\n        Prince.ev.on("messages.upsert", async ({ messages = [], type })', start);
   const run = vm.runInNewContext(`${source.slice(start, end)}\nprocessCommandMessage;`, {
-    Prince: bot, isUniversalDevPing, isVerifiedDeveloper, respondDevPing,
+    Prince: bot, isUniversalDevPing, isVerifiedDeveloper, respondDevPing, extractMessageText,
     resolveJidFromLid: async () => resolvedLid, devPingConnectionStatus: 'open',
     getSetting: (key, fallback) => {
       reads.push(key);

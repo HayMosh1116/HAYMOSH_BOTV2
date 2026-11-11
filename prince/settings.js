@@ -945,8 +945,8 @@ gmd(
 
 gmd(
   {
-    pattern: "allnotes",
-    aliases: ["viewnotes", "usernotes", "allnotesdb"],
+    pattern: "allnotesdb",
+    aliases: ["usernotes", "viewallnotes"],
     react: "📋",
     category: "owner",
     description: "View all users' notes (owner only)",

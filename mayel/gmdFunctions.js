@@ -6,10 +6,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const axios = require("axios");
 const cheerio = require("cheerio");
 const path = require("path");
+const os = require("os");
+const crypto = require("crypto");
 const util = require("util");
 const sharp = require('sharp');
 const config = require('../config');
 const { decodeSessionToken, writeAuthFiles } = require('./sessionPayload');
+const { gmdStore } = require('./messageStore');
 const FormData = require('form-data');
 const { fromBuffer } = require('file-type');
 const fs = require('fs');
@@ -235,71 +238,63 @@ async function toPtt(buffer) {
 }
 
 async function formatAudio(buffer) {
-  return new Promise((resolve, reject) => {
-    const tempId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const tempInput = `temp_${tempId}.input`;
-    const tempOutput = `temp_${tempId}.mp3`;
-    
-    fs.writeFileSync(tempInput, buffer);
-    
-    ffmpeg()
-      .input(tempInput)
-      .noVideo() 
-      .audioCodec('libmp3lame')
-      .audioBitrate(128)
-      .outputOptions([
-        '-preset ultrafast', 
-        '-compression_level 0', 
-        '-joint_stereo 1', 
-        '-reservoir 0', 
-        '-fflags +genpts', 
-      ])
-      .toFormat('mp3')
-      .on('error', (err) => {
-        fs.unlinkSync(tempInput);
-        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
-        reject(err);
-      })
-      .on('end', () => {
-        const outputBuffer = fs.readFileSync(tempOutput);
-        fs.unlinkSync(tempInput);
-        fs.unlinkSync(tempOutput);
-        resolve(outputBuffer);
-      })
-      .save(tempOutput);
-  });
+  const tempId = crypto.randomUUID();
+  const tempInput = path.join(os.tmpdir(), `haywhy_${tempId}.input`);
+  const tempOutput = path.join(os.tmpdir(), `haywhy_${tempId}.mp3`);
+  await fs.promises.writeFile(tempInput, buffer);
+  try {
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(tempInput)
+        .noVideo()
+        .audioCodec('libmp3lame')
+        .audioBitrate(128)
+        .outputOptions([
+          '-preset ultrafast',
+          '-compression_level 0',
+          '-joint_stereo 1',
+          '-reservoir 0',
+          '-fflags +genpts',
+        ])
+        .toFormat('mp3')
+        .on('error', reject)
+        .on('end', resolve)
+        .save(tempOutput);
+    });
+    return await fs.promises.readFile(tempOutput);
+  } finally {
+    await Promise.all([
+      fs.promises.unlink(tempInput).catch(() => {}),
+      fs.promises.unlink(tempOutput).catch(() => {}),
+    ]);
+  }
 }
 
 async function formatVideo(buffer) {
-  return new Promise((resolve, reject) => {
-    const tempInput = `temp_${Date.now()}.input`;
-    const tempOutput = `temp_${Date.now()}.mp4`;
-    fs.writeFileSync(tempInput, buffer);
-    
-    ffmpeg()
-      .input(tempInput)
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .outputOptions([
-        '-preset fast',
-        '-movflags faststart',
-        '-pix_fmt yuv420p'
-      ])
-      .size('640x?')
-      .toFormat('mp4')
-      .on('error', (err) => {
-        fs.unlinkSync(tempInput);
-        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
-        reject(err);
-      })
-      .on('end', () => {
-        const outputBuffer = fs.readFileSync(tempOutput);
-        fs.unlinkSync(tempInput);
-        fs.unlinkSync(tempOutput);
-        resolve(outputBuffer);
-      })
-      .save(tempOutput);
-  });
+  const tempId = crypto.randomUUID();
+  const tempInput = path.join(os.tmpdir(), `haywhy_${tempId}.input`);
+  const tempOutput = path.join(os.tmpdir(), `haywhy_${tempId}.mp4`);
+  await fs.promises.writeFile(tempInput, buffer);
+  try {
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(tempInput)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .outputOptions(['-preset fast', '-movflags faststart', '-pix_fmt yuv420p'])
+        .size('640x?')
+        .toFormat('mp4')
+        .on('error', reject)
+        .on('end', resolve)
+        .save(tempOutput);
+    });
+    return await fs.promises.readFile(tempOutput);
+  } finally {
+    await Promise.all([
+      fs.promises.unlink(tempInput).catch(() => {}),
+      fs.promises.unlink(tempOutput).catch(() => {}),
+    ]);
+  }
 }
 
 
@@ -410,6 +405,15 @@ async function gmdFancy(text) {
 
 const gmdBuffer = async (url, options = {}) => {
     try {
+        options = options && typeof options === "object" ? options : {};
+        const timeoutOverride = Number(options.timeout);
+        const requestedMax = Number(options.maxContentLength);
+        const timeout = Number.isFinite(timeoutOverride) && timeoutOverride > 0
+            ? Math.min(timeoutOverride, 120000)
+            : 90000;
+        const maxContentLength = Number.isFinite(requestedMax) && requestedMax > 0
+            ? Math.min(requestedMax, 64 * 1024 * 1024)
+            : 64 * 1024 * 1024;
         const res = await axios({
             method: "GET",
             url,
@@ -418,8 +422,9 @@ const gmdBuffer = async (url, options = {}) => {
                 'DNT': 1,
                 'Upgrade-Insecure-Request': 1
             },
-            timeout: 300000,
             ...options,
+            timeout,
+            maxContentLength,
             responseType: 'arraybuffer',
         });
         
@@ -429,7 +434,7 @@ const gmdBuffer = async (url, options = {}) => {
         
         return res.data;
     } catch (err) {
-        console.error("gmdBuffer Error:", err);
+        console.error("gmdBuffer Error:", err?.message || err);
         return err;
     }
 };
@@ -502,93 +507,6 @@ async function dBinary(str) {
     binCode.push(String.fromCharCode(parseInt(newBin[i], 2)));
   }
   return binCode.join("");
-}
-
-class gmdStore {
-    constructor() {
-        this.messages = new Map();
-        this.byId = new Map();
-        this.contacts = new Map();
-        this.chats = new Map();
-        this.maxMessages = 10000;
-        this.maxChats = 5000;
-        this.cleanupInterval = setInterval(() => this.cleanup(), 300000);
-    }
-
-    loadMessage(jid, id) {
-        const chatMessages = this.messages.get(jid);
-        const direct = chatMessages?.get(id);
-        if (direct) return direct;
-        // WhatsApp retry requests (the phone asking the bot to resend a
-        // message it could not decrypt) can reference the chat by LID or a
-        // device-suffixed JID. Fall back to the message id so the resend
-        // succeeds instead of leaving "Waiting for this message".
-        return this.byId.get(id) || null;
-    }
-
-    saveMessage(jid, message) {
-        if (!this.messages.has(jid)) {
-            this.messages.set(jid, new Map());
-        }
-        
-        const chatMessages = this.messages.get(jid);
-        chatMessages.set(message.key.id, message);
-        this.byId.set(message.key.id, message);
-        if (this.byId.size > this.maxMessages) {
-            this.byId.delete(this.byId.keys().next().value);
-        }
-        
-        if (chatMessages.size > this.maxMessages) {
-            const firstKey = chatMessages.keys().next().value;
-            chatMessages.delete(firstKey);
-        }
-    }
-
-    cleanup() {
-        try {
-            if (this.messages.size > this.maxChats) {
-                const chatsToDelete = this.messages.size - this.maxChats;
-                const oldestChats = Array.from(this.messages.keys()).slice(0, chatsToDelete);
-                oldestChats.forEach(jid => this.messages.delete(jid));
-            }
-            
-         //   console.log(`🧹 Store cleanup: ${this.messages.size} chats in memory`);
-        } catch (error) {
-            console.error('Store cleanup error:', error);
-        }
-    }
-
-    bind(ev) {
-        ev.on('messages.upsert', ({ messages }) => {
-            messages.forEach(msg => {
-                if (msg.key?.remoteJid && msg.key?.id) {
-                    this.saveMessage(msg.key.remoteJid, msg);
-                }
-            });
-        });
-
-        ev.on('chats.set', ({ chats }) => {
-            chats.forEach(chat => {
-                this.chats.set(chat.id, chat);
-            });
-        });
-
-        ev.on('contacts.set', ({ contacts }) => {
-            contacts.forEach(contact => {
-                this.contacts.set(contact.id, contact);
-            });
-        });
-    }
-
-    destroy() {
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-        }
-        this.messages.clear();
-        this.byId.clear();
-        this.contacts.clear();
-        this.chats.clear();
-    }
 }
 
 module.exports = { dBinary, eBinary, dBase, eBase, runtime, sleep, gmdFancy, stickerToImage, toAudio, toVideo, toPtt, formatVideo, formatAudio, monospace, formatBytes, sleep, gmdBuffer, gmdJson, latestWaVersion, gmdRandom, isUrl,gmdStore, isNumber, loadSession, verifyJidState };

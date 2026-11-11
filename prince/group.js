@@ -334,8 +334,7 @@ gmd(
 
 gmd(
   {
-    pattern: "savecontact",
-    aliases: ["savec", "sc"],
+    pattern: "savec",
     react: "📇",
     category: "general",
     description: "Save the contact of the person whose message you replied to",
@@ -872,7 +871,7 @@ _Or use directly:_
 gmd(
   {
     pattern: "add",
-    aliases: ["invite"],
+    aliases: ["addmember"],
     react: "➕",
     category: "group",
     description: "Add a user to the group.",

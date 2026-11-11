@@ -390,7 +390,7 @@ ${providerLine}
 
 gmd({
     pattern: "video",
-    aliases: ["ytmp4doc", "mp4", "ytmp4", "dlmp4"],
+    aliases: ["ytmp4doc", "mp4", "ytmp4"],
     category: "downloader",
     react: "🎥",
     description: "Download Video from Youtube"

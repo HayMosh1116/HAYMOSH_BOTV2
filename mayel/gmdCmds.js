@@ -21,6 +21,14 @@ function gmd(obj, functions) {
     if (!obj.category) infoComs.category = "general"; 
     if (!obj.react) infoComs.react = "🚀";
     if (!obj.dontAddCommandList) infoComs.dontAddCommandList = false; 
+    const aliasValues = [
+        ...(Array.isArray(obj.aliases) ? obj.aliases : []),
+        ...(Array.isArray(obj.alias) ? obj.alias : typeof obj.alias === "string" ? [obj.alias] : []),
+    ];
+    infoComs.aliases = [...new Set(aliasValues
+        .filter((alias) => typeof alias === "string")
+        .map((alias) => alias.trim().toLowerCase())
+        .filter(Boolean))];
     infoComs.function = functions;
     
     const stack = new Error().stack;

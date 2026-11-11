@@ -74,6 +74,9 @@ const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./m
 const botNetwork = require("./mayel/botNetwork");
 const botAlerts = require("./mayel/alerts");
 const axios = require("axios");
+// Keep third-party command APIs from hanging forever or buffering unbounded responses.
+axios.defaults.timeout = 60000;
+axios.defaults.maxContentLength = 64 * 1024 * 1024;
 const googleTTS = require("google-tts-api");
 const fs = require("fs-extra");
 const path = require("path");
@@ -116,6 +119,8 @@ const {
 } = config;
 const PORT = process.env.PORT || 5000;
 const { isProtectedDeveloper } = require("./mayel/developerProtection");
+const { createMessageDeduplicator, extractMessageText } = require("./mayel/messageDispatch");
+const incomingMessageDeduplicator = createMessageDeduplicator();
 
 const app = express();
 botNetwork.installNetworkApi(app);
@@ -212,6 +217,8 @@ let isShuttingDown = false;
 let reconnectTimer = null;
 let startInProgress = false;
 let shutdownHandlersRegistered = false;
+let connectionStableTimer = null;
+const CONNECTION_STABLE_RESET_MS = 60000;
 
 // Group metadata cache: fetching it from WhatsApp on every group message was
 // a major source of slow replies. Entries expire after 15 minutes and are
@@ -330,15 +337,30 @@ async function startPrince() {
 
         const rawGroupMetadata = Prince.groupMetadata.bind(Prince);
         const groupMetaInflight = new Map();
+        const boundedGroupMetadata = (promise) => new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(null), 8000);
+            timer.unref?.();
+            promise.then(
+                (value) => { clearTimeout(timer); resolve(value); },
+                (error) => { clearTimeout(timer); reject(error); },
+            );
+        });
         Prince.groupMetadata = async (jid) => {
             const hit = groupMetaCache.get(jid);
             if (hit && Date.now() - hit.at < GROUP_META_TTL) return hit.data;
-            if (groupMetaInflight.has(jid)) return groupMetaInflight.get(jid);
-            const p = rawGroupMetadata(jid)
-                .then((data) => { groupMetaCache.set(jid, { data, at: Date.now() }); return data; })
-                .finally(() => groupMetaInflight.delete(jid));
-            groupMetaInflight.set(jid, p);
-            return p;
+            let p = groupMetaInflight.get(jid);
+            if (!p) {
+                p = rawGroupMetadata(jid).then((data) => {
+                    groupMetaCache.set(jid, { data, at: Date.now() });
+                    return data;
+                });
+                groupMetaInflight.set(jid, p);
+                p.then(
+                    () => { if (groupMetaInflight.get(jid) === p) groupMetaInflight.delete(jid); },
+                    () => { if (groupMetaInflight.get(jid) === p) groupMetaInflight.delete(jid); },
+                );
+            }
+            return boundedGroupMetadata(p);
         };
         Prince.ev.on("groups.update", (updates) => {
             for (const u of updates || []) if (u?.id) groupMetaCache.delete(u.id);
@@ -817,21 +839,24 @@ async function startPrince() {
             const pushName = ms.pushName || "Prince-Md User";
             // Record group activity once per incoming WhatsApp message.
             if (isGroup && !ms.key.fromMe) {
-                try {
-                    require("./prince/activity").trackGroupMessage({
+                const activityRecord = {
                         groupId: from,
                         senderJid: sender,
                         pushName,
                         messageId: ms.key.id,
                         timestamp: Date.now(),
-                    });
-                } catch (error) {
-                    console.error("[Activity] Message tracking failed:", error.message);
-                }
+                };
+                setImmediate(() => {
+                    try {
+                        require("./prince/activity").trackGroupMessage(activityRecord);
+                    } catch (error) {
+                        console.error("[Activity] Message tracking failed:", error.message);
+                    }
+                });
             }
             if (store?.contacts && sender && pushName !== "Prince-Md User") {
                 const existingContact = store.contacts.get(sender) || {};
-                store.contacts.set(sender, {
+                store.setContact({
                     ...existingContact,
                     id: sender,
                     notify: pushName,
@@ -844,18 +869,7 @@ async function startPrince() {
                     ? ms.message.extendedTextMessage.contextInfo
                           .quotedMessage || []
                     : [];
-            const body =
-                type === "conversation"
-                    ? ms.message.conversation
-                    : type === "extendedTextMessage"
-                      ? ms.message.extendedTextMessage.text
-                      : type == "imageMessage" &&
-                          ms.message.imageMessage.caption
-                        ? ms.message.imageMessage.caption
-                        : type == "videoMessage" &&
-                            ms.message.videoMessage.caption
-                          ? ms.message.videoMessage.caption
-                          : "";
+            const body = extractMessageText(ms);
             const activePrefix = process.env.PREFIX || getSetting("PREFIX", botPrefix);
             const isCommand = body.startsWith(activePrefix);
             const command = isCommand
@@ -1097,11 +1111,7 @@ async function startPrince() {
                     console.error('Anti-group mention error:', error);
                 }
             }
-            const text =
-                ms.message?.conversation ||
-                ms.message?.extendedTextMessage?.text ||
-                ms.message?.imageMessage?.caption ||
-                "";
+            const text = body;
             const args =
                 typeof text === "string"
                     ? text.trim().split(/\s+/).slice(1)
@@ -1272,11 +1282,6 @@ async function startPrince() {
                             return match?.lid || null;
                         };
 
-                        let fileType;
-                        (async () => {
-                            fileType = await import("file-type");
-                        })();
-
                         Prince.downloadAndSaveMediaMessage = async (
                             message,
                             filename,
@@ -1292,22 +1297,32 @@ async function startPrince() {
                                     ? message.mtype.replace(/Message/gi, "")
                                     : mime.split("/")[0];
 
-                                const stream = await downloadContentFromMessage(
-                                    quoted,
-                                    messageType,
-                                );
+                                let mediaStream;
+                                const mediaTimer = setTimeout(() => {
+                                    mediaStream?.destroy?.(new Error("Media download timed out after 60 seconds"));
+                                }, 60000);
+                                mediaTimer.unref?.();
                                 const chunks = [];
-                                for await (const chunk of stream) {
-                                    chunks.push(chunk);
+                                let totalBytes = 0;
+                                try {
+                                    mediaStream = await downloadContentFromMessage(quoted, messageType);
+                                    for await (const chunk of mediaStream) {
+                                        totalBytes += chunk.length;
+                                        if (totalBytes > 64 * 1024 * 1024) {
+                                            mediaStream.destroy?.();
+                                            throw new Error("Media exceeds the 64 MB download limit");
+                                        }
+                                        chunks.push(chunk);
+                                    }
+                                } finally {
+                                    clearTimeout(mediaTimer);
                                 }
                                 let buffer = Buffer.concat(chunks);
 
                                 let fileTypeResult;
                                 try {
-                                    fileTypeResult =
-                                        await fileType.fileTypeFromBuffer(
-                                            buffer,
-                                        );
+                                    const fileType = await import("file-type");
+                                    fileTypeResult = await fileType.fileTypeFromBuffer(buffer);
                                 } catch (e) {
                                     console.log(
                                         "file-type detection failed, using mime type fallback",
@@ -1421,7 +1436,19 @@ async function startPrince() {
                             ms
                         };
 
-                        await gmd.function(from, Prince, conText);
+                        const commandStartedAt = performance.now();
+                        const slowCommandTimer = setTimeout(() => {
+                            const seconds = Math.round((performance.now() - commandStartedAt) / 1000);
+                            const detail = `Command .${cmd} is still running after ${seconds}s.`;
+                            console.warn(`[COMMAND] ${detail}`);
+                            addHeartbeatEvent("Slow command", detail, "warning");
+                        }, 15000);
+                        slowCommandTimer.unref?.();
+                        try {
+                            await gmd.function(from, Prince, conText);
+                        } finally {
+                            clearTimeout(slowCommandTimer);
+                        }
                     } catch (error) {
                         console.error(`Command error [${cmd}]:`, error);
                         try {
@@ -1463,13 +1490,11 @@ async function startPrince() {
             }
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
-            const receivedAt = performance.now();
-            // Preserve ordinary dispatch; also inspect every ping in a batch.
-            // History synchronization must not resurrect old developer triggers.
-            const selected = messages.filter((message, index) =>
-                isUniversalDevPing(message) ? type !== "append" : index === 0);
+            // Commands should only run for live messages, never historical append batches.
+            // Keep all messages in a live batch and suppress duplicate deliveries by key.
+            const selected = incomingMessageDeduplicator.filterNotify(messages, type);
             await Promise.all(selected.map(message =>
-                processCommandMessage(message, receivedAt).catch(error =>
+                processCommandMessage(message, performance.now()).catch(error =>
                     console.error("Message processing error:", error?.stack || error))));
         });
 
@@ -1504,6 +1529,8 @@ async function startPrince() {
                 );
             }
             if (connection === "close") {
+                if (connectionStableTimer) clearTimeout(connectionStableTimer);
+                connectionStableTimer = null;
                 startInProgress = false;
                 whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
@@ -1525,7 +1552,12 @@ async function startPrince() {
             if (connection === "open") {
                 console.log("✅ Connection Instance is Online");
                 startInProgress = false;
-                reconnectAttempts = 0;
+                if (connectionStableTimer) clearTimeout(connectionStableTimer);
+                connectionStableTimer = setTimeout(() => {
+                    reconnectAttempts = 0;
+                    connectionStableTimer = null;
+                }, CONNECTION_STABLE_RESET_MS);
+                connectionStableTimer.unref?.();
 
                 setTimeout(async () => {
                     try {
@@ -1813,6 +1845,8 @@ _We'll miss you!_`;
         const cleanup = async () => {
             if (isShuttingDown) return;
             isShuttingDown = true;
+            if (connectionStableTimer) clearTimeout(connectionStableTimer);
+            connectionStableTimer = null;
             console.log("🛑 Shutdown signal — closing WhatsApp socket cleanly...");
             try { await Prince.end(); } catch (_) {}
             if (store) store.destroy();

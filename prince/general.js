@@ -445,7 +445,7 @@ gmd({
 // ─── .repo ────────────────────────────────────────────────────────────────────
 gmd({ 
   pattern: "repo", 
-  aliases: ['sc', 'script'],
+  aliases: ['script'],
   react: "💜",
   category: "general",
   description: "Fetch bot GitHub repo info.",
