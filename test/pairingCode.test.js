@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizePairingNumber, requestPairingCode } = require('../mayel/pairingCode');
+const { isAuthorizedPairingRequest } = require('../mayel/pairingPageAuth');
 
 test('normalizes international phone numbers to digits and rejects invalid lengths', () => {
   assert.equal(normalizePairingNumber('+234 912-345-6789'), '2349123456789');
@@ -49,4 +50,18 @@ test('does not request a pairing code if the socket fails to open', async () => 
 test('reports unsupported sockets and empty server responses', async () => {
   await assert.rejects(requestPairingCode({}, { registered: false }, '2349123456789'), /does not support pairing-code login/);
   await assert.rejects(requestPairingCode({ async requestPairingCode() { return ''; } }, { registered: false }, '2349123456789'), /empty pairing code/);
+});
+
+test('protects the pairing page with a strong password and exact Basic credentials', () => {
+  const password = 'a-private-pairing-password-42';
+  const authorization = `Basic ${Buffer.from(`pairing:${password}`).toString('base64')}`;
+  const wrongUser = `Basic ${Buffer.from(`other:${password}`).toString('base64')}`;
+  const wrongPassword = `Basic ${Buffer.from('pairing:wrong-password-value').toString('base64')}`;
+
+  assert.equal(isAuthorizedPairingRequest(authorization, password), true);
+  assert.equal(isAuthorizedPairingRequest(wrongUser, password), false);
+  assert.equal(isAuthorizedPairingRequest(wrongPassword, password), false);
+  assert.equal(isAuthorizedPairingRequest(authorization, 'too-short'), false);
+  assert.equal(isAuthorizedPairingRequest(authorization, ''), false);
+  assert.equal(isAuthorizedPairingRequest(undefined, password), false);
 });

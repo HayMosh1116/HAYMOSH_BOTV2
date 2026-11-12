@@ -19,7 +19,7 @@
 
 <div align="center">
 
-> **A generated Session ID is optional.** You can use the generator below, or deploy without `SESSION_ID` and pair directly from your bot's hosting logs.
+> **A generated Session ID is optional.** You can use the generator below, or pair directly from the bot's password-protected `/pairing` page.
 
 <br/>
 
@@ -29,8 +29,8 @@
 
 | Option | Action |
 |--------|--------|
-| Pairing code | Set `PAIRING_NUMBER` to the WhatsApp number in international format; enter the temporary code printed in hosting logs under WhatsApp → Linked devices → Link with phone number. |
-| Direct QR | Omit `PAIRING_NUMBER` (and `SESSION_ID`), then scan the displayed QR in WhatsApp → Linked devices. |
+| Pairing code | Set `PAIRING_NUMBER` to the WhatsApp number in international format; open `/pairing` and enter its temporary code under WhatsApp → Linked devices → Link with phone number. |
+| Direct QR | Omit `PAIRING_NUMBER` (and `SESSION_ID`), open `/pairing`, then scan the QR in WhatsApp → Linked devices. |
 | Session token | Use the generator, then set the full token as the optional `SESSION_ID` environment variable. |
 
 </div>
@@ -112,9 +112,10 @@ cd HAYMOSH_BOT
 # 2. Install dependencies
 npm install
 
-# 3. SESSION_ID is optional. Without it, use PAIRING_NUMBER for a code,
-# or leave both unset to scan the QR printed in hosting logs.
-# Never share the temporary code, QR, or logs containing them.
+# 3. SESSION_ID is optional. Set PAIRING_PAGE_PASSWORD (16+ characters)
+# to access the private /pairing page; use PAIRING_NUMBER for a code,
+# or leave it unset to scan a QR from that page.
+# Never share the page password, temporary code, QR, or screenshots.
 # On hosts with mounted persistent storage, set WA_AUTH_DIR to a dedicated path.
 
 # 4. Start the bot
@@ -128,10 +129,12 @@ node index.js
 Set these values in your hosting provider's environment configuration (or a private, ignored `.env` file):
 
 ```env
-# Optional: omit this to pair directly from the QR printed in hosting logs.
+# Optional: omit this to pair directly using QR on the private /pairing page.
 # SESSION_ID=CYPHER-X:~<complete-generated-ZIP-session-token>
 # Optional: set your WhatsApp number in international format for a pairing code.
 # PAIRING_NUMBER=2349123456789
+# Required for private QR/code display: use a strong private password (at least 16 characters).
+# PAIRING_PAGE_PASSWORD=<your-long-random-password>
 # Optional: use a dedicated mounted volume path, outside the bot source tree.
 # WA_AUTH_DIR=/data/whatsapp-auth
 OWNER_NUMBER=<your-WhatsApp-number-with-country-code>
@@ -146,11 +149,11 @@ JAMENDO_CLIENT_ID=<optional-public-client-id>
 MUSICBRAINZ_USER_AGENT=HAYMOSH_BOT/1.0 (contact@example.com)
 ```
 
-`SESSION_ID` is optional. If it is unset and no local auth exists, the bot requests a pairing code when `PAIRING_NUMBER` is valid; otherwise it prints a scannable QR in hosting logs. Enter the code in WhatsApp → Linked devices → Link with phone number, or scan the QR there. Baileys saves credentials locally after linking. The default auth directory is `mayel/session`. Set `WA_AUTH_DIR` to a dedicated directory outside the source tree when your host provides a mounted persistent volume. If the host discards local files on restart and has no persistent volume, you may need to pair again after a restart or redeploy.
+`SESSION_ID` is optional. To display a QR or pairing code without putting it in logs, set `PAIRING_PAGE_PASSWORD` to a private password of at least 16 characters, then visit `https://<your-bot-host>/pairing`. At the browser's sign-in prompt, enter username `pairing` and the password you configured. With a valid `PAIRING_NUMBER`, the page shows a temporary pairing code; without one, it displays the QR. The public `/heartbeat` page never displays login credentials. The code and QR exist only in process memory and are cleared after connection/disconnection. Baileys saves credentials locally after linking. The default auth directory is `mayel/session`. Set `WA_AUTH_DIR` to a dedicated directory outside the source tree when your host provides a mounted persistent volume. If the host discards local files on restart and has no persistent volume, you may need to pair again after a restart or redeploy.
 
 When a token is used, the session handler accepts any non-empty prefix followed by `!` or `~`, including `CYPHER-X:~`. It supports the versioned gzip archive, legacy compressed credential tokens, and unencrypted ZIP auth archives. Standard or URL-safe base64 may be padded, unpadded, or line-wrapped. ZIPs should contain `creds.json` and Baileys auth JSON files, normally as flat filenames such as `pre-key-1.json`, at the root or under one shared enclosing folder. An optional `keys/` directory is flattened on import. Encrypted and ZIP64 archives are not supported.
 
-`OWNER_NUMBER` and `SUDO_NUMBERS` have no privileged built-in defaults; configure the owner explicitly. Treat `SESSION_ID`, the live QR code, `PRINCE_API_KEY`, and database URLs as secrets. Developer connection alerts are disabled unless you opt in with `DEVELOPER_ALERTS=true`.
+`OWNER_NUMBER` and `SUDO_NUMBERS` have no privileged built-in defaults; configure the owner explicitly. Treat `SESSION_ID`, `PAIRING_PAGE_PASSWORD`, the live QR code/pairing code, `PRINCE_API_KEY`, and database URLs as secrets. Developer connection alerts are disabled unless you opt in with `DEVELOPER_ALERTS=true`.
 
 The hybrid `.play` flow uses MusicBrainz to normalize title and artist metadata. If `JAMENDO_CLIENT_ID` is configured, Jamendo is used only when its API marks a matching track as downloadable. Otherwise the bot falls back to the existing strict YouTube/SoundCloud verification path and will not send low-confidence, remix, or cover matches.
 

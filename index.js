@@ -69,13 +69,14 @@ const {
     StickerTypes,
 } = require("wa-sticker-formatter");
 const pino = require("pino");
-const qrcodeTerminal = require("qrcode-terminal");
+const QRCode = require("qrcode");
 const config = require("./config");
 const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./mayel/devPing");
 const botNetwork = require("./mayel/botNetwork");
 const botAlerts = require("./mayel/alerts");
 const { clearAuthDirectory } = require("./mayel/clearAuthDirectory");
 const { normalizePairingNumber, requestPairingCode } = require("./mayel/pairingCode");
+const { MIN_PASSWORD_LENGTH, isAuthorizedPairingRequest } = require("./mayel/pairingPageAuth");
 const axios = require("axios");
 // Keep third-party command APIs from hanging forever or buffering unbounded responses.
 axios.defaults.timeout = 60000;
@@ -129,10 +130,15 @@ const app = express();
 botNetwork.installNetworkApi(app);
 let Prince;
 let whatsappConnected = false;
+let pairingQrValue = null;
+let pairingCodeValue = null;
 botNetwork.startNetworkClient(() => ({ connected: whatsappConnected, botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
 
 logger.level = "silent";
 
+// The default Baileys auth directory lives under mayel/session. Block it before
+// the static middleware so creds.json and Signal keys can never be downloaded.
+app.use("/session", (req, res) => res.sendStatus(404));
 app.use(express.static("mayel"));
 // Keep the platform health URL free of missing-file errors. The heartbeat page
 // is generated below and is the canonical dashboard for this deployment.
@@ -197,6 +203,44 @@ app.get("/heartbeat", (req, res) => {
 <section class="section"><div class="section-head"><h2>Bot information</h2><span class="hint">Current settings</span></div><div class="details"><div class="detail"><span class="label">Bot name</span><div class="value">${safeName}</div></div><div class="detail"><span class="label">Owner</span><div class="value">${safeOwner}</div></div><div class="detail"><span class="label">Version</span><div class="value">${safeVersion}</div></div><div class="detail"><span class="label">Condition</span><div class="value">${escapeHeartbeat(status)}</div></div></div></section>
 <section class="section"><div class="section-head"><h2>Recent activity & issues</h2><span class="hint">Latest first</span></div><div class="events">${eventRows}</div></section>
 <div class="footer">Last checked: ${escapeHeartbeat(checkedAt)} · This page refreshes automatically.</div></div></body></html>`);
+});
+app.get("/pairing", async (req, res) => {
+    const configuredPassword = process.env.PAIRING_PAGE_PASSWORD || "";
+    res.set({
+        "Cache-Control": "private, no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag": "noindex, nofollow, noarchive",
+        "Referrer-Policy": "no-referrer",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    });
+    if (configuredPassword.length < MIN_PASSWORD_LENGTH) {
+        return res.status(503).type("text/plain").send(
+            `Private pairing display is disabled. Set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters, then restart the service. QR codes and pairing codes are never printed to logs.`,
+        );
+    }
+    if (!isAuthorizedPairingRequest(req.headers.authorization, configuredPassword)) {
+        res.set("WWW-Authenticate", 'Basic realm="Private WhatsApp pairing", charset="UTF-8"');
+        return res.status(401).type("text/plain").send("Sign in to view this bot's private WhatsApp pairing details.");
+    }
+
+    let qrDataUrl = "";
+    if (pairingQrValue) {
+        try {
+            qrDataUrl = await QRCode.toDataURL(pairingQrValue, { width: 320, margin: 2 });
+        } catch (_) {
+            return res.status(500).type("text/plain").send("Could not render the current WhatsApp QR code. Refresh the page.");
+        }
+    }
+    const loginContent = qrDataUrl
+        ? `<p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code">`
+        : pairingCodeValue
+          ? `<p>In WhatsApp, open <strong>Linked devices → Link with phone number</strong> and enter:</p><code>${escapeHeartbeat(pairingCodeValue)}</code>`
+          : `<p>${whatsappConnected ? "WhatsApp is connected; no pairing code is needed." : "Waiting for WhatsApp to provide a fresh QR code or pairing code. Refresh this page in a few seconds."}</p>`;
+    return res.type("html").send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="8"><title>Private WhatsApp pairing</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:520px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.qr{display:block;width:min(320px,100%);height:auto;margin:18px auto;background:#fff;border-radius:12px}code{display:inline-block;margin:18px 0;padding:18px 24px;border-radius:12px;background:#09070c;color:#fff;font-size:30px;font-weight:800;letter-spacing:4px}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><div class="hint">${loginContent}</div><p class="private">This page is private. Do not share the QR, code, password, or screenshot.</p></main></body></html>`);
 });
 app.get("/healthz", (req, res) => {
     res.status(whatsappConnected ? 200 : 503).json({
@@ -1505,10 +1549,12 @@ async function startPrince() {
             const { connection, lastDisconnect, qr } = update;
             if (connection) devPingConnectionStatus = connection;
             if (qr) {
-                const message = "SESSION_ID is optional: scan this QR in WhatsApp → Linked devices. Treat the QR and these logs as secrets.";
-                console.log(`\n📲 ${message}\n`);
-                qrcodeTerminal.generate(qr, { small: true });
-                addHeartbeatEvent("QR login required", "Scan the QR code shown in the hosting logs using WhatsApp → Linked devices.", "warning");
+                pairingQrValue = qr;
+                pairingCodeValue = null;
+                addHeartbeatEvent("QR login required", "Open the password-protected /pairing page to scan the QR code.", "warning");
+                if ((process.env.PAIRING_PAGE_PASSWORD || "").length < MIN_PASSWORD_LENGTH) {
+                    console.warn(`QR login is ready but hidden: set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters to view it at /pairing. Login credentials are never printed to logs.`);
+                }
             }
             if (connection === "connecting") {
                 whatsappConnected = false;
@@ -1518,6 +1564,8 @@ async function startPrince() {
             if (connection === "open") {
                 whatsappConnected = true;
                 heartbeatConnection = "Connected";
+                pairingQrValue = null;
+                pairingCodeValue = null;
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
                 try {
                     await Prince.sendPresenceUpdate("available");
@@ -1543,6 +1591,8 @@ async function startPrince() {
                 startInProgress = false;
                 whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
+                pairingQrValue = null;
+                pairingCodeValue = null;
                 const closeError = lastDisconnect?.error;
                 const closeCode = new Boom(closeError)?.output?.statusCode;
                 const closeMessage = closeError?.message || closeError?.output?.payload?.message || "no error message";
@@ -1695,14 +1745,20 @@ async function startPrince() {
             console.warn("PAIRING_NUMBER is invalid; QR login remains available. Use 6–15 international digits.");
         }
         if (pairingNumber && !state.creds.registered) {
-            try {
-                const pairingCode = await requestPairingCode(Prince, state.creds, pairingNumber);
-                if (pairingCode) {
-                    console.log(`\n🔐 WhatsApp pairing code: ${pairingCode}\nEnter it in WhatsApp → Linked devices → Link with phone number. Treat this code and the logs as secrets.\n`);
-                    addHeartbeatEvent("Pairing code ready", "Enter the temporary code in WhatsApp → Linked devices to link this bot.", "warning");
+            if ((process.env.PAIRING_PAGE_PASSWORD || "").length < MIN_PASSWORD_LENGTH) {
+                console.warn(`Pairing code not requested: set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters to view it privately at /pairing. Login credentials are never printed to logs.`);
+            } else {
+                try {
+                    const pairingCode = await requestPairingCode(Prince, state.creds, pairingNumber);
+                    if (pairingCode) {
+                        pairingCodeValue = pairingCode;
+                        pairingQrValue = null;
+                        console.log("Pairing code is ready on the password-protected /pairing page.");
+                        addHeartbeatEvent("Pairing code ready", "Open the password-protected /pairing page and enter the code in WhatsApp → Linked devices → Link with phone number.", "warning");
+                    }
+                } catch (error) {
+                    console.warn("Pairing-code request failed; QR login remains available:", error?.message || error);
                 }
-            } catch (error) {
-                console.warn("Pairing-code request failed; QR login remains available:", error?.message || error);
             }
         }
 
