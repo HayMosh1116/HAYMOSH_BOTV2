@@ -1,7 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizePairingNumber, requestPairingCode } = require('../mayel/pairingCode');
-const { isAuthorizedPairingRequest } = require('../mayel/pairingPageAuth');
+const {
+  MIN_PASSWORD_LENGTH,
+  SESSION_COOKIE_NAME,
+  SESSION_TTL_MS,
+  verifyPairingPassword,
+  createPairingSession,
+  isValidPairingSession,
+  getPairingCookie,
+} = require('../mayel/pairingPageAuth');
 
 test('normalizes international phone numbers to digits and rejects invalid lengths', () => {
   assert.equal(normalizePairingNumber('+234 912-345-6789'), '2349123456789');
@@ -52,16 +60,26 @@ test('reports unsupported sockets and empty server responses', async () => {
   await assert.rejects(requestPairingCode({ async requestPairingCode() { return ''; } }, { registered: false }, '2349123456789'), /empty pairing code/);
 });
 
-test('protects the pairing page with a strong password and exact Basic credentials', () => {
+test('accepts only the configured password without requiring a username', () => {
   const password = 'a-private-pairing-password-42';
-  const authorization = `Basic ${Buffer.from(`pairing:${password}`).toString('base64')}`;
-  const wrongUser = `Basic ${Buffer.from(`other:${password}`).toString('base64')}`;
-  const wrongPassword = `Basic ${Buffer.from('pairing:wrong-password-value').toString('base64')}`;
+  assert.equal(verifyPairingPassword(password, password), true);
+  assert.equal(verifyPairingPassword('wrong-password-value', password), false);
+  assert.equal(verifyPairingPassword(password, 'too-short'), false);
+  assert.equal(verifyPairingPassword(undefined, password), false);
+  assert.equal(MIN_PASSWORD_LENGTH, 16);
+});
 
-  assert.equal(isAuthorizedPairingRequest(authorization, password), true);
-  assert.equal(isAuthorizedPairingRequest(wrongUser, password), false);
-  assert.equal(isAuthorizedPairingRequest(wrongPassword, password), false);
-  assert.equal(isAuthorizedPairingRequest(authorization, 'too-short'), false);
-  assert.equal(isAuthorizedPairingRequest(authorization, ''), false);
-  assert.equal(isAuthorizedPairingRequest(undefined, password), false);
+test('creates a random short-lived pairing cookie session and extracts it safely', () => {
+  const sessions = new Map();
+  const now = 1_000_000;
+  const token = createPairingSession(sessions, now);
+
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(token, createPairingSession(sessions, now));
+  assert.equal(isValidPairingSession(sessions, token, now), true);
+  assert.equal(getPairingCookie(`theme=dark; ${SESSION_COOKIE_NAME}=${token}`), token);
+  assert.equal(getPairingCookie('theme=dark'), null);
+  assert.equal(SESSION_TTL_MS, 10 * 60 * 1000);
+  assert.equal(isValidPairingSession(sessions, token, now + SESSION_TTL_MS), false);
+  assert.equal(sessions.has(token), false);
 });

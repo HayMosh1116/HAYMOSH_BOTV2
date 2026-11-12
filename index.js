@@ -76,7 +76,15 @@ const botNetwork = require("./mayel/botNetwork");
 const botAlerts = require("./mayel/alerts");
 const { clearAuthDirectory } = require("./mayel/clearAuthDirectory");
 const { normalizePairingNumber, requestPairingCode } = require("./mayel/pairingCode");
-const { MIN_PASSWORD_LENGTH, isAuthorizedPairingRequest } = require("./mayel/pairingPageAuth");
+const {
+    MIN_PASSWORD_LENGTH,
+    SESSION_COOKIE_NAME,
+    SESSION_TTL_MS,
+    verifyPairingPassword,
+    createPairingSession,
+    isValidPairingSession,
+    getPairingCookie,
+} = require("./mayel/pairingPageAuth");
 const axios = require("axios");
 // Keep third-party command APIs from hanging forever or buffering unbounded responses.
 axios.defaults.timeout = 60000;
@@ -132,6 +140,7 @@ let Prince;
 let whatsappConnected = false;
 let pairingQrValue = null;
 let pairingCodeValue = null;
+const pairingPageSessions = new Map();
 botNetwork.startNetworkClient(() => ({ connected: whatsappConnected, botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
 
 logger.level = "silent";
@@ -204,8 +213,7 @@ app.get("/heartbeat", (req, res) => {
 <section class="section"><div class="section-head"><h2>Recent activity & issues</h2><span class="hint">Latest first</span></div><div class="events">${eventRows}</div></section>
 <div class="footer">Last checked: ${escapeHeartbeat(checkedAt)} · This page refreshes automatically.</div></div></body></html>`);
 });
-app.get("/pairing", async (req, res) => {
-    const configuredPassword = process.env.PAIRING_PAGE_PASSWORD || "";
+function setPairingPageHeaders(res) {
     res.set({
         "Cache-Control": "private, no-store, no-cache, must-revalidate",
         "Pragma": "no-cache",
@@ -213,16 +221,31 @@ app.get("/pairing", async (req, res) => {
         "X-Robots-Tag": "noindex, nofollow, noarchive",
         "Referrer-Policy": "no-referrer",
         "X-Frame-Options": "DENY",
-        "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     });
+}
+
+function renderPairingPasswordForm(message = "") {
+    const notice = message ? `<p class="notice">${escapeHeartbeat(message)}</p>` : "";
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Private WhatsApp pairing</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:420px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.notice{color:#ffb8c0}label{display:block;text-align:left;margin:20px 0 8px;color:#d9cce8}input{box-sizing:border-box;width:100%;padding:13px;border-radius:10px;border:1px solid #695080;background:#0d0914;color:#fff;font-size:16px}button{width:100%;margin-top:14px;padding:13px;border:0;border-radius:10px;background:#b78aff;color:#160e20;font-size:16px;font-weight:800;cursor:pointer}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><p class="hint">Enter your pairing-page password to view the current WhatsApp QR code or pairing code.</p>${notice}<form method="post" action="/pairing"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="${MIN_PASSWORD_LENGTH}" required autofocus><button type="submit">Unlock pairing page</button></form><p class="private">Use the HTTPS address of your bot. Never share the password, QR, or code.</p></main></body></html>`;
+}
+
+function isPairingPageSessionValid(req) {
+    const token = getPairingCookie(req.headers.cookie);
+    return isValidPairingSession(pairingPageSessions, token);
+}
+
+app.get("/pairing", async (req, res) => {
+    setPairingPageHeaders(res);
+    const configuredPassword = process.env.PAIRING_PAGE_PASSWORD || "";
     if (configuredPassword.length < MIN_PASSWORD_LENGTH) {
         return res.status(503).type("text/plain").send(
             `Private pairing display is disabled. Set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters, then restart the service. QR codes and pairing codes are never printed to logs.`,
         );
     }
-    if (!isAuthorizedPairingRequest(req.headers.authorization, configuredPassword)) {
-        res.set("WWW-Authenticate", 'Basic realm="Private WhatsApp pairing", charset="UTF-8"');
-        return res.status(401).type("text/plain").send("Sign in to view this bot's private WhatsApp pairing details.");
+    if (!isPairingPageSessionValid(req)) {
+        return res.type("html").send(renderPairingPasswordForm());
     }
 
     let qrDataUrl = "";
@@ -241,6 +264,26 @@ app.get("/pairing", async (req, res) => {
     return res.type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="8"><title>Private WhatsApp pairing</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:520px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.qr{display:block;width:min(320px,100%);height:auto;margin:18px auto;background:#fff;border-radius:12px}code{display:inline-block;margin:18px 0;padding:18px 24px;border-radius:12px;background:#09070c;color:#fff;font-size:30px;font-weight:800;letter-spacing:4px}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><div class="hint">${loginContent}</div><p class="private">This page is private. Do not share the QR, code, password, or screenshot.</p></main></body></html>`);
+});
+
+app.post("/pairing", express.urlencoded({ extended: false, limit: "1kb" }), (req, res) => {
+    setPairingPageHeaders(res);
+    const configuredPassword = process.env.PAIRING_PAGE_PASSWORD || "";
+    if (configuredPassword.length < MIN_PASSWORD_LENGTH) {
+        return res.status(503).type("text/plain").send("Private pairing display is disabled. Configure a sufficiently long password and restart the service.");
+    }
+    if (!verifyPairingPassword(req.body?.password, configuredPassword)) {
+        return res.status(401).type("html").send(renderPairingPasswordForm("That password was not accepted. Try again."));
+    }
+    const token = createPairingSession(pairingPageSessions);
+    res.cookie(SESSION_COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/pairing",
+        maxAge: SESSION_TTL_MS,
+    });
+    return res.redirect(303, "/pairing");
 });
 app.get("/healthz", (req, res) => {
     res.status(whatsappConnected ? 200 : 503).json({
