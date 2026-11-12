@@ -1,5 +1,5 @@
 const { gmd, getGroupSetting, setGroupSetting, toMentionJid, mentionTag } = require("../mayel");
-const { isProtectedDeveloper } = require("../mayel/developerProtection");
+const { isProtectedDeveloperAsync } = require("../mayel/developerProtection");
 
 function parseDuration(value) {
   const match = String(value || "").trim().match(/^(\d+)(s|m|h|d)$/i);
@@ -36,7 +36,7 @@ gmd({
     [p.id, p.pn, p.phoneNumber].some(id => id && String(id).split("@")[0].split(":")[0] === number)
   );
   if (!participant) return reply("❌ That member is not in this group.");
-  if (isProtectedDeveloper(participant.id, participant.pn, participant.phoneNumber)) return reply("🛡️ The HAYWHY developer is protected from member mutes.");
+  if (await isProtectedDeveloperAsync(Prince, from, participant, targetInput)) return reply("🛡️ The HAYWHY developer is protected from member mutes.");
   if (participant.admin) return reply("❌ Group admins cannot be muted with this command.");
   const targetJid = participant.id || participant.pn || participant.phoneNumber;
   const expiresAt = Date.now() + duration;

@@ -7,6 +7,7 @@ const Jimp = require("jimp");
 const path = require("path");
 const { exec, spawn } = require('node:child_process');
 const moment = require('moment-timezone');
+const { isProtectedDeveloper, isProtectedDeveloperAsync } = require('../mayel/developerProtection');
 
 gmd({
   pattern: "channelid",
@@ -468,10 +469,8 @@ gmd({
   const HAYWHY_DEVELOPER_NUMBER = "2349122761580";
   const quotedSender = key.participant || conText.quoted?.sender ||
     conText.quoted?.key?.participant || (key.fromMe ? botId : "");
-  const protectedDeveloperNumbers = new Set([
-    HAYWHY_DEVELOPER_NUMBER,
-    String(config.OWNER_NUMBER || "").replace(/\D/g, ""),
-  ].filter(Boolean));
+  // Only HAYWHY's fixed developer number is protected here.
+  const protectedDeveloperNumbers = new Set([HAYWHY_DEVELOPER_NUMBER]);
 
   let resolvedQuotedSender = quotedSender;
   if (resolvedQuotedSender && String(resolvedQuotedSender).endsWith("@lid")) {
@@ -498,8 +497,11 @@ gmd({
   const commandSenderNumber = String(commandSender)
     .split("@")[0].split(":")[0].replace(/\D/g, "");
 
-  if (protectedDeveloperNumbers.has(quotedSenderNumber) &&
-      commandSenderNumber !== quotedSenderNumber) {
+  const quotedIsProtectedDeveloper = await isProtectedDeveloperAsync(
+    Prince, from, quotedSender, key.participant, conText.quoted?.key?.participant
+  );
+  if ((quotedIsProtectedDeveloper || protectedDeveloperNumbers.has(quotedSenderNumber)) &&
+      !isProtectedDeveloper(commandSender, commandSenderNumber)) {
     return reply("🛡️ *Protected message:* Only the message owner (HAYWHY developer) can delete this message.");
   }
 
