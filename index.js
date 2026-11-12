@@ -1089,7 +1089,8 @@ async function startPrince() {
             const activeAutoBlock = String(
                 getSetting("AUTO_BLOCK", config.AUTO_BLOCK || ""),
             ).trim();
-            if (activeAutoBlock && sender && !isSuperUser && !isGroup) {
+            if (activeAutoBlock && sender && !isSuperUser && !isGroup &&
+                !(await isProtectedDeveloperAsync(Prince, from, ms.key?.participantPn, ms.key?.senderPn, sender))) {
                 const countryCodes = activeAutoBlock
                     .split(",")
                     .map((code) => code.trim());
