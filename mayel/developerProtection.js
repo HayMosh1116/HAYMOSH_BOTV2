@@ -2,7 +2,7 @@ const HAYWHY_DEVELOPER_NUMBER = "2349122761580";
 
 function digits(value) {
   const raw = String(value || "").trim();
-  // A LID is an opaque WhatsApp identifier, not a phone number.
+  // WhatsApp LIDs are opaque identifiers; never parse them as phone numbers.
   if (!raw || raw.toLowerCase().endsWith("@lid")) return "";
   return raw.split("@")[0].split(":")[0].replace(/\D/g, "");
 }
@@ -22,19 +22,31 @@ function isProtectedDeveloper(...values) {
   );
 }
 
-// Resolves opaque LIDs against the current group metadata before allowing
-// any moderation action. If WhatsApp cannot resolve a LID, callers should
-// fail closed for that target rather than guessing its phone number.
+// Only return true when a phone-number alias positively identifies HAYWHY.
+// An unresolved LID is not proof that a member is the developer.
 async function isProtectedDeveloperAsync(socket, ...values) {
   if (isProtectedDeveloper(...values)) return true;
+
   const lids = values.flatMap(candidateIds)
     .map((value) => String(value || "").trim())
     .filter((value) => value.toLowerCase().endsWith("@lid"));
-  if (!lids.length || !socket?.groupMetadata) return false;
+
+  if (lids.length && typeof socket?.getJidFromLid === "function") {
+    for (const lid of lids) {
+      try {
+        const resolved = await socket.getJidFromLid(lid);
+        if (digits(resolved) === HAYWHY_DEVELOPER_NUMBER) return true;
+      } catch (error) {
+        // Continue to metadata lookup; do not infer a phone number from a LID.
+      }
+    }
+  }
 
   const chats = new Set(values.flatMap(candidateIds)
     .map((value) => String(value || ""))
     .filter((value) => value.endsWith("@g.us")));
+  if (!lids.length || !chats.size || !socket?.groupMetadata) return false;
+
   for (const chat of chats) {
     try {
       const meta = await socket.groupMetadata(chat);
@@ -42,19 +54,13 @@ async function isProtectedDeveloperAsync(socket, ...values) {
         const participant = (meta?.participants || []).find((entry) =>
           candidateIds(entry).some((alias) => String(alias || "") === lid)
         );
-        if (!participant) continue;
-        // A participant with a verified phone alias is safe to classify.
-        // If WhatsApp supplies only an opaque LID, fail closed so moderation
-        // cannot accidentally target the developer through an unresolved ID.
-        return isProtectedDeveloper(participant) || !candidateIds(participant).some(
-          (alias) => digits(alias) === HAYWHY_DEVELOPER_NUMBER || (alias && !String(alias).toLowerCase().endsWith("@lid") && digits(alias))
-        );
+        if (participant && isProtectedDeveloper(participant)) return true;
       }
     } catch (error) {
-      // Keep the LID unresolved; the fail-closed check below prevents actions.
+      // Metadata is unavailable; no positive developer match was established.
     }
   }
-  return true;
+  return false;
 }
 
 module.exports = {
