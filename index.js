@@ -148,12 +148,16 @@ let Prince;
 let whatsappConnected = false;
 let pairingQrValue = null;
 let pairingCodeValue = null;
+// The underlying WebSocket opens before Baileys finishes validateConnection;
+// wait for its QR challenge event before sending a phone-number pairing request.
+let pairingHandshakeReady = false;
 const pairingCodeViewers = new Set();
 let activeAuthState = null;
 const requestOnDemandPairingCode = createOnDemandPairingCodeRequester({
     getSocket: () => Prince,
     getCredentials: () => activeAuthState?.creds,
     getPhoneNumber: () => config.PAIRING_NUMBER,
+    isReady: () => pairingHandshakeReady,
 });
 const pairingPageSessions = new Map();
 botNetwork.startNetworkClient(() => ({ connected: whatsappConnected, botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
@@ -275,7 +279,7 @@ app.get("/pairing", async (req, res) => {
     }
     const pairingNumber = normalizePairingNumber(config.PAIRING_NUMBER);
     const pairingCredentialsRegistered = Boolean(activeAuthState?.creds?.registered);
-    const canRequestPairingCode = Boolean(pairingNumber && Prince && activeAuthState && !pairingCredentialsRegistered && !whatsappConnected);
+    const canRequestPairingCode = Boolean(pairingNumber && Prince && activeAuthState && pairingHandshakeReady && !pairingCredentialsRegistered && !whatsappConnected);
     const pairingCodeError = req.query?.pairing_error === "1"
         ? `<p class="notice">A fresh pairing code could not be requested. Wait a moment and try again, or use the QR option.</p>`
         : "";
@@ -294,7 +298,12 @@ app.get("/pairing", async (req, res) => {
         loginContent = `${pairingCodeError}<p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code">`;
     } else {
         const invalidNumber = String(config.PAIRING_NUMBER || "").trim() && !pairingNumber;
-        loginContent = `${pairingCodeError}<p>${invalidNumber ? "PAIRING_NUMBER is invalid; set 6–15 international digits to enable pairing codes." : "Waiting for WhatsApp to provide a QR code. Refresh this page in a few seconds."}</p>`;
+        const waitingMessage = invalidNumber
+            ? "PAIRING_NUMBER is invalid; set 6–15 international digits to enable pairing codes."
+            : pairingNumber
+                ? "Waiting for WhatsApp to complete its pairing handshake. The Get pairing code button will appear when ready."
+                : "Waiting for WhatsApp to provide a QR code. Refresh this page in a few seconds.";
+        loginContent = `${pairingCodeError}<p>${waitingMessage}</p>`;
     }
     const refreshTag = pairingNumber && canRequestPairingCode ? "" : `<meta http-equiv="refresh" content="8">`;
     return res.type("html").send(`<!doctype html>
@@ -317,6 +326,7 @@ app.post("/pairing/code", async (req, res) => {
         pairingCodeViewers.clear();
         return res.redirect(303, "/pairing");
     }
+    if (!pairingHandshakeReady) return res.redirect(303, "/pairing?pairing_error=1");
     try {
         pairingCodeValue = null;
         pairingCodeViewers.clear();
@@ -1688,6 +1698,7 @@ async function startPrince() {
             if (connection) devPingConnectionStatus = connection;
             if (qr) {
                 pairingQrValue = qr;
+                pairingHandshakeReady = true;
                 pairingCodeValue = null;
                 pairingCodeViewers.clear();
                 addHeartbeatEvent("QR login required", "Open the password-protected /pairing page to scan the QR code.", "warning");
@@ -1697,6 +1708,7 @@ async function startPrince() {
             }
             if (connection === "connecting") {
                 whatsappConnected = false;
+                pairingHandshakeReady = false;
                 pairingCodeValue = null;
                 pairingCodeViewers.clear();
                 heartbeatConnection = "Connecting";
@@ -1704,6 +1716,7 @@ async function startPrince() {
             }
             if (connection === "open") {
                 whatsappConnected = true;
+                pairingHandshakeReady = false;
                 heartbeatConnection = "Connected";
                 pairingQrValue = null;
                 pairingCodeValue = null;
@@ -1733,6 +1746,7 @@ async function startPrince() {
                 startInProgress = false;
                 whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
+                pairingHandshakeReady = false;
                 pairingQrValue = null;
                 pairingCodeValue = null;
                 pairingCodeViewers.clear();

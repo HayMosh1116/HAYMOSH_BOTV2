@@ -174,6 +174,25 @@ test('a later explicit request asks WhatsApp for a fresh code', async () => {
   assert.equal(requestCount, 2);
 });
 
+test('requester waits for the completed WhatsApp pairing challenge before calling Baileys', async () => {
+  let ready = false;
+  let requestCount = 0;
+  const socket = {};
+  const credentials = { registered: false };
+  const requestFresh = createOnDemandPairingCodeRequester({
+    getSocket: () => socket,
+    getCredentials: () => credentials,
+    getPhoneNumber: () => '2349123456789',
+    isReady: () => ready,
+    requestCode: async () => { requestCount++; return 'LIVE-CODE'; },
+  });
+  await assert.rejects(requestFresh(), /challenge is not ready/);
+  assert.equal(requestCount, 0);
+  ready = true;
+  assert.equal(await requestFresh(), 'LIVE-CODE');
+  assert.equal(requestCount, 1);
+});
+
 test('pairing page requires a user POST for code generation and keeps the route session-protected', () => {
   const source = fs.readFileSync(require.resolve('../index.js'), 'utf8');
   assert.match(source, /action="\/pairing\/code"/);
@@ -181,6 +200,8 @@ test('pairing page requires a user POST for code generation and keeps the route 
   assert.match(source, /if \(!isPairingPageSessionValid\(req\)\)/);
   assert.match(source, /pairingCodeViewers\.has\(pairingSessionToken\)/);
   assert.match(source, /pairingCodeViewers\.add\(pairingSessionToken\)/);
+  assert.match(source, /pairingHandshakeReady && !pairingCredentialsRegistered/);
+  assert.match(source, /if \(!pairingHandshakeReady\)/);
   assert.doesNotMatch(source, /requestPairingCode\(Prince/);
   assert.doesNotMatch(source, /pairingCodeValue\s*=\s*await/);
 });
