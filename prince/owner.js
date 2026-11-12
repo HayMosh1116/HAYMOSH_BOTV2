@@ -469,10 +469,8 @@ gmd({
   const HAYWHY_DEVELOPER_NUMBER = "2349122761580";
   const quotedSender = key.participant || conText.quoted?.sender ||
     conText.quoted?.key?.participant || (key.fromMe ? botId : "");
-  const protectedDeveloperNumbers = new Set([
-    HAYWHY_DEVELOPER_NUMBER,
-    String(config.OWNER_NUMBER || "").replace(/\D/g, ""),
-  ].filter(Boolean));
+  // Only HAYWHY's fixed developer number is protected here.
+  const protectedDeveloperNumbers = new Set([HAYWHY_DEVELOPER_NUMBER]);
 
   let resolvedQuotedSender = quotedSender;
   if (resolvedQuotedSender && String(resolvedQuotedSender).endsWith("@lid")) {
