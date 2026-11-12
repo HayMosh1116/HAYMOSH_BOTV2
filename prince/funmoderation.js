@@ -1,5 +1,5 @@
 const { getSetting, addWarning, getUserWarnings, resetWarnings } = require("../mayel");
-const { isProtectedDeveloper } = require("../mayel/developerProtection");
+const { isProtectedDeveloperAsync } = require("../mayel/developerProtection");
 
 const pendingByChat = new Map();
 const PENDING_TTL = 10 * 60 * 1000;
@@ -36,7 +36,7 @@ function findMatch(body, words) {
 async function checkMessage({ chat, sender, body, isGroup, isAdmin, isSuperUser, isBotAdmin, Prince, quoted }) {
   const words = getWords();
   if (!words.length || !body || !sender) return;
-  if (isProtectedDeveloper(sender)) return;
+  if (await isProtectedDeveloperAsync(Prince, chat, sender)) return;
   if (isSuperUser || isAdmin) return;
   const matched = findMatch(body, words);
   if (!matched) return;
@@ -86,7 +86,7 @@ async function confirmAction({ chat, action, actor, isGroup, isAdmin, isSuperUse
   const pending = getPending(chat);
   if (!pending.length) return reply("ℹ️ There is no pending Fun Moderation action in this chat.");
   const item = pending[pending.length - 1];
-  if (isProtectedDeveloper(item.sender, item.target)) {
+  if (await isProtectedDeveloperAsync(Prince, chat, item.sender, item.target)) {
     pending.pop();
     if (pending.length) pendingByChat.set(chat, pending);
     else pendingByChat.delete(chat);
