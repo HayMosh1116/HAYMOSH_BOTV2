@@ -700,7 +700,7 @@ gmd(
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
     const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
 
-    if (isProtectedDeveloper(participant)) return reply("🛡️ The HAYWHY developer is protected from removal.");
+    if (await isProtectedDeveloperAsync(Prince, from, participant, targetId)) return reply("🛡️ The HAYWHY developer is protected from removal.");
     const sudoNums = superUser.map(u => u.split("@")[0]);
     if (sudoNums.includes(targetNum)) {
       await react("❌");
@@ -1260,9 +1260,12 @@ _No members have been removed._`
       const meta = await Prince.groupMetadata(from);
       const participants = meta.participants || [];
       const botJid = Prince.user?.id?.split(":")[0] + "@s.whatsapp.net";
-      const membersToRemove = participants
-        .filter((p) => p.id !== botJid && p.id !== sender && !(await isProtectedDeveloperAsync(Prince, from, p)))
-        .map((p) => p.id);
+      const membersToRemove = [];
+      for (const participant of participants) {
+        if (participant.id === botJid || participant.id === sender) continue;
+        if (await isProtectedDeveloperAsync(Prince, from, participant)) continue;
+        membersToRemove.push(participant.id);
+      }
 
       await Prince.sendMessage(
         from,
