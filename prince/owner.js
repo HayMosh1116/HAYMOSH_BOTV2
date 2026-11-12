@@ -498,8 +498,11 @@ gmd({
   const commandSenderNumber = String(commandSender)
     .split("@")[0].split(":")[0].replace(/\D/g, "");
 
-  if (protectedDeveloperNumbers.has(quotedSenderNumber) &&
-      commandSenderNumber !== quotedSenderNumber) {
+  const quotedIsProtectedDeveloper = await isProtectedDeveloperAsync(
+    Prince, from, quotedSender, key.participant, conText.quoted?.key?.participant
+  );
+  if ((quotedIsProtectedDeveloper || protectedDeveloperNumbers.has(quotedSenderNumber)) &&
+      !isProtectedDeveloper(commandSender, commandSenderNumber)) {
     return reply("🛡️ *Protected message:* Only the message owner (HAYWHY developer) can delete this message.");
   }
 
