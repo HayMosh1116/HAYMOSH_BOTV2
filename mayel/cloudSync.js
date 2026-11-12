@@ -23,7 +23,7 @@ async function connect() {
   const { MongoClient } = require("mongodb");
   client = new MongoClient(u, { serverSelectionTimeoutMS: 10000 });
   await client.connect();
-  coll = client.db(config.MONGODB_DB || "haymosh_bot").collection("sqlite_tables");
+  coll = client.db(config.MONGODB_DB || process.env.MONGODB_DB || "HAYWHYV5").collection("sqlite_tables");
   return coll;
 }
 
