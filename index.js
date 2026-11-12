@@ -405,6 +405,9 @@ async function startPrince() {
         };
 
         Prince = princeConnect(princeSock);
+        // Keep connection callbacks tied to the socket that created them. A late
+        // event from an old socket must never change the replacement socket's state.
+        const thisPrince = Prince;
         let devPingConnectionStatus = "connecting";
 
         // Normalize every outgoing mention at the socket boundary. This keeps
@@ -1581,6 +1584,7 @@ async function startPrince() {
             }
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
+            if (Prince !== thisPrince) return;
             // TEMP DIAGNOSTICS (remove after verification): log event delivery, filtering and dispatch without message content or identifiers.
             console.log(`[INCOMING DIAG] upsert type=${String(type)} batch=${messages.length}`);
             // Commands should only run for live messages, never historical append batches.
@@ -1600,6 +1604,7 @@ async function startPrince() {
         });
 
         Prince.ev.on("connection.update", async (update) => {
+            if (Prince !== thisPrince) return;
             const { connection, lastDisconnect, qr } = update;
             if (connection) devPingConnectionStatus = connection;
             if (qr) {
