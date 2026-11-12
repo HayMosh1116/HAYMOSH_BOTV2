@@ -599,7 +599,7 @@ gmd(
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
     const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
 
-    if (isProtectedDeveloper(participant)) return reply("🛡️ The HAYWHY developer is protected from group actions.");
+    if (await isProtectedDeveloperAsync(Prince, from, participant, targetId)) return reply("🛡️ The HAYWHY developer is protected from group actions.");
 
     if (participant.admin === "superadmin") {
       return reply(`❌ ${mentionTag(displayJid)} is the group owner and is already an admin.`, {
@@ -1261,7 +1261,7 @@ _No members have been removed._`
       const participants = meta.participants || [];
       const botJid = Prince.user?.id?.split(":")[0] + "@s.whatsapp.net";
       const membersToRemove = participants
-        .filter((p) => p.id !== botJid && p.id !== sender && !isProtectedDeveloper(p))
+        .filter((p) => p.id !== botJid && p.id !== sender && !(await isProtectedDeveloperAsync(Prince, from, p)))
         .map((p) => p.id);
 
       await Prince.sendMessage(
