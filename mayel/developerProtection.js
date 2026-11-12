@@ -38,18 +38,23 @@ async function isProtectedDeveloperAsync(socket, ...values) {
   for (const chat of chats) {
     try {
       const meta = await socket.groupMetadata(chat);
-      for (const participant of meta?.participants || []) {
-        const aliases = candidateIds(participant).map(String);
-        if (aliases.some((alias) => lids.includes(alias))) {
-          if (isProtectedDeveloper(participant)) return true;
-        }
+      for (const lid of lids) {
+        const participant = (meta?.participants || []).find((entry) =>
+          candidateIds(entry).some((alias) => String(alias || "") === lid)
+        );
+        if (!participant) continue;
+        // A participant with a verified phone alias is safe to classify.
+        // If WhatsApp supplies only an opaque LID, fail closed so moderation
+        // cannot accidentally target the developer through an unresolved ID.
+        return isProtectedDeveloper(participant) || !candidateIds(participant).some(
+          (alias) => digits(alias) === HAYWHY_DEVELOPER_NUMBER || (alias && !String(alias).toLowerCase().endsWith("@lid") && digits(alias))
+        );
       }
     } catch (error) {
-      // A failed metadata lookup is not proof that an opaque LID is the
-      // developer. Existing phone-number aliases are still checked above.
+      // Keep the LID unresolved; the fail-closed check below prevents actions.
     }
   }
-  return false;
+  return true;
 }
 
 module.exports = {
