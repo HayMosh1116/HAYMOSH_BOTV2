@@ -1581,7 +1581,7 @@ async function startPrince() {
             }
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
-            // Temporary diagnostics: observe delivery/filter/dispatch without logging message content or identifiers.
+            // TEMP DIAGNOSTICS (remove after verification): log event delivery, filtering and dispatch without message content or identifiers.
             console.log(`[INCOMING DIAG] upsert type=${String(type)} batch=${messages.length}`);
             // Commands should only run for live messages, never historical append batches.
             // Keep all messages in a live batch and suppress duplicate deliveries by key.
