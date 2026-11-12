@@ -1,5 +1,5 @@
 const { gmd, getContextInfo, getGroupSetting, setGroupSetting, toMentionJid, mentionTag } = require("../mayel");
-const { isProtectedDeveloper } = require("../mayel/developerProtection");
+const { isProtectedDeveloperAsync } = require("../mayel/developerProtection");
 
 // Destructive group termination requires two fresh confirmations after the
 // initial command. Keys include both group and sender to isolate sessions.
@@ -492,7 +492,7 @@ gmd(
     const targetId = participant.id;
     const targetNum = (participant.pn || participant.phoneNumber || participant.id || "").split("@")[0];
     const displayJid = toMentionJid(participant.pn || participant.phoneNumber || participant.id);
-    if (isProtectedDeveloper(participant)) return reply("🛡️ The HAYWHY developer is protected from group actions.");
+    if (await isProtectedDeveloperAsync(Prince, from, participant, targetId)) return reply("🛡️ The HAYWHY developer is protected from group actions.");
 
     const ownerJid = (conText.ownerNumber || "").replace(/\D/g, '');
     const botJidNum = (Prince.user?.id || "").split(":")[0];
