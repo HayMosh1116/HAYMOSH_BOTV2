@@ -1581,12 +1581,22 @@ async function startPrince() {
             }
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
+            // Temporary diagnostics: observe delivery/filter/dispatch without logging message content or identifiers.
+            console.log(`[INCOMING DIAG] upsert type=${String(type)} batch=${messages.length}`);
             // Commands should only run for live messages, never historical append batches.
             // Keep all messages in a live batch and suppress duplicate deliveries by key.
             const selected = incomingMessageDeduplicator.filterNotify(messages, type);
-            await Promise.all(selected.map(message =>
-                processCommandMessage(message, performance.now()).catch(error =>
-                    console.error("Message processing error:", error?.stack || error))));
+            console.log(`[INCOMING DIAG] accepted=${selected.length} filtered=${messages.length - selected.length}`);
+            await Promise.all(selected.map(async message => {
+                const messageKinds = Object.keys(message?.message || {}).join(",") || "none";
+                console.log(`[INCOMING DIAG] dispatch start fromMe=${Boolean(message?.key?.fromMe)} messageKinds=${messageKinds}`);
+                try {
+                    await processCommandMessage(message, performance.now());
+                    console.log("[INCOMING DIAG] dispatch completed");
+                } catch (error) {
+                    console.error("[INCOMING DIAG] dispatch failed:", error?.stack || error);
+                }
+            }));
         });
 
         Prince.ev.on("connection.update", async (update) => {
