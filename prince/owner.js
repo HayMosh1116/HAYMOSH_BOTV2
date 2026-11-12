@@ -7,6 +7,7 @@ const Jimp = require("jimp");
 const path = require("path");
 const { exec, spawn } = require('node:child_process');
 const moment = require('moment-timezone');
+const { isProtectedDeveloper, isProtectedDeveloperAsync } = require('../mayel/developerProtection');
 
 gmd({
   pattern: "channelid",
