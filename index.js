@@ -1635,7 +1635,8 @@ async function startPrince() {
                 whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
                 pairingQrValue = null;
-                pairingCodeValue = null;
+                // Preserve the latest code if WhatsApp closes the socket after
+                // issuing it; it remains visible until a new code or connection.
                 const closeError = lastDisconnect?.error;
                 const closeCode = new Boom(closeError)?.output?.statusCode;
                 const closeMessage = closeError?.message || closeError?.output?.payload?.message || "no error message";
