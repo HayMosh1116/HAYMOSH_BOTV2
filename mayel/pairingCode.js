@@ -34,7 +34,7 @@ async function requestPairingCode(socket, credentials, phoneNumber, options = {}
   return code.trim();
 }
 
-function createOnDemandPairingCodeRequester({ getSocket, getCredentials, getPhoneNumber, requestCode = requestPairingCode }) {
+function createOnDemandPairingCodeRequester({ getSocket, getCredentials, getPhoneNumber, isReady = () => true, requestCode = requestPairingCode }) {
   let inFlight = null;
   return async function requestFreshPairingCode() {
     if (inFlight) return inFlight;
@@ -44,11 +44,12 @@ function createOnDemandPairingCodeRequester({ getSocket, getCredentials, getPhon
     if (!phoneNumber) throw new Error('PAIRING_NUMBER is missing or invalid.');
     if (!socket || !credentials) throw new Error('WhatsApp is not ready for pairing-code login yet.');
     if (credentials.registered) return null;
+    if (!isReady(socket, credentials)) throw new Error('WhatsApp pairing challenge is not ready yet.');
 
     const pending = Promise.resolve()
       .then(() => requestCode(socket, credentials, phoneNumber))
       .then((code) => {
-        if (socket !== getSocket?.() || credentials !== getCredentials?.() || credentials.registered) {
+        if (socket !== getSocket?.() || credentials !== getCredentials?.() || credentials.registered || !isReady(socket, credentials)) {
           throw new Error('WhatsApp session changed while requesting the pairing code.');
         }
         return code;
