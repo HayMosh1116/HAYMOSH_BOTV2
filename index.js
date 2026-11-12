@@ -75,7 +75,7 @@ const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./m
 const botNetwork = require("./mayel/botNetwork");
 const botAlerts = require("./mayel/alerts");
 const { clearAuthDirectory } = require("./mayel/clearAuthDirectory");
-const { normalizePairingNumber, requestPairingCode } = require("./mayel/pairingCode");
+const { normalizePairingNumber, createOnDemandPairingCodeRequester } = require("./mayel/pairingCode");
 const {
     MIN_PASSWORD_LENGTH,
     SESSION_COOKIE_NAME,
@@ -148,6 +148,13 @@ let Prince;
 let whatsappConnected = false;
 let pairingQrValue = null;
 let pairingCodeValue = null;
+const pairingCodeViewers = new Set();
+let activeAuthState = null;
+const requestOnDemandPairingCode = createOnDemandPairingCodeRequester({
+    getSocket: () => Prince,
+    getCredentials: () => activeAuthState?.creds,
+    getPhoneNumber: () => config.PAIRING_NUMBER,
+});
 const pairingPageSessions = new Map();
 botNetwork.startNetworkClient(() => ({ connected: whatsappConnected, botName: getSetting("BOT_NAME", botName), ownerName, version: botVersion, activity: heartbeatEvents.slice(0, 8) }));
 
@@ -236,7 +243,7 @@ function setPairingPageHeaders(res) {
 function renderPairingPasswordForm(message = "") {
     const notice = message ? `<p class="notice">${escapeHeartbeat(message)}</p>` : "";
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Private WhatsApp pairing</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:420px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.notice{color:#ffb8c0}label{display:block;text-align:left;margin:20px 0 8px;color:#d9cce8}input{box-sizing:border-box;width:100%;padding:13px;border-radius:10px;border:1px solid #695080;background:#0d0914;color:#fff;font-size:16px}button{width:100%;margin-top:14px;padding:13px;border:0;border-radius:10px;background:#b78aff;color:#160e20;font-size:16px;font-weight:800;cursor:pointer}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><p class="hint">Enter your pairing-page password to view the current WhatsApp QR code or pairing code.</p>${notice}<form method="post" action="/pairing"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="${MIN_PASSWORD_LENGTH}" required autofocus><button type="submit">Unlock pairing page</button></form><p class="private">Use the HTTPS address of your bot. Never share the password, QR, or code.</p></main></body></html>`;
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:420px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.notice{color:#ffb8c0}label{display:block;text-align:left;margin:20px 0 8px;color:#d9cce8}input{box-sizing:border-box;width:100%;padding:13px;border-radius:10px;border:1px solid #695080;background:#0d0914;color:#fff;font-size:16px}button{width:100%;margin-top:14px;padding:13px;border:0;border-radius:10px;background:#b78aff;color:#160e20;font-size:16px;font-weight:800;cursor:pointer}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><p class="hint">Enter your pairing-page password to view the QR code or request a fresh pairing code.</p>${notice}<form method="post" action="/pairing"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="${MIN_PASSWORD_LENGTH}" required autofocus><button type="submit">Unlock pairing page</button></form><p class="private">Use the HTTPS address of your bot. Never share the password, QR, or code.</p></main></body></html>`;
 }
 
 function isPairingPageSessionValid(req) {
@@ -255,6 +262,8 @@ app.get("/pairing", async (req, res) => {
     if (!isPairingPageSessionValid(req)) {
         return res.type("html").send(renderPairingPasswordForm());
     }
+    const pairingSessionToken = getPairingCookie(req.headers.cookie);
+    const viewerHasPairingCode = Boolean(pairingCodeValue && pairingCodeViewers.has(pairingSessionToken));
 
     let qrDataUrl = "";
     if (pairingQrValue) {
@@ -264,14 +273,65 @@ app.get("/pairing", async (req, res) => {
             return res.status(500).type("text/plain").send("Could not render the current WhatsApp QR code. Refresh the page.");
         }
     }
-    const loginContent = qrDataUrl
-        ? `<p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code">`
-        : pairingCodeValue
-          ? `<p>In WhatsApp, open <strong>Linked devices → Link with phone number</strong> and enter:</p><code>${escapeHeartbeat(pairingCodeValue)}</code>`
-          : `<p>${whatsappConnected ? "WhatsApp is connected; no pairing code is needed." : "Waiting for WhatsApp to provide a fresh QR code or pairing code. Refresh this page in a few seconds."}</p>`;
+    const pairingNumber = normalizePairingNumber(config.PAIRING_NUMBER);
+    const pairingCredentialsRegistered = Boolean(activeAuthState?.creds?.registered);
+    const canRequestPairingCode = Boolean(pairingNumber && Prince && activeAuthState && !pairingCredentialsRegistered && !whatsappConnected);
+    const pairingCodeError = req.query?.pairing_error === "1"
+        ? `<p class="notice">A fresh pairing code could not be requested. Wait a moment and try again, or use the QR option.</p>`
+        : "";
+    const requestCodeButton = `<form method="post" action="/pairing/code"><button type="submit">${viewerHasPairingCode ? "Get a fresh pairing code" : "Get pairing code"}</button></form>`;
+    const qrMarkup = qrDataUrl
+        ? `<details><summary>Use QR code instead</summary><p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code"></details>`
+        : "";
+    let loginContent;
+    if (whatsappConnected || pairingCredentialsRegistered) {
+        loginContent = `<p>WhatsApp is already paired${whatsappConnected ? " and connected" : "; waiting for its connection"}. No new pairing code is needed.</p>${pairingCodeError}`;
+    } else if (viewerHasPairingCode) {
+        loginContent = `<p>In WhatsApp, open <strong>Linked devices → Link with phone number</strong> and enter this freshly requested code now:</p><code>${escapeHeartbeat(pairingCodeValue)}</code><p>If WhatsApp says it expired, click below to request a fresh code.</p>${requestCodeButton}${qrMarkup}`;
+    } else if (canRequestPairingCode) {
+        loginContent = `${pairingCodeError}<p>A pairing code is not generated until you click below. Request it when you are ready to enter it in WhatsApp.</p>${requestCodeButton}${qrMarkup}`;
+    } else if (qrDataUrl) {
+        loginContent = `${pairingCodeError}<p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code">`;
+    } else {
+        const invalidNumber = String(config.PAIRING_NUMBER || "").trim() && !pairingNumber;
+        loginContent = `${pairingCodeError}<p>${invalidNumber ? "PAIRING_NUMBER is invalid; set 6–15 international digits to enable pairing codes." : "Waiting for WhatsApp to provide a QR code. Refresh this page in a few seconds."}</p>`;
+    }
+    const refreshTag = pairingNumber && canRequestPairingCode ? "" : `<meta http-equiv="refresh" content="8">`;
     return res.type("html").send(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="8"><title>Private WhatsApp pairing</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:520px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.qr{display:block;width:min(320px,100%);height:auto;margin:18px auto;background:#fff;border-radius:12px}code{display:inline-block;margin:18px 0;padding:18px 24px;border-radius:12px;background:#09070c;color:#fff;font-size:30px;font-weight:800;letter-spacing:4px}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><div class="hint">${loginContent}</div><p class="private">This page is private. Do not share the QR, code, password, or screenshot.</p></main></body></html>`);
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">${refreshTag}<title>Private WhatsApp pairing</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:520px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.notice{color:#ffb8c0}.qr{display:block;width:min(320px,100%);height:auto;margin:18px auto;background:#fff;border-radius:12px}code{display:inline-block;margin:18px 0;padding:18px 24px;border-radius:12px;background:#09070c;color:#fff;font-size:30px;font-weight:800;letter-spacing:4px}button{width:100%;max-width:340px;margin:14px auto;padding:13px;border:0;border-radius:10px;background:#b78aff;color:#160e20;font-size:16px;font-weight:800;cursor:pointer}summary{cursor:pointer;margin:18px 0}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><div class="hint">${loginContent}</div><p class="private">This page is private. Do not share the QR, code, password, or screenshot.</p></main></body></html>`);
+});
+
+app.post("/pairing/code", async (req, res) => {
+    setPairingPageHeaders(res);
+    const configuredPassword = process.env.PAIRING_PAGE_PASSWORD || "";
+    if (configuredPassword.length < MIN_PASSWORD_LENGTH) {
+        return res.status(503).type("text/plain").send("Private pairing is disabled until a sufficiently long password is configured.");
+    }
+    if (!isPairingPageSessionValid(req)) {
+        return res.status(401).type("html").send(renderPairingPasswordForm("Your pairing page session expired. Unlock it again."));
+    }
+    const pairingSessionToken = getPairingCookie(req.headers.cookie);
+    if (whatsappConnected || activeAuthState?.creds?.registered) {
+        pairingCodeValue = null;
+        pairingCodeViewers.clear();
+        return res.redirect(303, "/pairing");
+    }
+    try {
+        pairingCodeValue = null;
+        pairingCodeViewers.clear();
+        const pairingCode = await requestOnDemandPairingCode();
+        if (!pairingCode) throw new Error("WhatsApp did not return a pairing code.");
+        pairingCodeValue = pairingCode;
+        pairingCodeViewers.add(pairingSessionToken);
+        pairingQrValue = null;
+        addHeartbeatEvent("Pairing code requested", "A fresh code was generated after a user request.", "warning");
+        return res.redirect(303, "/pairing");
+    } catch (error) {
+        console.warn("[PAIRING] On-demand code request failed:", error?.message || "Unknown error.");
+        addHeartbeatEvent("Pairing code request failed", "The code could not be generated; try again or use the QR option.", "warning");
+        return res.redirect(303, "/pairing?pairing_error=1");
+    }
 });
 
 app.post("/pairing", express.urlencoded({ extended: false, limit: "1kb" }), (req, res) => {
@@ -356,6 +416,7 @@ async function startPrince() {
             console.log(`📡 WA Version  : ${version.join('.')} (fallback)`);
         }
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        activeAuthState = state;
         let thisPrince;
 
         if (store) {
@@ -1628,6 +1689,7 @@ async function startPrince() {
             if (qr) {
                 pairingQrValue = qr;
                 pairingCodeValue = null;
+                pairingCodeViewers.clear();
                 addHeartbeatEvent("QR login required", "Open the password-protected /pairing page to scan the QR code.", "warning");
                 if ((process.env.PAIRING_PAGE_PASSWORD || "").length < MIN_PASSWORD_LENGTH) {
                     console.warn(`QR login is ready but hidden: set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters to view it at /pairing. Login credentials are never printed to logs.`);
@@ -1635,6 +1697,8 @@ async function startPrince() {
             }
             if (connection === "connecting") {
                 whatsappConnected = false;
+                pairingCodeValue = null;
+                pairingCodeViewers.clear();
                 heartbeatConnection = "Connecting";
                 addHeartbeatEvent("WhatsApp is reconnecting", "The bot is trying to connect to WhatsApp.", "warning");
             }
@@ -1643,6 +1707,7 @@ async function startPrince() {
                 heartbeatConnection = "Connected";
                 pairingQrValue = null;
                 pairingCodeValue = null;
+                pairingCodeViewers.clear();
                 addHeartbeatEvent("WhatsApp connected", "Your bot is online and ready to receive messages.");
                 try {
                     await Prince.sendPresenceUpdate("available");
@@ -1669,8 +1734,8 @@ async function startPrince() {
                 whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
                 pairingQrValue = null;
-                // Preserve the latest code if WhatsApp closes the socket after
-                // issuing it; it remains visible until a new code or connection.
+                pairingCodeValue = null;
+                pairingCodeViewers.clear();
                 const closeError = lastDisconnect?.error;
                 const closeCode = new Boom(closeError)?.output?.statusCode;
                 const closeMessage = closeError?.message || closeError?.output?.payload?.message || "no error message";
@@ -1818,26 +1883,8 @@ async function startPrince() {
             }
         });
 
-        const pairingNumber = normalizePairingNumber(config.PAIRING_NUMBER);
-        if (String(config.PAIRING_NUMBER || "").trim() && !pairingNumber) {
+        if (String(config.PAIRING_NUMBER || "").trim() && !normalizePairingNumber(config.PAIRING_NUMBER)) {
             console.warn("PAIRING_NUMBER is invalid; QR login remains available. Use 6–15 international digits.");
-        }
-        if (pairingNumber && !state.creds.registered) {
-            if ((process.env.PAIRING_PAGE_PASSWORD || "").length < MIN_PASSWORD_LENGTH) {
-                console.warn(`Pairing code not requested: set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters to view it privately at /pairing. Login credentials are never printed to logs.`);
-            } else {
-                try {
-                    const pairingCode = await requestPairingCode(Prince, state.creds, pairingNumber);
-                    if (pairingCode) {
-                        pairingCodeValue = pairingCode;
-                        pairingQrValue = null;
-                        console.log("Pairing code is ready on the password-protected /pairing page.");
-                        addHeartbeatEvent("Pairing code ready", "Open the password-protected /pairing page and enter the code in WhatsApp → Linked devices → Link with phone number.", "warning");
-                    }
-                } catch (error) {
-                    console.warn("Pairing-code request failed; QR login remains available:", error?.message || error);
-                }
-            }
         }
 
         Prince.ev.on("group-participants.update", async (update) => {

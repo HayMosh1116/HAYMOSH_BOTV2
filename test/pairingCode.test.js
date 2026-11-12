@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizePairingNumber, requestPairingCode } = require('../mayel/pairingCode');
+const fs = require('node:fs');
+const { normalizePairingNumber, requestPairingCode, createOnDemandPairingCodeRequester } = require('../mayel/pairingCode');
 const {
   MIN_PASSWORD_LENGTH,
   SESSION_COOKIE_NAME,
@@ -82,4 +83,104 @@ test('creates a random short-lived pairing cookie session and extracts it safely
   assert.equal(SESSION_TTL_MS, 10 * 60 * 1000);
   assert.equal(isValidPairingSession(sessions, token, now + SESSION_TTL_MS), false);
   assert.equal(sessions.has(token), false);
+});
+
+
+test('on-demand requester does not generate a code until explicitly called', async () => {
+  let requestCount = 0;
+  const socket = {};
+  const credentials = { registered: false };
+  const requestFresh = createOnDemandPairingCodeRequester({
+    getSocket: () => socket,
+    getCredentials: () => credentials,
+    getPhoneNumber: () => '+234 912 345 6789',
+    requestCode: async (s, creds, number) => {
+      assert.equal(s, socket);
+      assert.equal(creds, credentials);
+      assert.equal(number, '2349123456789');
+      requestCount++;
+      return 'ABCD-1234';
+    },
+  });
+  assert.equal(requestCount, 0);
+  assert.equal(await requestFresh(), 'ABCD-1234');
+  assert.equal(requestCount, 1);
+});
+
+test('simultaneous Get pairing code clicks share one WhatsApp request', async () => {
+  let requestCount = 0;
+  let releaseRequest;
+  const socket = {};
+  const credentials = { registered: false };
+  const requestFresh = createOnDemandPairingCodeRequester({
+    getSocket: () => socket,
+    getCredentials: () => credentials,
+    getPhoneNumber: () => '2349123456789',
+    requestCode: async () => {
+      requestCount++;
+      await new Promise((resolve) => { releaseRequest = resolve; });
+      return 'WXYZ-9876';
+    },
+  });
+  const first = requestFresh();
+  const second = requestFresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requestCount, 1);
+  releaseRequest();
+  assert.deepEqual(await Promise.all([first, second]), ['WXYZ-9876', 'WXYZ-9876']);
+});
+
+test('on-demand requester refuses registered sessions and rejects a code from a replaced socket', async () => {
+  let requestCount = 0;
+  const registeredCredentials = { registered: true };
+  const registered = createOnDemandPairingCodeRequester({
+    getSocket: () => ({}),
+    getCredentials: () => registeredCredentials,
+    getPhoneNumber: () => '2349123456789',
+    requestCode: async () => { requestCount++; return 'ABCD-1234'; },
+  });
+  assert.equal(await registered(), null);
+  assert.equal(requestCount, 0);
+
+  let currentSocket = {};
+  let releaseRequest;
+  const credentials = { registered: false };
+  const stale = createOnDemandPairingCodeRequester({
+    getSocket: () => currentSocket,
+    getCredentials: () => credentials,
+    getPhoneNumber: () => '2349123456789',
+    requestCode: () => new Promise((resolve) => { releaseRequest = () => resolve('ABCD-1234'); }),
+  });
+  const pending = stale();
+  await new Promise((resolve) => setImmediate(resolve));
+  currentSocket = {};
+  releaseRequest();
+  await assert.rejects(pending, /session changed/);
+});
+
+
+test('a later explicit request asks WhatsApp for a fresh code', async () => {
+  let requestCount = 0;
+  const socket = {};
+  const credentials = { registered: false };
+  const requestFresh = createOnDemandPairingCodeRequester({
+    getSocket: () => socket,
+    getCredentials: () => credentials,
+    getPhoneNumber: () => '2349123456789',
+    requestCode: async () => `CODE-${++requestCount}`,
+  });
+  assert.equal(await requestFresh(), 'CODE-1');
+  assert.equal(await requestFresh(), 'CODE-2');
+  assert.equal(requestCount, 2);
+});
+
+test('pairing page requires a user POST for code generation and keeps the route session-protected', () => {
+  const source = fs.readFileSync(require.resolve('../index.js'), 'utf8');
+  assert.match(source, /action="\/pairing\/code"/);
+  assert.match(source, /app\.post\("\/pairing\/code"/);
+  assert.match(source, /if \(!isPairingPageSessionValid\(req\)\)/);
+  assert.match(source, /pairingCodeViewers\.has\(pairingSessionToken\)/);
+  assert.match(source, /pairingCodeViewers\.add\(pairingSessionToken\)/);
+  assert.doesNotMatch(source, /requestPairingCode\(Prince/);
+  assert.doesNotMatch(source, /pairingCodeValue\s*=\s*await/);
 });
