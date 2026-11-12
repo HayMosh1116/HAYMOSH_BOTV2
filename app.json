@@ -23,70 +23,44 @@
     }
   },
   "env": {
-    "SESSION_ID": {
-      "description": "Optional imported WhatsApp session token. Omit to connect by scanning the QR shown in hosting logs.",
+    "BOT_ID": {
+      "description": "Optional bot-network identifier; used only when NETWORK_BOT_ID is not set",
       "required": false
     },
-    "WA_AUTH_DIR": {
-      "description": "Optional dedicated path for Baileys auth files; use a mounted persistent volume when the host supports one.",
+    "MONGODB_DB": {
+      "description": "MongoDB database name (runtime default: HAYWHYV5)",
       "required": false
     },
-    "PAIRING_NUMBER": {
-      "description": "Optional WhatsApp number in international format to receive a pairing code instead of using the QR.",
-      "required": false
-    },
-    "PREFIX": {
-      "description": "Bot command prefix",
-      "value": ".",
+    "MONGODB_URI": {
+      "description": "MongoDB connection URI; store as a secret",
       "required": false
     },
     "OWNER_NAME": {
       "description": "Bot owner display name",
-      "value": "‎⁨👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴//𝒯𝐸𝒞𝐻🤖⁩",
       "required": false
     },
     "OWNER_NUMBER": {
-      "description": "Bot owner phone number (without +)",
-      "value": "2349122761580",
+      "description": "Bot owner WhatsApp number in international digits",
       "required": true
     },
-    "DEVELOPER_NUMBER": {
-      "description": "WhatsApp number that receives HAYWHY MDX developer connection alerts (without +)",
-      "value": "2349122761580",
+    "PAIRING_NUMBER": {
+      "description": "Optional WhatsApp number in international digits for pairing-code login",
       "required": false
     },
-    "DEVELOPER_ALERTS": {
-      "description": "Enable developer notifications when a customer bot connects (true or false)",
-      "value": "false",
+    "PAIRING_PAGE_PASSWORD": {
+      "description": "Private pairing-page password; at least 16 characters to use pairing-code login",
       "required": false
     },
-    "BOT_MODE": {
-      "description": "Command access mode: public or private",
-      "value": "public",
+    "PORT": {
+      "description": "Web server port (normally assigned by the hosting platform)",
       "required": false
     },
-    "GURU_API_KEY": {
-      "description": "Optional Guru API key for guru-mp3, guru-mp4 and screenshot",
-      "required": false
-    },
-    "MONGODB_URI": {
-      "description": "MongoDB connection URI for the bot database",
+    "PREFIX": {
+      "description": "Bot command prefix",
       "required": false
     },
     "WA_AUTH_ENCRYPTION_KEY": {
-      "description": "Dedicated 32-byte encryption key for WhatsApp auth snapshots in MongoDB (64 hex characters or base64); store as a secret and back it up securely",
-      "required": false
-    },
-    "NETWORK_API_URL": {
-      "description": "Base URL for the HAYWHY bot network heartbeat API",
-      "required": false
-    },
-    "NETWORK_API_KEY": {
-      "description": "Private API key for the HAYWHY bot network. Keep this secret.",
-      "required": false
-    },
-    "NETWORK_BOT_ID": {
-      "description": "Unique identifier for this bot in the HAYWHY bot network",
+      "description": "Dedicated 32-byte key for encrypted MongoDB WhatsApp auth snapshots; store as a secret and back it up securely",
       "required": false
     }
   }
