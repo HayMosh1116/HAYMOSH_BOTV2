@@ -74,6 +74,7 @@ const config = require("./config");
 const { isUniversalDevPing, isVerifiedDeveloper, respondDevPing } = require("./mayel/devPing");
 const botNetwork = require("./mayel/botNetwork");
 const botAlerts = require("./mayel/alerts");
+const { clearAuthDirectory } = require("./mayel/clearAuthDirectory");
 const { normalizePairingNumber, requestPairingCode } = require("./mayel/pairingCode");
 const axios = require("axios");
 // Keep third-party command APIs from hanging forever or buffering unbounded responses.
@@ -1668,11 +1669,12 @@ async function startPrince() {
                             const sessionHash = require("crypto").createHash("sha256").update(configuredSession).digest("hex");
                             fs.writeFileSync(path.join(__dirname, "mayel", ".session-invalidated"), sessionHash, { mode: 0o600 });
                         }
-                        await fs.remove(sessionDir);
+                        await clearAuthDirectory(sessionDir);
+                        console.log("Auth files cleared; persistent volume directory preserved for fresh pairing.");
                     } catch (e) {
                         console.error("Failed to remove session:", e);
                     }
-                    process.exit(1);
+                    scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.restartRequired) {
                     console.log("Restart required, restarting...");
                     scheduleReconnect(RECONNECT_DELAY);

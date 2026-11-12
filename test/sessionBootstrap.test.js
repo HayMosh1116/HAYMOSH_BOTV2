@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { getAuthDir } = require('../mayel/authDir');
 const { loadSession } = require('../mayel/sessionBootstrap');
+const { clearAuthDirectory } = require('../mayel/clearAuthDirectory');
 
 function tempPath() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'haywhy-auth-test-'));
@@ -24,6 +25,23 @@ test('missing SESSION_ID initializes a private direct-login directory instead of
     assert.equal(result.authDir, authDir);
     assert.equal(fs.existsSync(authDir), true);
     assert.equal(fs.statSync(authDir).mode & 0o777, 0o700);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('clears auth files without deleting the auth directory mount point', async () => {
+  const root = tempPath();
+  const authDir = path.join(root, 'mounted-auth');
+  try {
+    fs.mkdirSync(path.join(authDir, 'keys'), { recursive: true });
+    fs.writeFileSync(path.join(authDir, 'creds.json'), '{"registered":false}');
+    fs.writeFileSync(path.join(authDir, 'keys', 'pre-key-1.json'), '{}');
+
+    await clearAuthDirectory(authDir);
+
+    assert.equal(fs.existsSync(authDir), true);
+    assert.deepEqual(fs.readdirSync(authDir), []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
