@@ -35,6 +35,12 @@
 
 </div>
 
+### Durable encrypted session storage
+
+When `MONGODB_URI` is configured, the bot mirrors its complete Baileys multi-file auth state to the `whatsapp_auth_sessions` collection. Set `WA_AUTH_ENCRYPTION_KEY` to a separately generated 32-byte key (64 hexadecimal characters or base64) in the hosting provider's secret manager. Do not reuse the WhatsApp session token or MongoDB password. Back up this key securely: encrypted snapshots cannot be restored without it.
+
+Use a dedicated MongoDB database user with read/write access only to the bot database, and restrict database network access to the bot's deployment where possible. The existing local auth directory remains in use as a working/fallback copy. On first deployment, an existing local session is retained and imported; on a fresh instance, the latest encrypted database snapshot is restored before the WhatsApp socket starts. If the database is unavailable, a valid local session is kept intact; if neither source is available, startup stops rather than initiating a new QR pairing.
+
 ---
 
 ## ✨ Features

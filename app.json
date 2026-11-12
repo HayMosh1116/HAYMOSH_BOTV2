@@ -73,6 +73,10 @@
       "description": "MongoDB connection URI for the bot database",
       "required": false
     },
+    "WA_AUTH_ENCRYPTION_KEY": {
+      "description": "Dedicated 32-byte encryption key for WhatsApp auth snapshots in MongoDB (64 hex characters or base64); store as a secret and back it up securely",
+      "required": false
+    },
     "NETWORK_API_URL": {
       "description": "Base URL for the HAYWHY bot network heartbeat API",
       "required": false

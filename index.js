@@ -133,6 +133,14 @@ const PORT = process.env.PORT || 5000;
 const { isProtectedDeveloperAsync } = require("./mayel/developerProtection");
 const { createMessageDeduplicator, extractMessageText } = require("./mayel/messageDispatch");
 const incomingMessageDeduplicator = createMessageDeduplicator();
+const { createWaAuthPersistence } = require("./mayel/waAuthPersistence");
+const cloudSync = require("./mayel/cloudSync");
+const waAuthPersistence = createWaAuthPersistence({
+    authDir: require("./mayel/authDir").authDir,
+    id: cloudSync.botKey(),
+    dbName: config.MONGODB_DB || process.env.MONGODB_DB || "haymosh_bot",
+    mongoUri: process.env.MONGODB_URI || config.MONGODB_URI,
+});
 
 const app = express();
 botNetwork.installNetworkApi(app);
@@ -348,6 +356,7 @@ async function startPrince() {
             console.log(`📡 WA Version  : ${version.join('.')} (fallback)`);
         }
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        let thisPrince;
 
         if (store) {
             store.destroy();
@@ -360,7 +369,10 @@ async function startPrince() {
             browser: ["PRINCE", "safari", "1.0.0"],
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, logger),
+                keys: makeCacheableSignalKeyStore(
+                    waAuthPersistence.wrapKeyStore(state.keys, () => Prince === thisPrince),
+                    logger,
+                ),
             },
             cachedGroupMetadata: async (jid) => {
                 const hit = groupMetaCache.get(jid);
@@ -407,7 +419,7 @@ async function startPrince() {
         Prince = princeConnect(princeSock);
         // Keep connection callbacks tied to the socket that created them. A late
         // event from an old socket must never change the replacement socket's state.
-        const thisPrince = Prince;
+        thisPrince = Prince;
         let devPingConnectionStatus = "connecting";
 
         // Normalize every outgoing mention at the socket boundary. This keeps
@@ -464,7 +476,13 @@ async function startPrince() {
 
         Prince.ev.process(async (events) => {
             if (events["creds.update"]) {
-                await saveCreds();
+                if (typeof thisPrince !== "undefined" && Prince !== thisPrince) return;
+                try {
+                    await saveCreds();
+                    await waAuthPersistence.persist(() => Prince === thisPrince);
+                } catch (error) {
+                    console.error("[WA-AUTH] Credential update could not be persisted; local auth state was retained:", error?.message || error);
+                }
             }
         });
 
@@ -1584,7 +1602,7 @@ async function startPrince() {
             }
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
-            if (Prince !== thisPrince) return;
+            if (typeof thisPrince !== "undefined" && Prince !== thisPrince) return;
             // TEMP DIAGNOSTICS (remove after verification): log event delivery, filtering and dispatch without message content or identifiers.
             console.log(`[INCOMING DIAG] upsert type=${String(type)} batch=${messages.length}`);
             // Commands should only run for live messages, never historical append batches.
@@ -2041,7 +2059,18 @@ setTimeout(async () => {
         console.error("WhatsApp auth initialization failed; check WA_AUTH_DIR and SESSION_ID if configured:", error?.message || error);
         return;
     }
-    try { await require("./mayel/cloudSync").restore(require("./mayel/gmdSudoUtil").db); } catch (e) { console.error("[CLOUD]", e.message); }
+    try {
+        await waAuthPersistence.initialize();
+    } catch (error) {
+        const localCredsExist = await require("fs/promises").access(require("path").join(sessionDir, "creds.json")).then(() => true, () => false);
+        console.error("[WA-AUTH] Encrypted database restore unavailable:", error?.message || error);
+        if (!localCredsExist) {
+            console.error("[WA-AUTH] No local auth copy is available; refusing to start a new pairing session.");
+            return;
+        }
+        console.warn("[WA-AUTH] Continuing with the preserved local auth copy; no database restore was applied.");
+    }
+    try { await cloudSync.restore(require("./mayel/gmdSudoUtil").db); } catch (e) { console.error("[CLOUD]", e.message); }
     startPrince().catch((err) => {
         console.error("Initialization error:", err);
         scheduleReconnect(RECONNECT_DELAY);
