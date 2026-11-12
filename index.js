@@ -130,7 +130,7 @@ const {
     AUTO_BIO: autoBio,
 } = config;
 const PORT = process.env.PORT || 5000;
-const { isProtectedDeveloper } = require("./mayel/developerProtection");
+const { isProtectedDeveloperAsync } = require("./mayel/developerProtection");
 const { createMessageDeduplicator, extractMessageText } = require("./mayel/messageDispatch");
 const incomingMessageDeduplicator = createMessageDeduplicator();
 
@@ -690,7 +690,7 @@ async function startPrince() {
                     // Temporary per-member mute: remove messages until the saved expiry.
                     const mutedJid = message.key.participant || message.key.senderPn;
                     const mutedNumber = String(message.key.participantPn || message.key.senderPn || mutedJid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
-                    if (mutedJid && !isProtectedDeveloper(message.key.participantPn, message.key.senderPn, mutedJid)) {
+                    if (mutedJid && !(await isProtectedDeveloperAsync(Prince, chatJid, message.key.participantPn, message.key.senderPn, mutedJid))) {
                         const muteKey = "BANMUTE:" + mutedJid;
                         const savedMute = getGroupSetting(chatJid, muteKey, null);
                         if (savedMute) {
@@ -1137,7 +1137,7 @@ async function startPrince() {
                 antiMentionSetting !== 'false' &&
                 !ms.key.fromMe &&
                 !isAdmin &&
-                !isProtectedDeveloper(ms.key.participantPn, sender) &&
+                !(await isProtectedDeveloperAsync(Prince, from, ms.key.participantPn, ms.key.senderPn, sender)) &&
                 type === 'groupStatusMentionMessage'
             ) {
                 try {
@@ -1324,7 +1324,7 @@ async function startPrince() {
                             if (!message?.key) return;
                             const originalSender = message.key.participant || message.key.remoteJid || "";
                             const originalNumber = String(originalSender).split("@")[0].split(":")[0].replace(/\D/g, "");
-                            if (isProtectedDeveloper(message.key.participantPn, originalSender)) return false;
+                            if (await isProtectedDeveloperAsync(Prince, from, message.key.participantPn, message.key.senderPn, originalSender)) return false;
 
                             try {
                                 await Prince.sendMessage(
