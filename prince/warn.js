@@ -11,9 +11,18 @@ async function resolveTarget(Prince, from, c) {
   if (!raw && q) { const n = q.split(" ")[0].replace(/\D/g, ""); if (n.length >= 10) raw = n + "@s.whatsapp.net"; }
   if (!raw) return null;
   const meta = groupMetadata || await Prince.groupMetadata(from).catch(() => null);
-  const num = String(raw).split("@")[0].split(":")[0];
-  const p = meta?.participants?.find((x) => [x.id, x.pn, x.phoneNumber].some((v) => v && String(v).split("@")[0].split(":")[0] === num));
-  return { jid: toMentionJid((p && (p.pn || p.phoneNumber || p.id)) || raw), participantId: p?.id || raw, participant: p, raw, isAdmin: !!p?.admin };
+  let resolved = raw;
+  if (String(raw).toLowerCase().endsWith("@lid") && typeof Prince.getJidFromLid === "function") {
+    try { resolved = await Prince.getJidFromLid(raw) || raw; } catch {}
+  }
+  const candidates = [raw, resolved].map((value) => String(value).split("@")[0].split(":")[0]);
+  const p = meta?.participants?.find((x) =>
+    [x.id, x.pn, x.phoneNumber, x.jid, x.lid]
+      .filter(Boolean)
+      .some((v) => candidates.includes(String(v).split("@")[0].split(":")[0]))
+  );
+  const target = p?.pn || p?.phoneNumber || p?.id || resolved;
+  return { jid: toMentionJid(target), participantId: p?.id || resolved, participant: p, raw, isAdmin: !!p?.admin };
 }
 
 function reasonOf(c) {
@@ -52,7 +61,7 @@ gmd({ pattern: "resetwarn", aliases: ["delwarn", "clearwarn", "unwarn"], react: 
   if (!isAdmin && !isSuperAdmin) return reply("❌ You must be an admin to use this command!");
   const t = await resolveTarget(Prince, from, c);
   if (!t) return reply("❌ Tag, reply to, or type the number of the person.\nExample: *.resetwarn @user*");
-  if (isDeveloper(t.participantId) || isDeveloper(t.jid)) return reply("🛡️ The HAYWHY developer is protected from changes to warning records.");
+  if (await isProtectedDeveloperAsync(Prince, from, t.participant, t.participantId, t.jid, t.raw)) return reply("🛡️ The HAYWHY developer is protected from changes to warning records.");
   const before = getUserWarnings(from, t.jid).count || 0;
   resetWarnings(from, t.jid);
   return Prince.sendMessage(from, { text: before ? `♻️ Cleared *${before}* warning(s) for ${mentionTag(t.jid)}.` : `✅ ${mentionTag(t.jid)} has no warnings.`, mentions: [t.jid] }, { quoted: c.mek });
