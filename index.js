@@ -366,7 +366,7 @@ async function startPrince() {
         const princeSock = {
             version,
             logger: pino({ level: "silent" }),
-            browser: ["PRINCE", "safari", "1.0.0"],
+            browser: ["HAYWHY_APEX", "safari", "1.0.0"],
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(
