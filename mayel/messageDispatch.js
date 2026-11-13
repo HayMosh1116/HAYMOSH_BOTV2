@@ -1,5 +1,6 @@
 const DEFAULT_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_DEDUPE_MAX_ENTRIES = 20000;
+const DEFAULT_APPEND_CLOCK_SKEW_MS = 30 * 1000;
 
 function unwrapMessageContent(input) {
   let message = input?.message || input || {};
@@ -42,6 +43,18 @@ function messageIdentity(message) {
   ]);
 }
 
+function timestampMs(message) {
+  const timestamp = message?.messageTimestamp;
+  let seconds;
+  if (typeof timestamp === "number") seconds = timestamp;
+  else if (typeof timestamp === "bigint") seconds = Number(timestamp);
+  else if (typeof timestamp?.toNumber === "function") seconds = timestamp.toNumber();
+  else if (typeof timestamp === "string" && /^\d+$/.test(timestamp)) seconds = Number(timestamp);
+  else return null;
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return seconds * 1000;
+}
+
 function createMessageDeduplicator(options = {}) {
   const ttlMs = Number.isFinite(options.ttlMs) && options.ttlMs > 0
     ? Math.floor(options.ttlMs)
@@ -73,6 +86,19 @@ function createMessageDeduplicator(options = {}) {
     filterNotify(messages, type, now = Date.now()) {
       if (type !== "notify" || !Array.isArray(messages)) return [];
       return messages.filter((message) => shouldProcess(message, now));
+    },
+    filterReconnectAppend(messages, window, now = Date.now()) {
+      if (!Array.isArray(messages) || !window || !Number.isFinite(window.sinceMs) || !Number.isFinite(window.untilMs)) return [];
+      if (now < window.sinceMs || now > window.untilMs) return [];
+      const skewMs = Number.isFinite(window.clockSkewMs) && window.clockSkewMs >= 0
+        ? window.clockSkewMs
+        : DEFAULT_APPEND_CLOCK_SKEW_MS;
+      return messages.filter((message) => {
+        if (!message?.message || message?.key?.fromMe) return false;
+        const sentAt = timestampMs(message);
+        if (sentAt === null || sentAt < window.sinceMs - skewMs || sentAt > now + skewMs) return false;
+        return shouldProcess(message, now);
+      });
     },
     clear() {
       seen.clear();

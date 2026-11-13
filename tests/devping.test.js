@@ -73,14 +73,16 @@ test('existing configured-prefix devping plugin delegates to the same deduplicat
 // Exercise actual main listener wiring without starting WhatsApp or installing
 // unrelated dependencies. Capture processCommandMessage's verified dispatch.
 const source = fs.readFileSync(require.resolve('../index'), 'utf8');
-function wire() {
+const { respondToPing } = require('../mayel/ping');
+function wire(reconnectAppendWindow = null, processMessage = null) {
   const start = source.indexOf('        Prince.ev.on("messages.upsert", async ({ messages = [], type })');
   const end = source.indexOf('\n\n        Prince.ev.on("connection.update",', start);
   let listener; const dispatched = [];
   vm.runInNewContext(source.slice(start, end), {
     Prince: { ev: { on: (_, handler) => { listener = handler; } } }, performance,
     incomingMessageDeduplicator: createMessageDeduplicator(),
-    processCommandMessage: async ms => dispatched.push(ms.key.id), console,
+    reconnectAppendWindow,
+    processCommandMessage: processMessage || (async ms => dispatched.push(ms.key.id)), console,
   });
   return { listener, dispatched };
 }
@@ -91,6 +93,30 @@ test('main listener handles every live message in a batch', async () => {
 });
 test('history replay does not dispatch commands or trigger universal ping', async () => {
   const { listener, dispatched } = wire(); await listener({ type: 'append', messages: [message(developer)] }); assert.deepEqual(dispatched, []);
+});
+test('main listener dispatches a recent offline-delivered command during reconnect catch-up', async () => {
+  const now = Date.now();
+  const { listener, dispatched } = wire({ sinceMs: now - 60_000, untilMs: now + 120_000 });
+  const recovered = { ...message(developer, 'recovered'), messageTimestamp: Math.floor((now - 5_000) / 1000) };
+  await listener({ type: 'append', messages: [recovered] });
+  assert.deepEqual(dispatched, ['recovered']);
+});
+test('recovered `.ping` append reaches the ping responder and sends a quoted reply', async () => {
+  const now = Date.now();
+  const sent = [];
+  const socket = { sendMessage: async (...args) => sent.push(args) };
+  const processMessage = async ms => {
+    if (ms.message?.conversation?.trim().toLowerCase() === '.ping') {
+      await respondToPing(ms.key.remoteJid, socket, { mek: ms, receivedAt: performance.now() });
+    }
+  };
+  const { listener } = wire({ sinceMs: now - 60_000, untilMs: now + 120_000 }, processMessage);
+  const recovered = { ...message(developer, 'reconnected-ping'), messageTimestamp: Math.floor((now - 5_000) / 1000), message: { conversation: '.ping' } };
+  await listener({ type: 'append', messages: [recovered] });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], developer);
+  assert.match(sent[0][1].text, /𝐇𝐀𝐘𝐖𝐇𝐘.*𝐎𝐍𝐋𝐈𝐍𝐄/);
+  assert.deepEqual(sent[0][2], { quoted: recovered });
 });
 
 // Execute the real command dispatcher, with only WhatsApp/network boundaries
