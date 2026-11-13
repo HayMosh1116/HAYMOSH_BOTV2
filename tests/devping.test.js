@@ -73,13 +73,14 @@ test('existing configured-prefix devping plugin delegates to the same deduplicat
 // Exercise actual main listener wiring without starting WhatsApp or installing
 // unrelated dependencies. Capture processCommandMessage's verified dispatch.
 const source = fs.readFileSync(require.resolve('../index'), 'utf8');
-function wire() {
+function wire(reconnectAppendWindow = null) {
   const start = source.indexOf('        Prince.ev.on("messages.upsert", async ({ messages = [], type })');
   const end = source.indexOf('\n\n        Prince.ev.on("connection.update",', start);
   let listener; const dispatched = [];
   vm.runInNewContext(source.slice(start, end), {
     Prince: { ev: { on: (_, handler) => { listener = handler; } } }, performance,
     incomingMessageDeduplicator: createMessageDeduplicator(),
+    reconnectAppendWindow,
     processCommandMessage: async ms => dispatched.push(ms.key.id), console,
   });
   return { listener, dispatched };
@@ -91,6 +92,13 @@ test('main listener handles every live message in a batch', async () => {
 });
 test('history replay does not dispatch commands or trigger universal ping', async () => {
   const { listener, dispatched } = wire(); await listener({ type: 'append', messages: [message(developer)] }); assert.deepEqual(dispatched, []);
+});
+test('main listener dispatches a recent offline-delivered command during reconnect catch-up', async () => {
+  const now = Date.now();
+  const { listener, dispatched } = wire({ sinceMs: now - 60_000, untilMs: now + 120_000 });
+  const recovered = { ...message(developer, 'recovered'), messageTimestamp: Math.floor((now - 5_000) / 1000) };
+  await listener({ type: 'append', messages: [recovered] });
+  assert.deepEqual(dispatched, ['recovered']);
 });
 
 // Execute the real command dispatcher, with only WhatsApp/network boundaries

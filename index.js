@@ -14,6 +14,7 @@ const {
     makeCacheableSignalKeyStore,
     jidDecode,
 } = require("prince-baileys");
+require("./mayel/signalLogRedaction").installSignalLogRedaction();
 
 const {
     evt,
@@ -133,6 +134,7 @@ const PORT = process.env.PORT || 5000;
 const { isProtectedDeveloperAsync } = require("./mayel/developerProtection");
 const { createMessageDeduplicator, extractMessageText } = require("./mayel/messageDispatch");
 const incomingMessageDeduplicator = createMessageDeduplicator();
+let reconnectAppendWindow = null;
 const { createWaAuthPersistence } = require("./mayel/waAuthPersistence");
 const cloudSync = require("./mayel/cloudSync");
 const waAuthPersistence = createWaAuthPersistence({
@@ -1674,11 +1676,15 @@ async function startPrince() {
         };
         Prince.ev.on("messages.upsert", async ({ messages = [], type }) => {
             if (typeof thisPrince !== "undefined" && Prince !== thisPrince) return;
-            // TEMP DIAGNOSTICS (remove after verification): log event delivery, filtering and dispatch without message content or identifiers.
             console.log(`[INCOMING DIAG] upsert type=${String(type)} batch=${messages.length}`);
-            // Commands should only run for live messages, never historical append batches.
-            // Keep all messages in a live batch and suppress duplicate deliveries by key.
-            const selected = incomingMessageDeduplicator.filterNotify(messages, type);
+            // Notify is the normal live path. During a reconnect only, accept
+            // non-self append messages whose WhatsApp timestamps fall inside
+            // the outage window; old history remains excluded.
+            const selected = type === "notify"
+                ? incomingMessageDeduplicator.filterNotify(messages, type)
+                : type === "append"
+                    ? incomingMessageDeduplicator.filterReconnectAppend(messages, reconnectAppendWindow)
+                    : [];
             console.log(`[INCOMING DIAG] accepted=${selected.length} filtered=${messages.length - selected.length}`);
             await Promise.all(selected.map(async message => {
                 const messageKinds = Object.keys(message?.message || {}).join(",") || "none";
@@ -1716,6 +1722,9 @@ async function startPrince() {
             }
             if (connection === "open") {
                 whatsappConnected = true;
+                if (reconnectAppendWindow) {
+                    reconnectAppendWindow.untilMs = Math.min(reconnectAppendWindow.untilMs, Date.now() + 2 * 60 * 1000);
+                }
                 pairingHandshakeReady = false;
                 heartbeatConnection = "Connected";
                 pairingQrValue = null;
@@ -1746,6 +1755,7 @@ async function startPrince() {
                 startInProgress = false;
                 whatsappConnected = false;
                 heartbeatConnection = "Disconnected";
+                reconnectAppendWindow = { sinceMs: Date.now(), untilMs: Date.now() + 10 * 60 * 1000 };
                 pairingHandshakeReady = false;
                 pairingQrValue = null;
                 pairingCodeValue = null;

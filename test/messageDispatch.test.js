@@ -25,6 +25,18 @@ test('dispatch selection keeps every new notify message and ignores history appe
   assert.equal(deduper.size, 2);
 });
 
+test('reconnect catch-up accepts only recent offline append messages in the outage window', () => {
+  const deduper = createMessageDeduplicator();
+  const now = 1_700_000_000_000;
+  const window = { sinceMs: now - 60_000, untilMs: now + 120_000 };
+  const recent = { ...message('recent'), messageTimestamp: Math.floor((now - 5_000) / 1000) };
+  const stale = { ...message('stale'), messageTimestamp: Math.floor((now - 120_000) / 1000) };
+  const self = { ...message('self'), messageTimestamp: Math.floor((now - 5_000) / 1000), key: { ...message('self').key, fromMe: true } };
+  assert.deepEqual(deduper.filterReconnectAppend([recent, stale, self], window, now), [recent]);
+  assert.deepEqual(deduper.filterReconnectAppend([recent], window, now), []);
+  assert.deepEqual(deduper.filterReconnectAppend([recent], { ...window, untilMs: now - 1 }, now), []);
+});
+
 test('deduplicates repeated delivery by chat and message id but permits same id in another chat', () => {
   const deduper = createMessageDeduplicator();
   const first = message('same');
