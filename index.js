@@ -454,7 +454,7 @@ async function startPrince() {
 
         const princeSock = {
             version,
-            logger: pino({ level: "silent" }),
+            logger: pino({ level: process.env.BAILEYS_LOG_LEVEL || "silent" }),
             browser: ["HAYWHY_APEX", "safari", "1.0.0"],
             auth: {
                 creds: state.creds,
@@ -1923,6 +1923,41 @@ async function startPrince() {
                 }
             }
         });
+
+        // ---- WhatsApp event monitor ----
+        // Once a minute, logs which WhatsApp events actually arrived. If the bot looks
+        // online but never answers, this shows whether WhatsApp is delivering anything.
+        // Optional: set DEAF_RESTART_MINUTES (for example 15) to reconnect automatically
+        // when no WhatsApp event of any kind arrives for that long. Off by default.
+        const eventCounts = {};
+        let lastEventAt = Date.now();
+        Prince.ev.process(async (events) => {
+            for (const name of Object.keys(events)) eventCounts[name] = (eventCounts[name] || 0) + 1;
+            lastEventAt = Date.now();
+        });
+        const DEAF_RESTART_MS = Math.max(0, Number(process.env.DEAF_RESTART_MINUTES || 0)) * 60 * 1000;
+        const healthTimer = setInterval(() => {
+            if (Prince !== thisPrince) { clearInterval(healthTimer); return; }
+            if (!whatsappConnected) return;
+            const names = Object.keys(eventCounts);
+            const summary = names.length ? names.map((n) => `${n}=${eventCounts[n]}`).join(" ") : "NONE";
+            names.forEach((n) => delete eventCounts[n]);
+            const quietMin = Math.round((Date.now() - lastEventAt) / 60000);
+            console.log(`[WA-HEALTH] events in the last minute: ${summary} | quiet for ${quietMin} min`);
+            if (DEAF_RESTART_MS && Date.now() - lastEventAt > DEAF_RESTART_MS) {
+                console.warn(`[WA-HEALTH] No WhatsApp events for ${quietMin} min; restarting the connection.`);
+                clearInterval(healthTimer);
+                whatsappConnected = false;
+                heartbeatConnection = "Disconnected";
+                reconnectAppendWindow = { sinceMs: Date.now(), untilMs: Date.now() + 10 * 60 * 1000 };
+                const stale = Prince;
+                Prince = null;
+                teardownSocket(stale);
+                lastSocket = null;
+                scheduleReconnect(RECONNECT_DELAY);
+            }
+        }, 60000);
+        healthTimer.unref?.();
 
         if (String(config.PAIRING_NUMBER || "").trim() && !normalizePairingNumber(config.PAIRING_NUMBER)) {
             console.warn("PAIRING_NUMBER is invalid; QR login remains available. Use 6–15 international digits.");
