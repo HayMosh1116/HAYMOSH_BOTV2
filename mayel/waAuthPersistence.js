@@ -39,13 +39,32 @@ async function readSnapshot(directory) {
   const entries = {};
   let total = 0;
   async function walk(current, prefix = '') {
-    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+    let children;
+    try {
+      children = await fs.readdir(current, { withFileTypes: true });
+    } catch (error) {
+      // Baileys may remove an empty key directory while a snapshot is walking it.
+      // Treat that as a concurrent deletion, not a failed authentication backup.
+      if (error?.code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of children) {
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (!validRelativePath(relative)) continue;
       const full = path.join(current, entry.name);
-      if (entry.isDirectory()) await walk(full, relative);
-      else if (entry.isFile()) {
-        const data = await fs.readFile(full);
+      if (entry.isDirectory()) {
+        await walk(full, relative);
+      } else if (entry.isFile()) {
+        let data;
+        try {
+          data = await fs.readFile(full);
+        } catch (error) {
+          // One-time pre-key files are consumed and deleted by Baileys. A file
+          // can disappear between readdir() and readFile(); it must not abort
+          // the entire snapshot. A later queued snapshot captures the new state.
+          if (error?.code === 'ENOENT') continue;
+          throw error;
+        }
         total += data.length;
         if (total > MAX_SNAPSHOT_BYTES) throw new Error('WhatsApp auth snapshot exceeds the configured safety limit.');
         entries[relative] = data.toString('base64');
