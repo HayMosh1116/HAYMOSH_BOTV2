@@ -220,19 +220,19 @@ app.get("/heartbeat", (req, res) => {
     const safePrefix = escapeHeartbeat(prefixDisplay);
     const safeVersion = escapeHeartbeat(botVersion || "Not available");
     res.type("html").send(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>${safeName} Â· Bot Status</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>${safeName} · Bot Status</title>
 <style>
 :root{color-scheme:dark;--bg:#090711;--panel:#151020;--line:#382752;--purple:#b78aff;--pink:#edb7ff;--text:#f8f3ff;--muted:#b8abc9;--green:#76e5b1;--amber:#ffd18a;--red:#ff9cae}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#39205d 0,transparent 38%),radial-gradient(ellipse at 100% 30%,#321c49 0,transparent 32%),var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;padding:30px 16px 50px}
 .wrap{max-width:920px;margin:auto}.top{display:flex;justify-content:space-between;gap:16px;margin-bottom:24px}.brand{font-size:12px;letter-spacing:3px;color:var(--pink);font-weight:800}.refresh,.hint{color:var(--muted);font-size:12px}.hero,.card{background:linear-gradient(145deg,#1c1530ed,#110d1ced);border:1px solid var(--line);border-radius:22px;box-shadow:0 20px 60px #0005}.hero{padding:30px}.eyebrow,.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1.4px}h1{font-size:clamp(28px,6vw,42px);margin:9px 0 4px}.owner{color:var(--muted);margin:0}.pill{display:inline-flex;align-items:center;gap:9px;margin-top:22px;padding:10px 15px;border-radius:999px;font-size:13px;font-weight:800}.good{background:#123b30;color:var(--green)}.warn{background:#48331c;color:var(--amber)}.dot,.event-dot{width:9px;height:9px;border-radius:50%;background:currentColor}.explain{color:#e4d8f2;line-height:1.65}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}.card,.detail{padding:18px}.label{display:block;margin-bottom:9px}.value{font-size:17px;font-weight:750;overflow-wrap:anywhere}.section{margin-top:25px}.section-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:12px}h2{font-size:18px;margin:0}.details{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.detail,.event{padding:16px;border-radius:16px;background:#171123;border:1px solid #332443}.events{display:grid;gap:10px}.event{display:flex;gap:12px}.event-dot{flex:0 0 9px;margin-top:5px;background:var(--purple)}.event.error .event-dot{background:var(--red)}.event.warning .event-dot{background:var(--amber)}.event p{margin:5px 0;color:#d3c8df;line-height:1.5;overflow-wrap:anywhere}.event small,.muted{color:var(--muted)}.footer{text-align:center;color:#897b9b;font-size:12px;margin-top:25px}
 @media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:430px){body{padding:18px 12px}.hero{padding:22px}.grid,.details{grid-template-columns:1fr 1fr}.card,.detail{padding:14px}.value{font-size:15px}}
 </style></head><body><div class="wrap">
-<div class="top"><div class="brand">âœ¦ HAYWHY BOT CARE</div><div class="refresh">Auto-refreshes every 30 seconds</div></div>
+<div class="top"><div class="brand">✦ HAYWHY BOT CARE</div><div class="refresh">Auto-refreshes every 30 seconds</div></div>
 <section class="hero"><div class="eyebrow">Your personal bot dashboard</div><h1>${safeName}</h1><p class="owner">Owned by ${safeOwner}</p><div class="pill ${statusTone}"><span class="dot"></span>${connected ? "ONLINE" : "CHECKING CONNECTION"}</div><p class="explain">${escapeHeartbeat(issueSummary)} This page shows only the bot running at this link.</p></section>
-<section class="grid"><div class="card"><span class="label">WhatsApp</span><div class="value">${connected ? "Connected âœ“" : "Not connected"}</div></div><div class="card"><span class="label">Bot prefix</span><div class="value">${safePrefix}</div></div><div class="card"><span class="label">Running time</span><div class="value">${hours}h ${minutes}m</div></div><div class="card"><span class="label">Memory used</span><div class="value">${memoryMb} MB</div></div></section>
+<section class="grid"><div class="card"><span class="label">WhatsApp</span><div class="value">${connected ? "Connected ✓" : "Not connected"}</div></div><div class="card"><span class="label">Bot prefix</span><div class="value">${safePrefix}</div></div><div class="card"><span class="label">Running time</span><div class="value">${hours}h ${minutes}m</div></div><div class="card"><span class="label">Memory used</span><div class="value">${memoryMb} MB</div></div></section>
 <section class="section"><div class="section-head"><h2>Bot information</h2><span class="hint">Current settings</span></div><div class="details"><div class="detail"><span class="label">Bot name</span><div class="value">${safeName}</div></div><div class="detail"><span class="label">Owner</span><div class="value">${safeOwner}</div></div><div class="detail"><span class="label">Version</span><div class="value">${safeVersion}</div></div><div class="detail"><span class="label">Condition</span><div class="value">${escapeHeartbeat(status)}</div></div></div></section>
 <section class="section"><div class="section-head"><h2>Recent activity & issues</h2><span class="hint">Latest first</span></div><div class="events">${eventRows}</div></section>
-<div class="footer">Last checked: ${escapeHeartbeat(checkedAt)} Â· This page refreshes automatically.</div></div></body></html>`);
+<div class="footer">Last checked: ${escapeHeartbeat(checkedAt)} · This page refreshes automatically.</div></div></body></html>`);
 });
 function setPairingPageHeaders(res) {
     res.set({
@@ -287,21 +287,21 @@ app.get("/pairing", async (req, res) => {
         : "";
     const requestCodeButton = `<form method="post" action="/pairing/code"><button type="submit">${viewerHasPairingCode ? "Get a fresh pairing code" : "Get pairing code"}</button></form>`;
     const qrMarkup = qrDataUrl
-        ? `<details><summary>Use QR code instead</summary><p>In WhatsApp, open <strong>Linked devices â†’ Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code"></details>`
+        ? `<details><summary>Use QR code instead</summary><p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code"></details>`
         : "";
     let loginContent;
     if (whatsappConnected || pairingCredentialsRegistered) {
         loginContent = `<p>WhatsApp is already paired${whatsappConnected ? " and connected" : "; waiting for its connection"}. No new pairing code is needed.</p>${pairingCodeError}`;
     } else if (viewerHasPairingCode) {
-        loginContent = `<p>In WhatsApp, open <strong>Linked devices â†’ Link with phone number</strong> and enter this freshly requested code now:</p><code>${escapeHeartbeat(pairingCodeValue)}</code><p>If WhatsApp says it expired, click below to request a fresh code.</p>${requestCodeButton}${qrMarkup}`;
+        loginContent = `<p>In WhatsApp, open <strong>Linked devices → Link with phone number</strong> and enter this freshly requested code now:</p><code>${escapeHeartbeat(pairingCodeValue)}</code><p>If WhatsApp says it expired, click below to request a fresh code.</p>${requestCodeButton}${qrMarkup}`;
     } else if (canRequestPairingCode) {
         loginContent = `${pairingCodeError}<p>A pairing code is not generated until you click below. Request it when you are ready to enter it in WhatsApp.</p>${requestCodeButton}${qrMarkup}`;
     } else if (qrDataUrl) {
-        loginContent = `${pairingCodeError}<p>In WhatsApp, open <strong>Linked devices â†’ Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code">`;
+        loginContent = `${pairingCodeError}<p>In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan this QR.</p><img class="qr" src="${escapeHeartbeat(qrDataUrl)}" alt="WhatsApp pairing QR code">`;
     } else {
         const invalidNumber = String(config.PAIRING_NUMBER || "").trim() && !pairingNumber;
         const waitingMessage = invalidNumber
-            ? "PAIRING_NUMBER is invalid; set 6â€“15 international digits to enable pairing codes."
+            ? "PAIRING_NUMBER is invalid; set 6–15 international digits to enable pairing codes."
             : pairingNumber
                 ? "Waiting for WhatsApp to complete its pairing handshake. The Get pairing code button will appear when ready."
                 : "Waiting for WhatsApp to provide a QR code. Refresh this page in a few seconds.";
@@ -437,11 +437,11 @@ async function startPrince() {
         try {
             const waVersion = await fetchLatestWaWebVersion();
             version = waVersion.version;
-            console.log(`ðŸ“¡ WA Version  : ${version.join('.')}`);
+            console.log(`📡 WA Version  : ${version.join('.')}`);
         } catch (e) {
             const fallback = await fetchLatestBaileysVersion();
             version = fallback.version;
-            console.log(`ðŸ“¡ WA Version  : ${version.join('.')} (fallback)`);
+            console.log(`📡 WA Version  : ${version.join('.')} (fallback)`);
         }
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
         activeAuthState = state;
@@ -624,7 +624,7 @@ async function startPrince() {
                 const serverId = msg.key?.server_id || msg.newsletterServerId;
                 if (msg.key.remoteJid === newsletterJid && serverId) {
                     try {
-                        const emojiList = ["â¤ï¸", "ðŸ‘", "ðŸ˜®"];
+                        const emojiList = ["❤️", "👍", "😮"];
                         const emoji =
                             emojiList[
                                 Math.floor(Math.random() * emojiList.length)
@@ -815,7 +815,7 @@ async function startPrince() {
                                     setGroupSetting(chatJid, muteKey, "");
                                     const mentionJid = message.key.senderPn || mutedJid;
                                     await Prince.sendMessage(chatJid, {
-                                        text: "ðŸ”Š @" + mentionJid.split("@")[0] + " your temporary mute has expired. You can now send messages again.",
+                                        text: "🔊 @" + mentionJid.split("@")[0] + " your temporary mute has expired. You can now send messages again.",
                                         mentions: [mentionJid]
                                     });
                                 }
@@ -876,7 +876,7 @@ async function startPrince() {
 
                     if (getSetting("AUTO_LIKE_STATUS", autoLikeStatus) === "true" && mek.key.participant) {
                         const emojis = String(
-                            getSetting("STATUS_LIKE_EMOJIS", statusLikeEmojis || "ðŸ’›,â¤ï¸,ðŸ’œ,ðŸ¤,ðŸ’™"),
+                            getSetting("STATUS_LIKE_EMOJIS", statusLikeEmojis || "💛,❤️,💜,🤍,💙"),
                         ).split(",").filter(Boolean);
                         const randomEmoji =
                             emojis[Math.floor(Math.random() * emojis.length)];
@@ -903,7 +903,7 @@ async function startPrince() {
                         if (mek.key.fromMe) return;
                         const customMessage = getSetting(
                             "STATUS_REPLY_TEXT",
-                            statusReplyText || "âœ… Status Viewed By HAYWHY_MDX",
+                            statusReplyText || "✅ Status Viewed By HAYWHY_MDX",
                         );
                         await Prince.sendMessage(
                             fromJid,
@@ -924,16 +924,16 @@ async function startPrince() {
                     try {
                         require(path.join(pluginsPath, fileName));
                     } catch (e) {
-                        console.error(`âŒ Failed to load plugin ${fileName}`);
+                        console.error(`❌ Failed to load plugin ${fileName}`);
                         console.error(e && e.stack ? e.stack : e);
                     }
                 }
             });
         } catch (error) {
-            console.error("âŒ Error reading Taskflow folder:", error.message);
+            console.error("❌ Error reading Taskflow folder:", error.message);
         }
 
-        console.log(`âœ… Plugin Files Loaded (${commands.filter((command) => command.pattern).length} commands)`);
+        console.log(`✅ Plugin Files Loaded (${commands.filter((command) => command.pattern).length} commands)`);
 
         const processCommandMessage = async (ms, receivedAt) => {
             if (!ms?.message || !ms?.key) return;
@@ -1212,7 +1212,7 @@ async function startPrince() {
                         console.error("Block error:", blockErr);
                         if (isSuperUser) {
                             await Prince.sendMessage(ownerJid, {
-                                text: `âš ï¸ Failed to block restricted user: ${sender}\nError: ${blockErr.message}`,
+                                text: `⚠️ Failed to block restricted user: ${sender}\nError: ${blockErr.message}`,
                             });
                         }
                     }
@@ -1254,7 +1254,7 @@ async function startPrince() {
             ) {
                 try {
                     if (!isBotAdmin) {
-                        await Prince.sendMessage(from, { text: '*The STATUS_MENTION process is enabled in this group, but the bot needs to be an admin to run. â›”ï¸*' }, { quoted: ms });
+                        await Prince.sendMessage(from, { text: '*The STATUS_MENTION process is enabled in this group, but the bot needs to be an admin to run. ⛔️*' }, { quoted: ms });
                     } else if (isSuperUser) {
                         // Skip superusers/owners
                     } else {
@@ -1272,12 +1272,12 @@ async function startPrince() {
 
                         if (antiMentionAction === 'delete') {
                             await Prince.sendMessage(from, {
-                                text: `ðŸš« *Anti-Group Mention Activated!*\n\nðŸ‘¥ *Group:* ${groupName}\nðŸ‘¥ *Members:* ${memberCount}\nðŸ‘¤ *User:* @${senderNumber}\nðŸ“ *Action:* Message Removed`,
+                                text: `🚫 *Anti-Group Mention Activated!*\n\n👥 *Group:* ${groupName}\n👥 *Members:* ${memberCount}\n👤 *User:* @${senderNumber}\n📝 *Action:* Message Removed`,
                                 mentions: [sender]
                             }, { quoted: ms });
                         } else if (antiMentionAction === 'kick') {
                             await Prince.sendMessage(from, {
-                                text: `ðŸš« *Anti-Group Mention Activated!*\n\nðŸ‘¥ *Group:* ${groupName}\nðŸ‘¥ *Members:* ${memberCount}\nðŸ‘¤ *User:* @${senderNumber}\nðŸ“ *Action:* Kicked from Group`,
+                                text: `🚫 *Anti-Group Mention Activated!*\n\n👥 *Group:* ${groupName}\n👥 *Members:* ${memberCount}\n👤 *User:* @${senderNumber}\n📝 *Action:* Kicked from Group`,
                                 mentions: [sender]
                             }, { quoted: ms });
                             await Prince.groupParticipantsUpdate(from, [sender], "remove");
@@ -1288,13 +1288,13 @@ async function startPrince() {
                             let warningMessage = '';
                             let shouldKick = false;
                             
-                            const baseText = `ðŸš« *Anti-Group Mention Activated!*\n\nðŸ‘¥ *Group:* ${groupName}\nðŸ‘¥ *Members:* ${memberCount}\nðŸ‘¤ *User:* @${senderNumber}\n`;
+                            const baseText = `🚫 *Anti-Group Mention Activated!*\n\n👥 *Group:* ${groupName}\n👥 *Members:* ${memberCount}\n👤 *User:* @${senderNumber}\n`;
 
                             if (newWarningCount >= 3) {
                                 shouldKick = true;
-                                warningMessage = `${baseText}âš ï¸ *Action:* Final Warning Exceeded! (Removed)`;
+                                warningMessage = `${baseText}⚠️ *Action:* Final Warning Exceeded! (Removed)`;
                             } else {
-                                warningMessage = `${baseText}âš ï¸ *Warning:* ${newWarningCount}/3\nðŸ“ *Note:* Next violation will result in removal.`;
+                                warningMessage = `${baseText}⚠️ *Warning:* ${newWarningCount}/3\n📝 *Note:* Next violation will result in removal.`;
                             }
                             
                             await Prince.sendMessage(from, {
@@ -1307,7 +1307,7 @@ async function startPrince() {
                                 resetWarnings(from, sender);
                             }
                         }
-                        console.log(`âœ… Anti-group mention triggered in ${groupName} by ${senderNumber}`);
+                        console.log(`✅ Anti-group mention triggered in ${groupName} by ${senderNumber}`);
                     }
                 } catch (error) {
                     console.error('Anti-group mention error:', error);
@@ -1344,7 +1344,7 @@ async function startPrince() {
                 const pfx = activePrefix || "";
                 try {
                     await Prince.sendMessage(from, {
-                        text: `\u200E\u2068ðŸ‘¾ð’Ÿð¸ð’±-ð»ð’œð’´ð’²ð»ð’´ðŸ¤–\u2069_Use this prefix to execute my bot commands:- *${pfx}*_\n\n\`Example ${pfx}menu\``,
+                        text: `\u200E\u2068👾𝒟𝐸𝒱-𝐻𝒜𝒴𝒲𝐻𝒴🤖\u2069_Use this prefix to execute my bot commands:- *${pfx}*_\n\n\`Example ${pfx}menu\``,
                         mentions: [standardizeJid(sendr)],
                     }, { quoted: ms });
                 } catch (e) { console.error("Prefix reply error:", e.message); }
@@ -1369,14 +1369,14 @@ async function startPrince() {
                         console.warn(`[COMMAND] Blocked private-mode command .${cmd} from ${sender || from}`);
                         await Prince.sendMessage(
                             from,
-                            { text: "ðŸ”’ This bot is currently in private mode. Set BOT_MODE=public or use the configured owner account." },
+                            { text: "🔒 This bot is currently in private mode. Set BOT_MODE=public or use the configured owner account." },
                             { quoted: ms },
                         );
                         return;
                     }
 
                     try {
-                        // reply(text, { mentions: [jid] }) â€” mentions were previously
+                        // reply(text, { mentions: [jid] }) — mentions were previously
                         // dropped here, which is why many commands showed raw numbers.
                         const reply = (teks, opts = {}) => {
                             const content = { text: teks };
@@ -1657,7 +1657,7 @@ async function startPrince() {
                             await Prince.sendMessage(
                                 from,
                                 {
-                                    text: `ðŸš¨ Command failed: ${error.message}`,
+                                    text: `🚨 Command failed: ${error.message}`,
                                     ...createContext(messageAuthor, {
                                         title: "Error",
                                         body: "Command execution failed",
@@ -1686,7 +1686,7 @@ async function startPrince() {
                 const quotedText = repliedMessage.conversation || repliedMessage.extendedTextMessage?.text || repliedMessage.imageMessage?.caption || repliedMessage.videoMessage?.caption || "";
 
                 // Status Mention Reply Handler - Moved to prince/group.js for interactive handling
-                /* if (quotedText.includes("ð’ð“ð€ð“ð”ð’ ðŒð„ðð“ðˆðŽð ð’ð„ð“ð“ðˆðð†ð’")) {
+                /* if (quotedText.includes("𝐒𝐓𝐀𝐓𝐔𝐒 𝐌𝐄𝐍𝐓𝐈𝐎𝐍 𝐒𝐄𝐓𝐓𝐈𝐍𝐆𝐒")) {
                     ...
                 } */
             }
@@ -1789,11 +1789,11 @@ async function startPrince() {
             }
 
             if (connection === "connecting") {
-                console.log("ðŸ•— Connecting Bot...");
+                console.log("🕗 Connecting Bot...");
             }
 
             if (connection === "open") {
-                console.log("âœ… Connection Instance is Online");
+                console.log("✅ Connection Instance is Online");
                 startInProgress = false;
                 if (connectionStableTimer) clearTimeout(connectionStableTimer);
                 connectionStableTimer = setTimeout(() => {
@@ -1807,7 +1807,7 @@ async function startPrince() {
                         const totalCommands = commands.filter(
                             (command) => command.pattern,
                         ).length;
-                        console.log("ðŸ’œ Connected to Whatsapp, Active!");
+                        console.log("💜 Connected to Whatsapp, Active!");
 
                         if (startMess === "true") {
                             const md =
@@ -1823,7 +1823,7 @@ async function startPrince() {
                                 timeStyle: "short",
                             });
                             const connectionMsg = `
-ðŸŸ£ *HAYWHY MDX â€” ONLINE*
+🟣 *HAYWHY MDX — ONLINE*
 
 *Status:* Connected and ready
 *Date & Time:* ${connectedAt} (Lagos)
@@ -1854,7 +1854,7 @@ async function startPrince() {
                                 },
                                 {
                                     disappearingMessagesInChat: true,
-                                    ephemeralExpiration: 300,Â 
+                                    ephemeralExpiration: 300, 
                                 },
                             );
                         }
@@ -1890,10 +1890,10 @@ async function startPrince() {
                     scheduleReconnect(RECONNECT_DELAY);
                 } else if (reason === DisconnectReason.connectionReplaced || reason === 405) {
                     if (isShuttingDown) {
-                        console.log("Connection replaced during shutdown â€” not reconnecting.");
+                        console.log("Connection replaced during shutdown — not reconnecting.");
                         return;
                     }
-                    console.log("Connection replaced (405) â€” waiting 60s for old session to expire...");
+                    console.log("Connection replaced (405) — waiting 60s for old session to expire...");
                     scheduleReconnect(60000);
                 } else if (reason === DisconnectReason.loggedOut) {
                     console.log("Device logged out; local auth will be cleared for a fresh QR login.");
@@ -1925,7 +1925,7 @@ async function startPrince() {
         });
 
         if (String(config.PAIRING_NUMBER || "").trim() && !normalizePairingNumber(config.PAIRING_NUMBER)) {
-            console.warn("PAIRING_NUMBER is invalid; QR login remains available. Use 6â€“15 international digits.");
+            console.warn("PAIRING_NUMBER is invalid; QR login remains available. Use 6–15 international digits.");
         }
 
         Prince.ev.on("group-participants.update", async (update) => {
@@ -1984,13 +1984,13 @@ async function startPrince() {
                             }
                             welcomeMsg = processed;
                         } else {
-                            welcomeMsg = `ðŸ‘‹ *Welcome to ${groupName}!*
+                            welcomeMsg = `👋 *Welcome to ${groupName}!*
 
 Hey ${userMention}, welcome to the group!
 
-ðŸ“ *Group:* ${groupName}
-ðŸ‘¥ *Members:* ${memberCount}
-ðŸ“ *Description:* ${groupDesc}
+📍 *Group:* ${groupName}
+👥 *Members:* ${memberCount}
+📝 *Description:* ${groupDesc}
 
 _Enjoy your stay!_`;
                         }
@@ -2062,11 +2062,11 @@ _Enjoy your stay!_`;
                             }
                             goodbyeMsg = processed;
                         } else {
-                            goodbyeMsg = `ðŸ‘‹ *Goodbye!*
+                            goodbyeMsg = `👋 *Goodbye!*
 
 ${userMention} has left *${groupName}*
 
-ðŸ‘¥ *Members remaining:* ${memberCount}
+👥 *Members remaining:* ${memberCount}
 
 _We'll miss you!_`;
                         }
@@ -2093,7 +2093,7 @@ _We'll miss you!_`;
             isShuttingDown = true;
             if (connectionStableTimer) clearTimeout(connectionStableTimer);
             connectionStableTimer = null;
-            console.log("ðŸ›‘ Shutdown signal â€” closing WhatsApp socket cleanly...");
+            console.log("🛑 Shutdown signal — closing WhatsApp socket cleanly...");
             try { await Prince.end(); } catch (_) {}
             if (store) store.destroy();
             setTimeout(() => process.exit(0), 2000);
