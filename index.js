@@ -169,6 +169,7 @@ logger.level = "silent";
 // The default Baileys auth directory lives under mayel/session. Block it before
 // the static middleware so creds.json and Signal keys can never be downloaded.
 app.use("/session", (req, res) => res.sendStatus(404));
+app.use((req, res, next) => /\.(db|sqlite|js|json)(-[a-z]+)?$/i.test(req.path) ? res.sendStatus(404) : next());
 app.use(express.static("mayel"));
 // Keep the platform health URL free of missing-file errors. The heartbeat page
 // is generated below and is the canonical dashboard for this deployment.
@@ -307,7 +308,7 @@ app.get("/pairing", async (req, res) => {
                 : "Waiting for WhatsApp to provide a QR code. Refresh this page in a few seconds.";
         loginContent = `${pairingCodeError}<p>${waitingMessage}</p>`;
     }
-    const refreshTag = pairingNumber && canRequestPairingCode ? "" : `<meta http-equiv="refresh" content="8">`;
+    const refreshTag = pairingNumber && canRequestPairingCode && !viewerHasPairingCode ? "" : `<meta http-equiv="refresh" content="8">`;
     return res.type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">${refreshTag}<title>Private WhatsApp pairing</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#100b18;color:#f7f1ff;font:16px system-ui,sans-serif;padding:20px}.card{max-width:520px;width:100%;box-sizing:border-box;text-align:center;background:#1b1427;border:1px solid #51356c;border-radius:20px;padding:28px;box-shadow:0 18px 55px #0008}h1{font-size:25px;margin:0 0 12px}.hint{color:#c4b7d5;line-height:1.6}.notice{color:#ffb8c0}.qr{display:block;width:min(320px,100%);height:auto;margin:18px auto;background:#fff;border-radius:12px}code{display:inline-block;margin:18px 0;padding:18px 24px;border-radius:12px;background:#09070c;color:#fff;font-size:30px;font-weight:800;letter-spacing:4px}button{width:100%;max-width:340px;margin:14px auto;padding:13px;border:0;border-radius:10px;background:#b78aff;color:#160e20;font-size:16px;font-weight:800;cursor:pointer}summary{cursor:pointer;margin:18px 0}.private{margin-top:22px;color:#a897bc;font-size:12px}</style></head><body><main class="card"><h1>Private WhatsApp pairing</h1><div class="hint">${loginContent}</div><p class="private">This page is private. Do not share the QR, code, password, or screenshot.</p></main></body></html>`);
@@ -443,7 +444,15 @@ async function startPrince() {
             version = fallback.version;
             console.log(`📡 WA Version  : ${version.join('.')} (fallback)`);
         }
-        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        let { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        // A pairing code that was requested but never completed leaves half-finished
+        // login data on disk, which makes the next attempt fail as "expired".
+        // Discard it so each new attempt starts clean. A paired session is never touched.
+        if (state.creds?.pairingCode && !state.creds?.account && !state.creds?.registered) {
+            console.log("Discarding an unfinished pairing attempt; starting a clean login.");
+            await clearAuthDirectory(sessionDir);
+            ({ state, saveCreds } = await useMultiFileAuthState(sessionDir));
+        }
         activeAuthState = state;
         let thisPrince;
 
@@ -1720,10 +1729,12 @@ async function startPrince() {
             const { connection, lastDisconnect, qr } = update;
             if (connection) devPingConnectionStatus = connection;
             if (qr) {
-                pairingQrValue = qr;
+                // WhatsApp rotates the QR every ~20 seconds. That must not erase a pairing
+                // code the person is typing in; the code is cleared when the socket
+                // reconnects or opens instead.
+                reconnectAttempts = 0; // keep pairing windows restarting quickly, not backing off
+                if (!pairingCodeValue) pairingQrValue = qr;
                 pairingHandshakeReady = true;
-                pairingCodeValue = null;
-                pairingCodeViewers.clear();
                 addHeartbeatEvent("QR login required", "Open the password-protected /pairing page to scan the QR code.", "warning");
                 if ((process.env.PAIRING_PAGE_PASSWORD || "").length < MIN_PASSWORD_LENGTH) {
                     console.warn(`QR login is ready but hidden: set PAIRING_PAGE_PASSWORD to at least ${MIN_PASSWORD_LENGTH} characters to view it at /pairing. Login credentials are never printed to logs.`);
