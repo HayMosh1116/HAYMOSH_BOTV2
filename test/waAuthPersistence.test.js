@@ -109,6 +109,8 @@ test('queues persisted Signal-key writes and snapshots their local file result',
     };
     const wrapped = persistence.wrapKeyStore(original, () => true);
     await wrapped.set({ 'pre-key': { key1: { private: 'private' } } });
+    // Snapshots are written in the background so they cannot stall message handling; wait for the queue.
+    await persistence.close();
     assert.equal(collection.doc.revision, 2);
     const saved = JSON.parse(decrypt(collection.doc.payload, encryptionKey(key)).toString());
     assert.match(Buffer.from(saved.entries['keys/signal-key.json'], 'base64').toString(), /pre-key/);
