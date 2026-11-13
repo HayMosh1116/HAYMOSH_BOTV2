@@ -152,9 +152,13 @@ function createWaAuthPersistence(options = {}) {
     return true;
   }
 
+  let pendingPersist = null;
   function schedulePersist(isCurrent = () => true) {
     if (!mongoUri) return Promise.resolve(false);
-    const next = queue.then(() => persistNow(isCurrent));
+    // Coalesce bursts: a run that has not started yet will snapshot the newest files anyway.
+    if (pendingPersist) return pendingPersist;
+    const next = queue.then(() => { pendingPersist = null; return persistNow(isCurrent); });
+    pendingPersist = next;
     queue = next.catch((error) => {
       logger.error?.('[WA-AUTH] Database snapshot save failed; local Baileys auth remains intact:', error?.message || error);
       return false;
@@ -230,7 +234,9 @@ function createWaAuthPersistence(options = {}) {
       get: (...args) => keyStore.get(...args),
       set: async (data) => {
         await keyStore.set(data);
-        await schedulePersist(isCurrent);
+        // Do not block Baileys' message pipeline on a full-snapshot database write;
+        // a slow or unreachable database must never stall incoming messages.
+        schedulePersist(isCurrent).catch(() => {});
       },
     };
   }
