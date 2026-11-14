@@ -1406,12 +1406,8 @@ async function startPrince() {
                         process.env.BOT_MODE || getSetting("BOT_MODE", config.MODE || "public"),
                     ).toLowerCase();
                     if (currentMode === "private" && !isSuperUser) {
-                        console.warn(`[COMMAND] Blocked private-mode command .${cmd} from ${sender || from}`);
-                        await Prince.sendMessage(
-                            from,
-                            { text: "🔒 This bot is currently in private mode. Set BOT_MODE=public or use the configured owner account." },
-                            { quoted: ms },
-                        );
+                        // Private mode is intentionally silent for non-owner users.
+                        // Do not reveal the mode or send an explanatory reply.
                         return;
                     }
 
