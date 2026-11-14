@@ -519,6 +519,37 @@ async function startPrince() {
         // Keep connection callbacks tied to the socket that created them. A late
         // event from an old socket must never change the replacement socket's state.
         thisPrince = Prince;
+
+        // ---- Acknowledge WhatsApp <status> stanzas ----
+        // Since early November 2026 WhatsApp delivers contacts' status updates to linked
+        // devices as top-level <status> stanzas. The WhatsApp library has no handler for
+        // them, so they were never acknowledged. WhatsApp then holds back new messages
+        // (the bot looks online but receives nothing) and finally closes the connection
+        // with "Stream Errored (ack)" (500). Acknowledging each stanza, exactly as the
+        // library does for other stanza types, removes the problem.
+        let statusAckLogged = false;
+        const ackStatusStanza = (node) => {
+            try {
+                if (Prince !== thisPrince) return;
+                const attrs = node?.attrs || {};
+                if (!attrs.id || !attrs.from) return;
+                const ack = { tag: "ack", attrs: { id: attrs.id, to: attrs.from, class: "status" } };
+                if (attrs.participant) ack.attrs.participant = attrs.participant;
+                if (attrs.recipient) ack.attrs.recipient = attrs.recipient;
+                if (attrs.type) ack.attrs.type = attrs.type;
+                Promise.resolve(thisPrince.sendNode(ack)).catch(() => {});
+                if (!statusAckLogged) {
+                    statusAckLogged = true;
+                    console.log("[WA] Acknowledging WhatsApp status stanzas (stream fix active).");
+                }
+            } catch (_) {}
+        };
+        try {
+            Prince.ws.on("CB:status", ackStatusStanza);
+        } catch (error) {
+            console.warn("Could not register the status stanza handler:", error?.message || error);
+        }
+
         let devPingConnectionStatus = "connecting";
 
         // Normalize every outgoing mention at the socket boundary. This keeps
