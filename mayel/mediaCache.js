@@ -87,8 +87,11 @@ function prefetch(Prince, ms) {
         const size = Number(media.fileLength || 0);
         if (size && size > MAX_ITEM) return Promise.resolve(null);
 
+        // Pass the original WAMessage unchanged. Rebuilding it with only the
+        // inner media node drops view-once/ephemeral wrappers and metadata that
+        // Baileys may need to resolve the downloadable media payload.
         const download = downloadMediaMessage(
-            { key: ms.key, message: { [type]: media } },
+            ms,
             "buffer",
             {},
             { logger, reuploadRequest: Prince.updateMediaMessage },
