@@ -1972,7 +1972,15 @@ async function startPrince() {
         // Optional: set DEAF_RESTART_MINUTES (for example 15) to reconnect automatically
         // when no WhatsApp event of any kind arrives for that long. Off by default.
         const eventCounts = {};
+        const frameCounts = {};
         let lastEventAt = Date.now();
+        // Raw stanza types WhatsApp sends us (message, receipt, notification, status, ack...).
+        // Shows whether anything reaches the bot at all, even when no event fires.
+        try {
+            Prince.ws.on("frame", (frame) => {
+                if (frame && typeof frame.tag === "string") frameCounts[frame.tag] = (frameCounts[frame.tag] || 0) + 1;
+            });
+        } catch (_) {}
         Prince.ev.process(async (events) => {
             for (const name of Object.keys(events)) eventCounts[name] = (eventCounts[name] || 0) + 1;
             lastEventAt = Date.now();
@@ -1985,7 +1993,10 @@ async function startPrince() {
             const summary = names.length ? names.map((n) => `${n}=${eventCounts[n]}`).join(" ") : "NONE";
             names.forEach((n) => delete eventCounts[n]);
             const quietMin = Math.round((Date.now() - lastEventAt) / 60000);
-            console.log(`[WA-HEALTH] events in the last minute: ${summary} | quiet for ${quietMin} min`);
+            const frameNames = Object.keys(frameCounts);
+            const frameSummary = frameNames.length ? frameNames.map((n) => `${n}=${frameCounts[n]}`).join(" ") : "NONE";
+            frameNames.forEach((n) => delete frameCounts[n]);
+            console.log(`[WA-HEALTH] events in the last minute: ${summary} | stanzas: ${frameSummary} | quiet for ${quietMin} min`);
             if (DEAF_RESTART_MS && Date.now() - lastEventAt > DEAF_RESTART_MS) {
                 console.warn(`[WA-HEALTH] No WhatsApp events for ${quietMin} min; restarting the connection.`);
                 clearInterval(healthTimer);
