@@ -931,6 +931,46 @@ async function startPrince() {
             // View Once Auto-Forward: reply "lol" or "wow" to a view-once image/video
             PrinceViewOnce(Prince);
 
+            // Auto reply: one short acknowledgement per private chat, rate-limited to avoid spam.
+            const autoReplyLastSent = new Map();
+            Prince.ev.on("messages.upsert", async ({ messages, type }) => {
+                if (type && type !== "notify") return;
+                for (const message of messages || []) {
+                    try {
+                        if (!message?.message || message.key?.fromMe) continue;
+                        const jid = message.key?.remoteJid || "";
+                        if (!jid.endsWith("@s.whatsapp.net")) continue;
+                        const enabled = String(getSetting("AUTO_REPLY", config.AUTO_REPLY || "false")).toLowerCase();
+                        if (!["true", "on", "1", "yes"].includes(enabled)) continue;
+
+                        // Do not auto-reply to bot commands or empty/non-text messages.
+                        const content = message.message?.ephemeralMessage?.message || message.message;
+                        const typeName = getContentType(content);
+                        const body = typeName === "conversation"
+                            ? content.conversation
+                            : typeName === "extendedTextMessage"
+                                ? content.extendedTextMessage?.text
+                                : content[typeName]?.text || content[typeName]?.caption || "";
+                        const text = String(body || "").trim();
+                        if (!text || text.startsWith(config.PREFIX || ".")) continue;
+
+                        const now = Date.now();
+                        const lastSent = autoReplyLastSent.get(jid) || 0;
+                        if (now - lastSent < 30 * 60 * 1000) continue;
+
+                        const replyText = String(
+                            getSetting("AUTO_REPLY_TEXT", config.AUTO_REPLY_TEXT || "Hello! Thanks for your message. I’m currently unavailable, but I’ll get back to you as soon as I can.")
+                        ).trim();
+                        if (!replyText) continue;
+
+                        await Prince.sendMessage(jid, { text: replyText }, { quoted: message });
+                        autoReplyLastSent.set(jid, now);
+                    } catch (error) {
+                        console.error("[AUTO-REPLY] Failed to send automatic reply:", error?.message || error);
+                    }
+                }
+            });
+
             Prince.ev.on("messages.upsert", async ({ messages }) => {
                 const message = messages[0];
                 if (!message?.message || message.key.fromMe) return;
