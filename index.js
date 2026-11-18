@@ -63,6 +63,17 @@ const {
     getUserWarnings,
     resetWarnings
 } = require("./mayel");
+const { PrinceAntiEdit } = require("./mayel/gmdFunctions2");
+
+// Returns { originalId, newMessage } when a message is a WhatsApp "edit", otherwise null.
+function getEditInfo(message) {
+    const direct = message?.protocolMessage;
+    const wrapped = message?.editedMessage?.message?.protocolMessage;
+    const isEdit = (pm) => pm && (pm.type === 14 || pm.type === "MESSAGE_EDIT");
+    const pm = isEdit(direct) ? direct : isEdit(wrapped) ? wrapped : null;
+    if (!pm?.key?.id || !pm.editedMessage) return null;
+    return { originalId: pm.key.id, newMessage: pm.editedMessage };
+}
 
 const {
     Sticker,
@@ -694,6 +705,61 @@ async function startPrince() {
         const botJid = `${Prince.user?.id.split(":")[0]}@s.whatsapp.net`;
         const botOwnerJid = `${Prince.user?.id.split(":")[0]}@s.whatsapp.net`;
 
+        // ---- anti-edit ----
+        // When someone edits a message, send the owner the text before and after.
+        // Setting: ANTIEDIT = chat / group / all / off, with a per-group override.
+        const handledEdits = new Map(); // "id|text" -> time, so one edit alerts only once
+        const processEdit = async ({ chatJid, originalId, newMessage, sender }) => {
+            try {
+                if (!chatJid || !originalId || !newMessage || chatJid === "status@broadcast") return;
+
+                const editedText =
+                    newMessage.conversation ||
+                    newMessage.extendedTextMessage?.text ||
+                    newMessage.imageMessage?.caption ||
+                    newMessage.videoMessage?.caption ||
+                    newMessage.documentMessage?.caption ||
+                    "";
+                const dedupeKey = `${originalId}|${editedText}`;
+                const now = Date.now();
+                for (const [k, t] of handledEdits) if (now - t > 120000) handledEdits.delete(k);
+                if (handledEdits.has(dedupeKey)) return;
+                handledEdits.set(dedupeKey, now);
+
+                // Keep the stored copy current so a second edit shows the previous version.
+                const stored = (Mayel.chats[chatJid] || []).find((m) => m.key.id === originalId);
+                const oldMessage = stored?.message;
+                if (stored) stored.message = newMessage;
+
+                const isGroup = chatJid.endsWith("@g.us");
+                const groupOverride = isGroup
+                    ? String(getGroupSetting(chatJid, "ANTIEDIT", "") || "").toLowerCase()
+                    : "";
+                let shouldExecute = false;
+                if (groupOverride === "on") shouldExecute = true;
+                else if (groupOverride === "off") shouldExecute = false;
+                else {
+                    const mode = String(getSetting("ANTIEDIT", process.env.ANTIEDIT || "off")).toLowerCase();
+                    if (mode === "all") shouldExecute = true;
+                    else if (mode === "chat" && !isGroup) shouldExecute = true;
+                    else if (mode === "group" && isGroup) shouldExecute = true;
+                }
+                if (!shouldExecute) return;
+                if (sender === botJid || sender === botOwnerJid) return;
+
+                let groupName = "";
+                if (isGroup) {
+                    try {
+                        groupName = (await Prince.groupMetadata(chatJid)).subject;
+                    } catch (e) {}
+                }
+                await PrinceAntiEdit(Prince, { chatJid, groupName, sender, oldMessage, newMessage, botOwnerJid });
+            } catch (error) {
+                logger.error("Anti-edit system error:", error);
+            }
+        };
+        // ---- end anti-edit ----
+
         Prince.ev.on("messages.upsert", async ({ messages }) => {
             try {
                 const ms = messages[0];
@@ -718,6 +784,17 @@ async function startPrince() {
 
                 if (!isDeleteProtocol && (sender === botJid || sender === botOwnerJid || key.fromMe))
                     return;
+
+                const editInfo = isDeleteProtocol ? null : getEditInfo(ms.message);
+                if (editInfo) {
+                    await processEdit({
+                        chatJid: key.remoteJid,
+                        originalId: editInfo.originalId,
+                        newMessage: editInfo.newMessage,
+                        sender,
+                    });
+                    return;
+                }
 
                 if (!isDeleteProtocol) {
                     if (!Mayel.chats[key.remoteJid])
@@ -798,6 +875,27 @@ async function startPrince() {
                 }
             } catch (error) {
                 logger.error("Anti-delete system error:", error);
+            }
+        });
+
+        // Edits can also arrive as message updates; processEdit ignores duplicates.
+        Prince.ev.on("messages.update", async (updates) => {
+            for (const u of updates || []) {
+                try {
+                    const key = u?.key;
+                    const edited =
+                        u?.update?.message?.editedMessage?.message ||
+                        u?.update?.message?.protocolMessage?.editedMessage;
+                    if (!key?.id || !key.remoteJid || key.fromMe || !edited) continue;
+                    await processEdit({
+                        chatJid: key.remoteJid,
+                        originalId: key.id,
+                        newMessage: edited,
+                        sender: key.senderPn || key.participantPn || key.participant || key.remoteJid,
+                    });
+                } catch (e) {
+                    logger.error("Anti-edit update error:", e);
+                }
             }
         });
 
@@ -1406,8 +1504,12 @@ async function startPrince() {
                         process.env.BOT_MODE || getSetting("BOT_MODE", config.MODE || "public"),
                     ).toLowerCase();
                     if (currentMode === "private" && !isSuperUser) {
-                        // Private mode is intentionally silent for non-owner users.
-                        // Do not reveal the mode or send an explanatory reply.
+                        console.warn(`[COMMAND] Blocked private-mode command .${cmd} from ${sender || from}`);
+                        await Prince.sendMessage(
+                            from,
+                            { text: "🔒 This bot is currently in private mode. Set BOT_MODE=public or use the configured owner account." },
+                            { quoted: ms },
+                        );
                         return;
                     }
 
