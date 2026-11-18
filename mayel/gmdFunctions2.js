@@ -349,6 +349,10 @@ const PrinceViewOnce = (Prince) => {
     Prince.ev.on("messages.upsert", async ({ messages }) => {
         for (const ms of messages || []) {
             try {
+                if (ms?.key?.id && !ms.message) {
+                    mediaCache.note(ms.key.id, "the message reached the bot but WhatsApp could not decrypt it");
+                    continue;
+                }
                 if (!ms?.message || !ms.key?.id) continue;
                 cacheViewOnce(Prince, ms);
                 if (ms.message.reactionMessage) await handleReaction(Prince, ms);
