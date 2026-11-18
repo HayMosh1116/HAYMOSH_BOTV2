@@ -410,6 +410,51 @@ _In a group:_ *.antidelete on/off/default*
 });
 
 gmd({
+  pattern: "antiedit",
+  aliases: ["setantiedit"],
+  desc: "Set antiedit mode: chat, group, all, or off",
+  category: "owner",
+  react: "✏️",
+  filename: __filename,
+}, async (from, Prince, conText) => {
+  const { q, reply, react, isSuperUser, getSetting, setSetting, getGroupSetting, setGroupSetting } = conText;
+  if (!isSuperUser) return reply("❌ Owner Only Command!");
+
+  const currentMode = String(getSetting("ANTIEDIT", config.ANTIEDIT || "off")).toLowerCase();
+  const input = (q || "").trim().toLowerCase();
+  const validModes = ["chat", "group", "all", "off"];
+
+  // In a group: ".antiedit on" / ".antiedit off" applies to that group only,
+  // ".antiedit default" goes back to the global mode.
+  if (from.endsWith("@g.us") && ["on", "off", "default"].includes(input)) {
+    if (input === "default") {
+      require("../mayel/gmdSudoUtil").deleteGroupSetting(from, "ANTIEDIT");
+      await react("✅");
+      return reply(`✅ Antiedit for this group now follows the global mode (*${currentMode.toUpperCase()}*).`);
+    }
+    const cur = String(getGroupSetting(from, "ANTIEDIT", "") || "").toLowerCase();
+    if (cur === input) return reply(`⚠️ Antiedit is already *${input.toUpperCase()}* in this group.`);
+    setGroupSetting(from, "ANTIEDIT", input);
+    await react("✅");
+    return reply(`✅ *Antiedit ${input.toUpperCase()}* for this group.`);
+  }
+
+  if (!validModes.includes(input)) {
+    return reply(
+      `*ANTIEDIT SETTINGS*\n\n📊 Current Mode: *${currentMode.toUpperCase()}*\n\n` +
+      `Use:\n*.antiedit chat* - private chats only\n*.antiedit group* - groups only\n` +
+      `*.antiedit all* - everywhere\n*.antiedit off* - disabled\n\n` +
+      `_In a group:_ *.antiedit on/off/default*`
+    );
+  }
+
+  if (input === currentMode) return reply(`⚠️ Antiedit is already set to *${input}*`);
+  setSetting("ANTIEDIT", input);
+  await react("✅");
+  await reply(`✅ *Antiedit set to:* ${input.toUpperCase()}`);
+});
+
+gmd({
   pattern: "del",
   aliases: ["delete", "dlt"],
   react: "🗑️",
@@ -1902,6 +1947,9 @@ async function revealViewOnce(Prince, conText, targets) {
 
         if (!entry) {
             const why = mediaCache.getNote(quotedId);
+            if (why && /absent from node/i.test(why)) {
+                return reply("\u26A0\uFE0F WhatsApp does not send view-once photos, videos or voice notes to linked devices like this bot. It only sends an empty placeholder, so there is nothing to recover. Only the phone itself receives the real media.");
+            }
             return reply(why
                 ? `⚠️ I couldn't recover that media: ${why}.`
                 : "⚠️ I couldn't recover that media. The bot has no record of it arriving. It was probably sent while the bot was offline or restarting, because media is only kept in memory for about an hour. Ask for it to be sent again and reply to the new one.");
