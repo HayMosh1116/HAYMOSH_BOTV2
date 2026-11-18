@@ -257,6 +257,37 @@ function extractText(message) {
     );
 }
 
+// ---- anti-edit ----
+// Sends the owner the text of a message before and after the sender edited it.
+const PrinceAntiEdit = async (Prince, info) => {
+    try {
+        const { chatJid, groupName, sender, oldMessage, newMessage, botOwnerJid } = info;
+        const isGroup = String(chatJid || "").endsWith("@g.us");
+        const oldBody = oldMessage ? extractText(oldMessage) : "";
+        const newBody = newMessage ? extractText(newMessage) : "";
+        if (oldBody && newBody && oldBody === newBody) return; // nothing visible changed
+
+        const senderJid = toMentionJid(sender);
+        const mentions = [senderJid].filter(Boolean);
+        let text = `✏️ *MESSAGE EDITED*\n\n`;
+        text += isGroup
+            ? `👥 *Group:* ${groupName || "Unknown"}\n`
+            : `👤 *Chat:* Private DM\n`;
+        text += `📝 *Edited By:* ${mentionTag(senderJid)}\n\n`;
+        text += `🕘 *Before:*\n${oldBody ? `_${oldBody}_` : "_Not available (the bot had not seen the original)_"}\n\n`;
+        text += `✅ *After:*\n${newBody ? `_${newBody}_` : "_(no text)_"}`;
+
+        await Prince.sendMessage(botOwnerJid, {
+            text,
+            mentions,
+            contextInfo: { mentionedJid: mentions, forwardingScore: 999, isForwarded: true },
+        });
+    } catch (e) {
+        console.error("Anti-edit forwarding error:", e);
+    }
+};
+// ---- end anti-edit ----
+
 const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwnerJid, deleterPushName, senderPushName) => {
     try {
         const from = key.remoteJid;
@@ -454,6 +485,6 @@ async function handlePlainReveal(Prince, ms) {
 
 module.exports = {
     logger, emojis, PrinceAutoReact, PrinceTechApi, PrinceApiKey, PrinceAntiLink,
-    PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrincePresence, PrinceAntiDelete,
+    PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrincePresence, PrinceAntiDelete, PrinceAntiEdit,
     PrinceAnticall, PrinceViewOnce, getViewOnceContent,
 };
