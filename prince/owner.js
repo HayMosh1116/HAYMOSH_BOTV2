@@ -1901,7 +1901,10 @@ async function revealViewOnce(Prince, conText, targets) {
         }
 
         if (!entry) {
-            return reply("⚠️ I couldn't recover that media. It may have expired or was not cached when it arrived.");
+            const why = mediaCache.getNote(quotedId);
+            return reply(why
+                ? `⚠️ I couldn't recover that media: ${why}.`
+                : "⚠️ I couldn't recover that media. The bot has no record of it arriving. It was probably sent while the bot was offline or restarting, because media is only kept in memory for about an hour. Ask for it to be sent again and reply to the new one.");
         }
 
         const caption = unwrapped.type === "audioMessage"
