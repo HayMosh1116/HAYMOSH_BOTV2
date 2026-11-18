@@ -34,6 +34,7 @@ module.exports = {
     CHATBOT_MODE : process.env.CHATBOT_MODE || 'inbox',
     STARTING_MESSAGE : process.env.STARTING_MESSAGE || "true",
     ANTIDELETE : process.env.ANTIDELETE || 'off',
+    ANTIEDIT : process.env.ANTIEDIT || 'off',
     GOODBYE_MESSAGE : process.env.GOODBYE_MESSAGE || 'false',
     ANTICALL : process.env.ANTICALL || 'false',
     ANTICALL_MSG: process.env.ANTICALL_MSG || "*_📞 Auto Call Reject Mode Active. 📵 No Calls Allowed!_*",
