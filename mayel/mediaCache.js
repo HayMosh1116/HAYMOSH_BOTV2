@@ -19,6 +19,21 @@ const cache = new Map(); // id -> { buffer, type, media, ts }
 const pending = new Map(); // id -> Promise (dedupe concurrent downloads)
 let totalBytes = 0;
 
+// Short notes about why a message could not be cached ("arrived without a media key",
+// "download failed: ...") so a failed reveal can tell the owner the real reason.
+const notes = new Map(); // id -> { text, ts }
+function note(id, text) {
+    if (!id) return;
+    notes.set(id, { text, ts: Date.now() });
+    if (notes.size > 500) notes.delete(notes.keys().next().value);
+}
+function getNote(id) {
+    const n = id && notes.get(id);
+    if (!n) return null;
+    if (Date.now() - n.ts > TTL_MS) { notes.delete(id); return null; }
+    return n.text;
+}
+
 function unwrapMessage(message) {
     let m = message || {};
     let viewOnce = false;
@@ -83,15 +98,18 @@ function prefetch(Prince, ms) {
         if (pending.has(id)) return pending.get(id);
 
         const { type, media } = unwrapMessage(ms.message);
-        if (!type || !hasMediaKey(media)) return Promise.resolve(null);
+        if (!type || !hasMediaKey(media)) {
+            if (type) note(id, "the message reached the bot without its media key (WhatsApp stripped it)");
+            return Promise.resolve(null);
+        }
         const size = Number(media.fileLength || 0);
-        if (size && size > MAX_ITEM) return Promise.resolve(null);
+        if (size && size > MAX_ITEM) {
+            note(id, `the file is larger than ${MAX_ITEM / (1024 * 1024)} MB`);
+            return Promise.resolve(null);
+        }
 
-        // Pass the original WAMessage unchanged. Rebuilding it with only the
-        // inner media node drops view-once/ephemeral wrappers and metadata that
-        // Baileys may need to resolve the downloadable media payload.
         const download = downloadMediaMessage(
-            ms,
+            { key: ms.key, message: { [type]: media } },
             "buffer",
             {},
             { logger, reuploadRequest: Prince.updateMediaMessage },
@@ -110,6 +128,7 @@ function prefetch(Prince, ms) {
             .then((buffer) => {
                 if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > MAX_ITEM) return null;
                 const entry = { buffer, type, media, ts: Date.now() };
+                notes.delete(id);
                 cache.set(id, entry);
                 totalBytes += buffer.length;
                 evict();
@@ -117,6 +136,7 @@ function prefetch(Prince, ms) {
             })
             .catch((e) => {
                 console.error("Media prefetch failed:", e.message);
+                note(id, `the download failed (${e.message})`);
                 return null;
             })
             .finally(() => pending.delete(id));
@@ -147,4 +167,4 @@ function toSendContent(entry, caption) {
     }
 }
 
-module.exports = { prefetch, get, getOrWait, unwrapMessage, hasMediaKey, toSendContent };
+module.exports = { prefetch, get, getOrWait, unwrapMessage, hasMediaKey, toSendContent, note, getNote };
