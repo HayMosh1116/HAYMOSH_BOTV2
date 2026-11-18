@@ -344,13 +344,26 @@ async function getViewOnceContent(Prince, id, fallback, caption) {
     return entry ? mediaCache.toSendContent(entry, caption) : null;
 }
 
+let lastDecryptLogAt = 0;
+
 const PrinceViewOnce = (Prince) => {
     // One listener handles caching, reactions and plain wow/lol replies.
     Prince.ev.on("messages.upsert", async ({ messages }) => {
         for (const ms of messages || []) {
             try {
                 if (ms?.key?.id && !ms.message) {
-                    mediaCache.note(ms.key.id, "the message reached the bot but WhatsApp could not decrypt it");
+                    // WhatsApp delivered a placeholder only. The library puts the decryption
+                    // error into messageStubParameters ("Bad MAC", "No session found", ...).
+                    const detail = (Array.isArray(ms.messageStubParameters) ? ms.messageStubParameters : [])
+                        .map(String).join(", ").slice(0, 120);
+                    mediaCache.note(
+                        ms.key.id,
+                        `the message reached the bot but WhatsApp could not decrypt it${detail ? ` (${detail})` : ""}`,
+                    );
+                    if (Date.now() - lastDecryptLogAt > 10000) {
+                        lastDecryptLogAt = Date.now();
+                        console.warn(`[DECRYPT] could not read message ${ms.key.id} in ${ms.key.remoteJid}: ${detail || "no detail"}`);
+                    }
                     continue;
                 }
                 if (!ms?.message || !ms.key?.id) continue;
