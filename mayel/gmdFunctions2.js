@@ -430,16 +430,16 @@ const PrinceViewOnce = (Prince) => {
                         ms.key.id,
                         `the message reached the bot but WhatsApp could not decrypt it${detail ? ` (${detail})` : ""}`,
                     );
-                    // Experiment: for a private message that arrived as an empty placeholder
-                    // (typical for view-once), ask the phone to send the real content again.
-                    if (/absent from node/i.test(detail)
-                        && ms.key.remoteJid
-                        && !ms.key.remoteJid.endsWith("@g.us")
-                        && !ms.key.remoteJid.endsWith("@broadcast")
-                        && typeof Prince.requestPlaceholderResend === "function") {
-                        Promise.resolve(Prince.requestPlaceholderResend(ms.key))
-                            .then(() => console.log(`[VIEWONCE] asked the phone to resend ${ms.key.id}`))
-                            .catch((e) => console.warn(`[VIEWONCE] resend request failed: ${e?.message || e}`));
+                    // Ask the primary phone to resend ciphertext placeholders. Include
+                    // group messages too; their key must retain participant.
+                    const needsResend = Number(ms.messageStubType) === 2
+                        || /absent from node|bad mac|no session found/i.test(detail);
+                    const jid = ms.key.remoteJid || "";
+                    if (needsResend && jid && !jid.endsWith("@broadcast")
+                        && !jid.endsWith("@newsletter") && jid !== "status@broadcast") {
+                        const result = await mediaCache.requestPlaceholderResend(Prince, ms.key);
+                        if (result.requested) console.log(`[VIEWONCE] requested phone resend for ${ms.key.id}`);
+                        else if (result.error) console.warn(`[VIEWONCE] placeholder resend failed: ${result.error.message || result.error}`);
                     }
                     if (Date.now() - lastDecryptLogAt > 10000) {
                         lastDecryptLogAt = Date.now();
