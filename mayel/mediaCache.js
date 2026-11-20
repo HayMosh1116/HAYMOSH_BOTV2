@@ -27,6 +27,22 @@ function note(id, text) {
     notes.set(id, { text, ts: Date.now() });
     if (notes.size > 500) notes.delete(notes.keys().next().value);
 }
+// Ask the primary phone to resend a message that arrived as an empty placeholder.
+// Group requests retain participant; the response arrives as another messages.upsert.
+const resendRequests = new Map();
+async function requestPlaceholderResend(Prince, key) {
+    if (typeof Prince?.requestPlaceholderResend !== 'function' || !key?.remoteJid || !key?.id) return { requested: false };
+    const requestKey = key.remoteJid + '|' + key.id;
+    if (resendRequests.has(requestKey)) return resendRequests.get(requestKey);
+    const messageKey = { remoteJid: key.remoteJid, id: key.id, fromMe: Boolean(key.fromMe), ...(key.participant ? { participant: key.participant } : {}) };
+    const request = Promise.resolve().then(() => Prince.requestPlaceholderResend(messageKey))
+        .then((requestId) => ({ requested: true, requestId }))
+        .catch((error) => ({ requested: false, error }));
+    resendRequests.set(requestKey, request);
+    request.finally(() => { const timer = setTimeout(() => resendRequests.delete(requestKey), 10000); timer.unref?.(); });
+    return request;
+}
+
 function getNote(id) {
     const n = id && notes.get(id);
     if (!n) return null;
@@ -178,6 +194,17 @@ async function getOrWait(id) {
     return get(id);
 }
 
+/** Wait briefly for a placeholder-resend response to arrive as a new upsert. */
+async function waitFor(id, timeoutMs = 8000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const entry = await getOrWait(id);
+        if (entry) return entry;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return get(id);
+}
+
 /** Builds a sendMessage payload from a cached entry. */
 function toSendContent(entry, caption) {
     const { buffer, type, media } = entry;
@@ -192,4 +219,4 @@ function toSendContent(entry, caption) {
     }
 }
 
-module.exports = { prefetch, get, getOrWait, unwrapMessage, getContextInfo, getText, hasMediaKey, toSendContent, note, getNote };
+module.exports = { prefetch, get, getOrWait, waitFor, requestPlaceholderResend, unwrapMessage, getContextInfo, getText, hasMediaKey, toSendContent, note, getNote };
