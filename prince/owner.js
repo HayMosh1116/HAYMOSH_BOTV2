@@ -1927,7 +1927,7 @@ async function revealViewOnce(Prince, conText, targets) {
     if (unwrapped?.type && !["imageMessage", "videoMessage", "audioMessage"].includes(unwrapped.type)) {
         return reply("❌ The quoted message is not a supported View Once image, video, or audio.");
     }
-    if (unwrapped?.type && !unwrapped.viewOnce) {
+    if (unwrapped?.type && !unwrapped.viewOnce && !mediaCache.get(quotedId)) {
         return reply("❌ The quoted media is not marked as View Once.");
     }
     if (ctx.quotedMessage && !unwrapped?.type && !mediaCache.get(quotedId)) {
