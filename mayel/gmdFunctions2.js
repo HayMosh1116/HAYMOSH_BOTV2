@@ -288,6 +288,45 @@ const PrinceAntiEdit = async (Prince, info) => {
 };
 // ---- end anti-edit ----
 
+// ---- auto reply ----
+// When AUTO_REPLY is on, answers private messages with a fixed message,
+// at most once per sender per cooldown (default 6 hours).
+function PrinceAutoReply(Prince, { getSetting, config, getPrefix }) {
+    const lastReply = new Map(); // sender jid -> time of the last auto reply
+    Prince.ev.on("messages.upsert", async ({ messages, type }) => {
+        try {
+            if (type !== "notify") return;
+            const m = messages?.[0];
+            if (!m?.message || m.key.fromMe) return;
+            const jid = m.key.remoteJid;
+            if (!jid || jid.endsWith("@g.us") || jid.endsWith("@broadcast") || jid.endsWith("@newsletter")) return;
+
+            const on = (v) => ["true", "on"].includes(String(v).toLowerCase());
+            if (!on(getSetting("AUTO_REPLY", config.AUTO_REPLY || "false"))) return;
+            // The AI chatbot already answers every message; do not double reply.
+            if (["true", "on", "audio"].includes(String(getSetting("CHATBOT", config.CHATBOT || "false")).toLowerCase())) return;
+
+            const content = m.message;
+            if (content.protocolMessage || content.reactionMessage || content.senderKeyDistributionMessage) return;
+            const body = content.conversation || content.extendedTextMessage?.text || "";
+            const prefix = String((getPrefix && getPrefix()) || "");
+            if (prefix && body.trim().startsWith(prefix)) return; // a command, not a chat
+
+            const hours = Math.max(1, Number(getSetting("AUTO_REPLY_COOLDOWN_HOURS", "6")) || 6);
+            const now = Date.now();
+            if (now - (lastReply.get(jid) || 0) < hours * 3600000) return;
+            lastReply.set(jid, now);
+
+            const custom = String(getSetting("AUTO_REPLY_MESSAGE", "") || "").trim();
+            const text = custom || "Hello! I'm not available right now. I'll reply as soon as I can.";
+            await Prince.sendMessage(jid, { text }, { quoted: m });
+        } catch (e) {
+            console.error("Auto-reply error:", e.message);
+        }
+    });
+}
+// ---- end auto reply ----
+
 const PrinceAntiDelete = async (Prince, deletedMsg, key, deleter, sender, botOwnerJid, deleterPushName, senderPushName) => {
     try {
         const from = key.remoteJid;
@@ -391,6 +430,17 @@ const PrinceViewOnce = (Prince) => {
                         ms.key.id,
                         `the message reached the bot but WhatsApp could not decrypt it${detail ? ` (${detail})` : ""}`,
                     );
+                    // Experiment: for a private message that arrived as an empty placeholder
+                    // (typical for view-once), ask the phone to send the real content again.
+                    if (/absent from node/i.test(detail)
+                        && ms.key.remoteJid
+                        && !ms.key.remoteJid.endsWith("@g.us")
+                        && !ms.key.remoteJid.endsWith("@broadcast")
+                        && typeof Prince.requestPlaceholderResend === "function") {
+                        Promise.resolve(Prince.requestPlaceholderResend(ms.key))
+                            .then(() => console.log(`[VIEWONCE] asked the phone to resend ${ms.key.id}`))
+                            .catch((e) => console.warn(`[VIEWONCE] resend request failed: ${e?.message || e}`));
+                    }
                     if (Date.now() - lastDecryptLogAt > 10000) {
                         lastDecryptLogAt = Date.now();
                         console.warn(`[DECRYPT] could not read message ${ms.key.id} in ${ms.key.remoteJid}: ${detail || "no detail"}`);
@@ -485,6 +535,6 @@ async function handlePlainReveal(Prince, ms) {
 
 module.exports = {
     logger, emojis, PrinceAutoReact, PrinceTechApi, PrinceApiKey, PrinceAntiLink,
-    PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrincePresence, PrinceAntiDelete, PrinceAntiEdit,
+    PrinceStatusMention, PrinceAutoBio, PrinceChatBot, PrinceAutoReply, PrincePresence, PrinceAntiDelete, PrinceAntiEdit,
     PrinceAnticall, PrinceViewOnce, getViewOnceContent,
 };
