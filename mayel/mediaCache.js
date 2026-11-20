@@ -43,6 +43,14 @@ async function requestPlaceholderResend(Prince, key) {
     return request;
 }
 
+function isResendPending(id) {
+    if (!id) return false;
+    for (const key of resendRequests.keys()) {
+        if (key.endsWith("|" + id)) return true;
+    }
+    return false;
+}
+
 function getNote(id) {
     const n = id && notes.get(id);
     if (!n) return null;
@@ -219,4 +227,4 @@ function toSendContent(entry, caption) {
     }
 }
 
-module.exports = { prefetch, get, getOrWait, waitFor, requestPlaceholderResend, unwrapMessage, getContextInfo, getText, hasMediaKey, toSendContent, note, getNote };
+module.exports = { prefetch, get, getOrWait, waitFor, requestPlaceholderResend, isResendPending, unwrapMessage, getContextInfo, getText, hasMediaKey, toSendContent, note, getNote };
