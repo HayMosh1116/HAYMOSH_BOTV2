@@ -1942,7 +1942,12 @@ async function revealViewOnce(Prince, conText, targets) {
         if (!entry) {
             const resendKey = { remoteJid: conText.from, id: quotedId, fromMe: false, ...(ctx.participant ? { participant: ctx.participant } : {}) };
             const resend = await mediaCache.requestPlaceholderResend(Prince, resendKey);
-            if (resend.requested) entry = await mediaCache.waitFor(quotedId, 8000);
+            if (resend.requested || resend.alreadyPending) {
+                // The library may already have issued the automatic resend when
+                // decryption failed. Its phone request can take 5s to send and
+                // up to 15s to time out, so keep listening for the same stanza.
+                entry = await mediaCache.waitFor(quotedId, 20000);
+            }
         }
 
         // Recovery fallback for quoted messages that still retain their media key.
