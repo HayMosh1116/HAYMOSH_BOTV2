@@ -509,7 +509,7 @@ async function handlePlainReveal(Prince, ms) {
     let fallback = null;
     if (ctx.quotedMessage) {
         const q = mediaCache.unwrapMessage(ctx.quotedMessage);
-        if (q.type) fallback = { type: q.type, media: q.media, from: ms.key.remoteJid, key: { participant: ctx.participant } };
+        if (q.type && q.viewOnce) fallback = { type: q.type, media: q.media, from: ms.key.remoteJid, key: { participant: ctx.participant } };
     }
     if (!_voCache.has(quotedKey) && !fallback) return;
     const type = (_voCache.get(quotedKey) || fallback).type;
