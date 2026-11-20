@@ -448,6 +448,15 @@ const PrinceViewOnce = (Prince) => {
                     continue;
                 }
                 if (!ms?.message || !ms.key?.id) continue;
+                // A phone resend may arrive without the View Once wrapper. If this
+                // stanza ID has an active placeholder-resend request, cache the
+                // recovered image/video/audio anyway so .vv can pick it up.
+                if (mediaCache.isResendPending(ms.key.id)) {
+                    const recovered = mediaCache.unwrapMessage(ms.message);
+                    if (["imageMessage", "videoMessage", "audioMessage"].includes(recovered.type)) {
+                        await mediaCache.prefetch(Prince, ms);
+                    }
+                }
                 cacheViewOnce(Prince, ms);
                 if (mediaCache.unwrapMessage(ms.message).message?.reactionMessage) await handleReaction(Prince, ms);
                 else await handlePlainReveal(Prince, ms);
