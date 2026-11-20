@@ -1925,6 +1925,9 @@ async function revealViewOnce(Prince, conText, targets) {
     if (!unwrapped.type || !["imageMessage", "videoMessage", "audioMessage"].includes(unwrapped.type)) {
         return reply("❌ The quoted message is not a supported View Once image, video, or audio.");
     }
+    if (!unwrapped.viewOnce) {
+        return reply("❌ The quoted media is not marked as View Once.");
+    }
 
     try {
         let entry = await mediaCache.getOrWait(quotedId);

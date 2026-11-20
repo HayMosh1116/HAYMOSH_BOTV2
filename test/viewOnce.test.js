@@ -100,3 +100,9 @@ test('.vv rejects non-media replies', async () => {
   const r = await run({ conversation: 'text' });
   assert.equal(r.sent.length, 0); assert.match(r.replies[0], /not a supported View Once/);
 });
+
+test('.vv rejects ordinary media that is not marked View Once', async () => {
+  const r = await run({ imageMessage: { mediaKey: key(), mimetype: 'image/jpeg' } });
+  assert.equal(r.sent.length, 0);
+  assert.match(r.replies[0], /not marked as View Once/);
+});
