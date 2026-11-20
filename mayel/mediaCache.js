@@ -36,10 +36,12 @@ async function requestPlaceholderResend(Prince, key) {
     if (resendRequests.has(requestKey)) return resendRequests.get(requestKey);
     const messageKey = { remoteJid: key.remoteJid, id: key.id, fromMe: Boolean(key.fromMe), ...(key.participant ? { participant: key.participant } : {}) };
     const request = Promise.resolve().then(() => Prince.requestPlaceholderResend(messageKey))
-        .then((requestId) => ({ requested: true, requestId }))
+        .then((requestId) => requestId === undefined
+            ? ({ requested: false, alreadyPending: true })
+            : ({ requested: true, requestId }))
         .catch((error) => ({ requested: false, error }));
     resendRequests.set(requestKey, request);
-    request.finally(() => { const timer = setTimeout(() => resendRequests.delete(requestKey), 10000); timer.unref?.(); });
+    request.finally(() => { const timer = setTimeout(() => resendRequests.delete(requestKey), 30000); timer.unref?.(); });
     return request;
 }
 

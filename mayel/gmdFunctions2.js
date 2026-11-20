@@ -438,8 +438,10 @@ const PrinceViewOnce = (Prince) => {
                     if (needsResend && jid && !jid.endsWith("@broadcast")
                         && !jid.endsWith("@newsletter") && jid !== "status@broadcast") {
                         const result = await mediaCache.requestPlaceholderResend(Prince, ms.key);
-                        if (result.requested) console.log(`[VIEWONCE] requested phone resend for ${ms.key.id}`);
-                        else if (result.error) console.warn(`[VIEWONCE] placeholder resend failed: ${result.error.message || result.error}`);
+                        if (result.requested) console.log(`[VIEWONCE] phone resend request sent for ${ms.key.id}`);
+                        else if (result.alreadyPending) console.log(`[VIEWONCE] phone resend already pending for ${ms.key.id}; waiting for the library's request`);
+                        else if (result.error) console.warn(`[VIEWONCE] placeholder resend failed for ${ms.key.id}: ${result.error.message || result.error}`);
+                        else console.warn(`[VIEWONCE] phone resend was not sent for ${ms.key.id}`);
                     }
                     if (Date.now() - lastDecryptLogAt > 10000) {
                         lastDecryptLogAt = Date.now();
