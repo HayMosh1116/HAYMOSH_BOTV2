@@ -45,13 +45,38 @@ function unwrapMessage(message) {
             m.viewOnceMessageV2?.message ||
             m.viewOnceMessageV2Extension?.message ||
             m.documentWithCaptionMessage?.message ||
-            m.editedMessage?.message;
+            m.deviceSentMessage?.message ||
+            m.futureProofMessage?.message ||
+            m.associatedChildMessage?.message ||
+            m.groupMentionedMessage?.message ||
+            m.botInvokeMessage?.message ||
+            m.editedMessage?.message ||
+            m.protocolMessage?.editedMessage;
         if (!inner) break;
         m = inner;
     }
     const type = MEDIA_TYPES.find((t) => m[t]);
     if (type && m[type]?.viewOnce) viewOnce = true;
     return { message: m, type: type || null, media: type ? m[type] : null, viewOnce };
+}
+
+// Finds the contextInfo (quote/reply data) of a message, whatever wrapper
+// (ephemeral, device-sent, view-once...) or content type it uses.
+function getContextInfo(message) {
+    const { message: m } = unwrapMessage(message);
+    for (const value of Object.values(m || {})) {
+        if (value && typeof value === "object" && value.contextInfo) return value.contextInfo;
+    }
+    return null;
+}
+
+// Plain text of a message (conversation / extended text / captions), unwrapped.
+function getText(message) {
+    const { message: m } = unwrapMessage(message);
+    return String(
+        m?.conversation || m?.extendedTextMessage?.text ||
+        m?.imageMessage?.caption || m?.videoMessage?.caption || "",
+    );
 }
 
 function hasMediaKey(media) {
@@ -167,4 +192,4 @@ function toSendContent(entry, caption) {
     }
 }
 
-module.exports = { prefetch, get, getOrWait, unwrapMessage, hasMediaKey, toSendContent, note, getNote };
+module.exports = { prefetch, get, getOrWait, unwrapMessage, getContextInfo, getText, hasMediaKey, toSendContent, note, getNote };

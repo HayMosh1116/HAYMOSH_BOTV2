@@ -1913,12 +1913,9 @@ async function revealViewOnce(Prince, conText, targets) {
     const { mek, reply, react, botName, isSuperUser } = conText;
     if (!isSuperUser) return reply("❌ Owner Only Command!");
 
-    const ctx =
-        mek.message?.extendedTextMessage?.contextInfo ||
-        mek.message?.imageMessage?.contextInfo ||
-        mek.message?.videoMessage?.contextInfo ||
-        mek.message?.audioMessage?.contextInfo ||
-        {};
+    // Read the reply data through any wrapper (disappearing-message chats,
+    // messages sent from the linked phone, captions on media, etc.).
+    const ctx = mediaCache.getContextInfo(mek.message) || {};
     const quotedId = ctx.stanzaId;
     if (!quotedId || !ctx.quotedMessage) {
         return reply("❌ Please reply directly to a View Once image, video, or audio message.");
@@ -1957,7 +1954,7 @@ async function revealViewOnce(Prince, conText, targets) {
 
         const caption = unwrapped.type === "audioMessage"
             ? undefined
-            : `${entry.media.caption ? entry.media.caption + "\\n\\n" : ""}> *REVEALED BY ${botName || "HAYWHY MDX"}*`;
+            : `${entry.media.caption ? entry.media.caption + "\n\n" : ""}> *REVEALED BY ${botName || "HAYWHY MDX"}*`;
         const content = mediaCache.toSendContent(entry, caption);
 
         const selfJid = Prince.user?.id

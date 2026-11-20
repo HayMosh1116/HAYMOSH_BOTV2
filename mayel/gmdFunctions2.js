@@ -449,7 +449,7 @@ const PrinceViewOnce = (Prince) => {
                 }
                 if (!ms?.message || !ms.key?.id) continue;
                 cacheViewOnce(Prince, ms);
-                if (ms.message.reactionMessage) await handleReaction(Prince, ms);
+                if (mediaCache.unwrapMessage(ms.message).message?.reactionMessage) await handleReaction(Prince, ms);
                 else await handlePlainReveal(Prince, ms);
             } catch (err) {
                 console.error("PrinceViewOnce error:", err.message);
@@ -473,7 +473,7 @@ function isOwnerMsg(Prince, ms) {
 
 // React with ❤️ 😂 😎 etc. on a cached view-once -> sent to owner's DM.
 async function handleReaction(Prince, ms) {
-    const reaction = ms.message.reactionMessage;
+    const reaction = mediaCache.unwrapMessage(ms.message).message.reactionMessage;
     if (!REACT_EMOJIS.has(reaction.text)) return;
     if (!isOwnerMsg(Prince, ms)) return;
     const reactedKeyId = reaction.key?.id;
@@ -498,11 +498,11 @@ async function handleReaction(Prince, ms) {
 
 // Owner replies "wow"/"lol" (or wow2/lol2 for DM only) to a view-once.
 async function handlePlainReveal(Prince, ms) {
-    const text = (ms.message.conversation || ms.message.extendedTextMessage?.text || "").trim().toLowerCase();
+    const text = mediaCache.getText(ms.message).trim().toLowerCase();
     if (!["wow", "lol", "wow2", "lol2"].includes(text)) return;
     if (!isOwnerMsg(Prince, ms)) return;
 
-    const ctx = ms.message.extendedTextMessage?.contextInfo;
+    const ctx = mediaCache.getContextInfo(ms.message);
     const quotedKey = ctx?.stanzaId;
     if (!quotedKey) return;
 
@@ -522,7 +522,11 @@ async function handlePlainReveal(Prince, ms) {
     );
     const ownerDM = Prince.user?.id ? normalizeNum(Prince.user.id) + "@s.whatsapp.net" : null;
     if (!content) {
-        if (ownerDM) await Prince.sendMessage(ownerDM, { text: "⚠️ That view-once media is no longer available to download." });
+        const why = mediaCache.getNote(quotedKey);
+        const msg = why && /absent from node/i.test(why)
+            ? "⚠️ WhatsApp only sent the bot an empty placeholder for that view-once, so there is nothing to recover."
+            : why ? `⚠️ I couldn't recover that view-once media: ${why}.` : "⚠️ That view-once media is no longer available to download.";
+        if (ownerDM) await Prince.sendMessage(ownerDM, { text: msg });
         return;
     }
     if (text === "wow2" || text === "lol2") {
