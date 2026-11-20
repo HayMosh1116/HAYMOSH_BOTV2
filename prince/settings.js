@@ -209,11 +209,19 @@ gmd(
     if (!isSuperUser) return reply("❌ Owner Only Command!");
     const valid = ["true", "false"];
     const value = parseBooleanInput(q);
+    const currentState = getSetting("AUTO_REPLY", "false");
     if (!value || !valid.includes(value)) {
-      return reply(`❌ Please specify: on or off`);
+      const msg = String(getSetting("AUTO_REPLY_MESSAGE", "") || "").trim();
+      return reply(
+        `*AUTO REPLY*\n\nStatus: *${formatBoolDisplay(String(currentState).toLowerCase() === "on" ? "true" : String(currentState).toLowerCase())}*\n` +
+        `Message: ${msg || "_default message_"}\n\n` +
+        `Use *.setautoreply on* or *.setautoreply off*\n` +
+        `Change the message with *.setautoreplymsg your text*\n` +
+        `_Each person gets the reply once every 6 hours, in private chats only._`
+      );
     }
     try {
-      const current = getSetting("AUTO_REPLY");
+      const current = getSetting("AUTO_REPLY", "false");
       if (current === value) {
         return reply(`⚠️ Auto reply is already: *${formatBoolDisplay(value)}*`);
       }
@@ -223,6 +231,29 @@ gmd(
     } catch (error) {
       await reply(`❌ Error: ${error.message}`);
     }
+  },
+);
+
+gmd(
+  {
+    pattern: "setautoreplymsg",
+    aliases: ["autoreplymsg", "setautoreplymessage"],
+    react: "💬",
+    category: "owner",
+    description: "Set the message used by auto reply",
+  },
+  async (from, Prince, conText) => {
+    const { q, reply, react, isSuperUser } = conText;
+    if (!isSuperUser) return reply("❌ Owner Only Command!");
+    const text = (q || "").trim();
+    if (!text) {
+      const current = String(getSetting("AUTO_REPLY_MESSAGE", "") || "").trim();
+      return reply(`💬 *Auto reply message*\n\n${current || "_Default message in use_"}\n\nUse: *.setautoreplymsg your message*`);
+    }
+    if (text.length > 1000) return reply("❌ The message is too long (maximum 1000 characters).");
+    setSetting("AUTO_REPLY_MESSAGE", text);
+    await react("✅");
+    await reply("✅ Auto reply message saved.");
   },
 );
 
