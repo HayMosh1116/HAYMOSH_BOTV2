@@ -62,6 +62,15 @@ test('placeholder resend preserves group participant and requests the phone', as
     participant: 'sender@s.whatsapp.net'
   });
 });
+test('tracks a pending placeholder resend by message id', async () => {
+  const result = await mediaCache.requestPlaceholderResend({
+    requestPlaceholderResend: async () => 'REQ-PENDING'
+  }, { remoteJid: 'chat@s.whatsapp.net', id: 'PENDING-1', fromMe: false });
+  assert.equal(result.requested, true);
+  assert.equal(mediaCache.isResendPending('PENDING-1'), true);
+  assert.equal(mediaCache.isResendPending('OTHER'), false);
+});
+
 test('empty placeholder (no media key) is not downloaded and is explained', async () => {
   const before = downloads;
   const r = await mediaCache.prefetch({}, { key: { id: 'P1' }, message: { viewOnceMessageV2: { message: { imageMessage: {} } } } });
