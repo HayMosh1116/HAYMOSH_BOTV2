@@ -1917,23 +1917,36 @@ async function revealViewOnce(Prince, conText, targets) {
     // messages sent from the linked phone, captions on media, etc.).
     const ctx = mediaCache.getContextInfo(mek.message) || {};
     const quotedId = ctx.stanzaId;
-    if (!quotedId || !ctx.quotedMessage) {
+    if (!quotedId) {
         return reply("❌ Please reply directly to a View Once image, video, or audio message.");
     }
 
-    const unwrapped = mediaCache.unwrapMessage(ctx.quotedMessage);
-    if (!unwrapped.type || !["imageMessage", "videoMessage", "audioMessage"].includes(unwrapped.type)) {
+    // Empty placeholders may contain no quotedMessage payload at all. In that
+    // case, recover by the original stanza ID from the cache or linked phone.
+    const unwrapped = ctx.quotedMessage ? mediaCache.unwrapMessage(ctx.quotedMessage) : null;
+    if (unwrapped?.type && !["imageMessage", "videoMessage", "audioMessage"].includes(unwrapped.type)) {
         return reply("❌ The quoted message is not a supported View Once image, video, or audio.");
     }
-    if (!unwrapped.viewOnce) {
+    if (unwrapped?.type && !unwrapped.viewOnce) {
         return reply("❌ The quoted media is not marked as View Once.");
+    }
+    if (ctx.quotedMessage && !unwrapped?.type && !mediaCache.get(quotedId)) {
+        return reply("❌ The quoted message is not a supported View Once image, video, or audio.");
     }
 
     try {
         let entry = await mediaCache.getOrWait(quotedId);
 
+        // Ask the primary phone to resend an empty placeholder. The response
+        // is delivered asynchronously as another messages.upsert event.
+        if (!entry) {
+            const resendKey = { remoteJid: conText.from, id: quotedId, fromMe: false, ...(ctx.participant ? { participant: ctx.participant } : {}) };
+            const resend = await mediaCache.requestPlaceholderResend(Prince, resendKey);
+            if (resend.requested) entry = await mediaCache.waitFor(quotedId, 8000);
+        }
+
         // Recovery fallback for quoted messages that still retain their media key.
-        if (!entry && mediaCache.hasMediaKey(unwrapped.media)) {
+        if (!entry && unwrapped && mediaCache.hasMediaKey(unwrapped.media)) {
             entry = await mediaCache.prefetch(Prince, {
                 key: {
                     remoteJid: conText.from,
@@ -1947,15 +1960,16 @@ async function revealViewOnce(Prince, conText, targets) {
 
         if (!entry) {
             const why = mediaCache.getNote(quotedId);
-            if (why && /absent from node/i.test(why)) {
-                return reply("\u26A0\uFE0F WhatsApp does not send view-once photos, videos or voice notes to linked devices like this bot. It only sends an empty placeholder, so there is nothing to recover. Only the phone itself receives the real media.");
+            if (why && /absent from node|could not decrypt/i.test(why)) {
+                return reply("⚠️ WhatsApp delivered an empty placeholder to the bot. I requested the original message again from the linked phone, but it has not arrived yet. Wait a few seconds and try .vv again. If it still fails, ask the sender to resend it as a normal photo, video, or audio.");
             }
             return reply(why
                 ? `⚠️ I couldn't recover that media: ${why}.`
                 : "⚠️ I couldn't recover that media. The bot has no record of it arriving. It was probably sent while the bot was offline or restarting, because media is only kept in memory for about an hour. Ask for it to be sent again and reply to the new one.");
         }
 
-        const caption = unwrapped.type === "audioMessage"
+        const mediaType = entry.type || unwrapped?.type;
+        const caption = mediaType === "audioMessage"
             ? undefined
             : `${entry.media.caption ? entry.media.caption + "\n\n" : ""}> *REVEALED BY ${botName || "HAYWHY MDX"}*`;
         const content = mediaCache.toSendContent(entry, caption);
