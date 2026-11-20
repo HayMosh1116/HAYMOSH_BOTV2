@@ -50,6 +50,18 @@ test('voice notes are re-sent as voice notes', () => {
   assert.equal(c.ptt, true); assert.ok(c.audio);
 });
 
+test('placeholder resend preserves group participant and requests the phone', async () => {
+  let received;
+  const result = await mediaCache.requestPlaceholderResend({
+    requestPlaceholderResend: async (key) => { received = key; return 'REQ-1'; }
+  }, { remoteJid: 'group@g.us', id: 'P2', fromMe: false, participant: 'sender@s.whatsapp.net' });
+  assert.equal(result.requested, true);
+  assert.equal(result.requestId, 'REQ-1');
+  assert.deepEqual(received, {
+    remoteJid: 'group@g.us', id: 'P2', fromMe: false,
+    participant: 'sender@s.whatsapp.net'
+  });
+});
 test('empty placeholder (no media key) is not downloaded and is explained', async () => {
   const before = downloads;
   const r = await mediaCache.prefetch({}, { key: { id: 'P1' }, message: { viewOnceMessageV2: { message: { imageMessage: {} } } } });
