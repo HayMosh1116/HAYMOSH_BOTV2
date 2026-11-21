@@ -1,4 +1,5 @@
 const { gmd, getContextInfo, PrinceTechApi, PrinceApiKey, config } = require("../mayel"),
+  sportify = require("../mayel/sportifyApi"),
   acrcloud = require("acrcloud"),
   fs = require("fs").promises,
   axios = require("axios"),
@@ -368,8 +369,33 @@ gmd(
     try {
       let track = null;
 
+      // Sportify first: resolve a Spotify track ID, then request timed lyrics.
+      // This endpoint does not expose audio downloads and is used only for metadata/lyrics.
+      try {
+        let spotifyId = sportify.extractSpotifyId(q.trim(), "track");
+        if (!spotifyId) {
+          const search = await sportify.searchTracks(q.trim(), 3);
+          const matches = sportify.getTracks(search);
+          spotifyId = matches[0]?.id || null;
+        }
+        if (spotifyId) {
+          const lyricsData = await sportify.getLyrics(spotifyId);
+          const timedLyrics = sportify.formatTimedLyrics(lyricsData);
+          if (timedLyrics) {
+            track = {
+              artist: lyricsData.track?.artist || "Unknown artist",
+              title: lyricsData.track?.title || q.trim(),
+              lyrics: timedLyrics,
+              synced: Boolean(lyricsData.synced),
+              source: "Sportify",
+            };
+          }
+        }
+      } catch (error) {
+        console.warn("Sportify lyrics provider failed; trying existing providers:", error.message);
+      }
 
-      // Try the configured PrinceTech lyrics service first.
+      // Existing providers remain as fallbacks when Sportify has no match.
       try {
         const response = await axios.get(
           `${String(PrinceTechApi || "").replace(/\/+$/, "")}/api/search/lyricsv2`,
