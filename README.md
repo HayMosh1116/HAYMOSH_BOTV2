@@ -223,3 +223,21 @@ The live check treats `SESSION_ID` as optional, verifies `OWNER_NUMBER` without 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:c77dff,50:5a0080,100:10002b&height=120&section=footer"/>
 
 </div>
+
+## 🎧 Sportify API Commands
+
+The bot can use the public Sportify API for Spotify catalogue information and timed lyrics. No Spotify token or API key is configured or exposed by the bot.
+
+| Command | Usage |
+|---|---|
+| `.spotifysearch` | `.spotifysearch Faded Alan Walker` |
+| `.trackinfo` | `.trackinfo <Spotify track URL>` |
+| `.albuminfo` | `.albuminfo <Spotify album URL>` |
+| `.artistinfo` | `.artistinfo Alan Walker` or an artist URL |
+| `.toptracks` | `.toptracks Alan Walker` or an artist URL |
+| `.playlistinfo` | `.playlistinfo <Spotify playlist URL>` |
+| `.syncedlyrics` | `.syncedlyrics Faded Alan Walker` or a track URL |
+| `.lyrics` | Existing lyrics command; Sportify is tried first, then the existing providers |
+
+The existing `.play` and `.spotify` audio download commands remain on their existing download providers because Sportify supplies catalogue data and lyrics, not audio download URLs. Set `SPORTIFY_API_URL` only if you want to use a different compatible Sportify API host.
+
