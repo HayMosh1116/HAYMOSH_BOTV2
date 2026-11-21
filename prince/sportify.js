@@ -2,14 +2,14 @@ const { gmd, getContextInfo } = require("../mayel");
 const sportify = require("../mayel/sportifyApi");
 
 function clean(value, max = 120) {
-  const text = String(value || "").replace(/\\s+/g, " ").trim();
+  const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
 function trackLines(tracks, limit = 12) {
   return (tracks || []).slice(0, limit).map((track, index) =>
-    `${index + 1}. *${clean(track.title || track.name, 90)}* — ${clean(track.artist || track.artists?.map?.(a => a.name || a).join(", ") || "Unknown artist", 90)}${track.duration ? ` (${track.duration})` : ""}\\n${track.url || (track.id ? `https://open.spotify.com/track/${track.id}` : "")}`
-  ).join("\\n\\n");
+    `${index + 1}. *${clean(track.title || track.name, 90)}* — ${clean(track.artist || track.artists?.map?.(a => a.name || a).join(", ") || "Unknown artist", 90)}${track.duration ? ` (${track.duration})` : ""}\n${track.url || (track.id ? `https://open.spotify.com/track/${track.id}` : "")}`
+  ).join("\n\n");
 }
 
 async function sendText(Prince, from, mek, text, contextInfo) {
@@ -46,9 +46,9 @@ gmd({
       return reply("No Spotify tracks found for that search.");
     }
     const output = tracks.map((t, i) =>
-      `${i + 1}. *${clean(t.title)}*\\n🎤 ${clean(t.artist || t.artists?.join?.(", ") || "Unknown artist")}\\n💿 ${clean(t.album || "Unknown album")} • ⏱ ${t.duration || sportify.formatDuration(t.duration_ms)}\\n🔗 ${t.url || `https://open.spotify.com/track/${t.id}`}\\n📝 Lyrics: .syncedlyrics ${t.id}`
-    ).join("\\n\\n");
-    await sendText(Prince, from, mek, `🎧 *${botName || "HAYWHY"} • SPOTIFY SEARCH*\\n\\n${output}\\n\\n> *${botFooter || "HAYWHY"}*`, getContextInfo(sender, newsletterJid, botName));
+      `${i + 1}. *${clean(t.title)}*\n🎤 ${clean(t.artist || t.artists?.join?.(", ") || "Unknown artist")}\n💿 ${clean(t.album || "Unknown album")} • ⏱ ${t.duration || sportify.formatDuration(t.duration_ms)}\n🔗 ${t.url || `https://open.spotify.com/track/${t.id}`}\n📝 Lyrics: .syncedlyrics ${t.id}`
+    ).join("\n\n");
+    await sendText(Prince, from, mek, `🎧 *${botName || "HAYWHY"} • SPOTIFY SEARCH*\n\n${output}\n\n> *${botFooter || "HAYWHY"}*`, getContextInfo(sender, newsletterJid, botName));
     await react("✅");
   } catch (error) {
     console.error("Sportify search failed:", error?.response?.data || error.message);
@@ -74,7 +74,7 @@ gmd({
     const data = await sportify.getTrack(id);
     const t = data.track || data.result?.track || data.result || data;
     await sendText(Prince, from, mek,
-      `🎵 *${botName || "HAYWHY"} • TRACK INFO*\\n\\n*Title:* ${clean(t.title || t.name)}\\n*Artist:* ${clean(t.artist || t.artists?.map?.(a => a.name).join(", "))}\\n*Duration:* ${t.duration || sportify.formatDuration(t.duration_ms)}\\n*Release:* ${clean(t.release_date || "Unknown")}\\n*Spotify:* ${t.url || `https://open.spotify.com/track/${id}`}\\n\\n> *${botFooter || "HAYWHY"}*`);
+      `🎵 *${botName || "HAYWHY"} • TRACK INFO*\n\n*Title:* ${clean(t.title || t.name)}\n*Artist:* ${clean(t.artist || t.artists?.map?.(a => a.name).join(", "))}\n*Duration:* ${t.duration || sportify.formatDuration(t.duration_ms)}\n*Release:* ${clean(t.release_date || "Unknown")}\n*Spotify:* ${t.url || `https://open.spotify.com/track/${id}`}\n\n> *${botFooter || "HAYWHY"}*`);
     await react("✅");
   } catch (error) {
     await react("❌");
@@ -100,7 +100,7 @@ gmd({
     const a = data.album || data.result?.album || data.result || data;
     const tracks = trackLines(a.tracks || [], 12);
     await sendText(Prince, from, mek,
-      `💿 *${botName || "HAYWHY"} • ALBUM INFO*\\n\\n*Album:* ${clean(a.name || a.title)}\\n*Artist:* ${clean(a.artist || a.artists?.map?.(x => x.name).join(", "))}\\n*Release:* ${clean(a.release_date || "Unknown")}\\n*Tracks:* ${a.total_tracks ?? a.tracks?.length ?? "Unknown"}\\n*Spotify:* ${a.url || `https://open.spotify.com/album/${id}`}\\n\\n${tracks || "Track list unavailable."}\\n\\n> *${botFooter || "HAYWHY"}*`);
+      `💿 *${botName || "HAYWHY"} • ALBUM INFO*\n\n*Album:* ${clean(a.name || a.title)}\n*Artist:* ${clean(a.artist || a.artists?.map?.(x => x.name).join(", "))}\n*Release:* ${clean(a.release_date || "Unknown")}\n*Tracks:* ${a.total_tracks ?? a.tracks?.length ?? "Unknown"}\n*Spotify:* ${a.url || `https://open.spotify.com/album/${id}`}\n\n${tracks || "Track list unavailable."}\n\n> *${botFooter || "HAYWHY"}*`);
     await react("✅");
   } catch (error) {
     await react("❌");
@@ -130,7 +130,7 @@ gmd({
     const data = await sportify.getArtist(id);
     const a = data.artist || data.result?.artist || data.result || data;
     await sendText(Prince, from, mek,
-      `🎤 *${botName || "HAYWHY"} • ARTIST INFO*\\n\\n*Name:* ${clean(a.name)}\\n*Followers:* ${a.followers ? Number(a.followers).toLocaleString() : "Not available"}\\n*Genres:* ${clean(a.genres?.join?.(", ") || "Not available")}\\n*Spotify:* ${a.url || `https://open.spotify.com/artist/${id}`}\\n\\n> *${botFooter || "HAYWHY"}*`);
+      `🎤 *${botName || "HAYWHY"} • ARTIST INFO*\n\n*Name:* ${clean(a.name)}\n*Followers:* ${a.followers ? Number(a.followers).toLocaleString() : "Not available"}\n*Genres:* ${clean(a.genres?.join?.(", ") || "Not available")}\n*Spotify:* ${a.url || `https://open.spotify.com/artist/${id}`}\n\n> *${botFooter || "HAYWHY"}*`);
     await react("✅");
   } catch (error) {
     await react("❌");
@@ -159,7 +159,7 @@ gmd({
     const data = await sportify.getTopTracks(id);
     const tracks = data.tracks || data.result?.tracks || [];
     await sendText(Prince, from, mek,
-      `🔥 *TOP TRACKS — ${clean(data.artist || "SPOTIFY ARTIST")}*\\n\\n${trackLines(tracks, 10) || "No top tracks found."}\\n\\n> *${botFooter || "HAYWHY"}*`);
+      `🔥 *TOP TRACKS — ${clean(data.artist || "SPOTIFY ARTIST")}*\n\n${trackLines(tracks, 10) || "No top tracks found."}\n\n> *${botFooter || "HAYWHY"}*`);
     await react("✅");
   } catch (error) {
     await react("❌");
@@ -184,7 +184,7 @@ gmd({
     const data = await sportify.getPlaylist(id);
     const p = data.playlist || data.result?.playlist || data.result || data;
     await sendText(Prince, from, mek,
-      `📃 *${botName || "HAYWHY"} • PLAYLIST INFO*\\n\\n*Name:* ${clean(p.name)}\\n*Owner:* ${clean(p.owner || "Unknown")}\\n*Tracks:* ${p.total_tracks ?? p.tracks?.length ?? "Unknown"}\\n*Spotify:* ${p.url || `https://open.spotify.com/playlist/${id}`}\\n\\n${trackLines(p.tracks || [], 12) || "Track list unavailable."}\\n\\n> *${botFooter || "HAYWHY"}*`);
+      `📃 *${botName || "HAYWHY"} • PLAYLIST INFO*\n\n*Name:* ${clean(p.name)}\n*Owner:* ${clean(p.owner || "Unknown")}\n*Tracks:* ${p.total_tracks ?? p.tracks?.length ?? "Unknown"}\n*Spotify:* ${p.url || `https://open.spotify.com/playlist/${id}`}\n\n${trackLines(p.tracks || [], 12) || "Track list unavailable."}\n\n> *${botFooter || "HAYWHY"}*`);
     await react("✅");
   } catch (error) {
     await react("❌");
@@ -218,7 +218,7 @@ gmd({
       return reply("No lyrics were returned for this track.");
     }
     const label = data.synced ? "SYNCED LYRICS" : "LYRICS (NOT SYNCED)";
-    const full = `🎼 *${botName || "HAYWHY"} • ${label}*\\n\\n*Title:* ${clean(t.title || "Unknown")}\\n*Artist:* ${clean(t.artist || "Unknown")}\\n*Source:* ${clean(data.lyrics_provider || data.source || "Sportify")}\\n\\n${lyrics}\\n\\n> *${botFooter || "HAYWHY"}*`;
+    const full = `🎼 *${botName || "HAYWHY"} • ${label}*\n\n*Title:* ${clean(t.title || "Unknown")}\n*Artist:* ${clean(t.artist || "Unknown")}\n*Source:* ${clean(data.lyrics_provider || data.source || "Sportify")}\n\n${lyrics}\n\n> *${botFooter || "HAYWHY"}*`;
     if (full.length <= 60000) {
       await sendText(Prince, from, mek, full);
     } else {
