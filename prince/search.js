@@ -406,7 +406,7 @@ gmd(
         );
 
         const result = response.data?.result;
-        if (response.data?.success && result && typeof result.lyrics === "string" && result.lyrics.trim()) {
+        if (!track && response.data?.success && result && typeof result.lyrics === "string" && result.lyrics.trim()) {
           track = {
             artist: result.artist || "Unknown artist",
             title: result.title || q.trim(),
