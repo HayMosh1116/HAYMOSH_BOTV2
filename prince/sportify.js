@@ -116,6 +116,7 @@ gmd({
   description: "Get Spotify artist information",
 }, async (from, Prince, ctx) => {
   const { q, mek, reply, react, botName, botFooter } = ctx;
+  if (!q || !q.trim()) { await react("❌"); return reply("Provide an artist name or Spotify artist URL."); }
   let id = sportify.extractSpotifyId(q, "artist");
   try {
     if (!id) {
@@ -146,6 +147,7 @@ gmd({
   description: "Get an artist's top Spotify tracks",
 }, async (from, Prince, ctx) => {
   const { q, mek, reply, react, botFooter } = ctx;
+  if (!q || !q.trim()) { await react("❌"); return reply("Provide an artist name or Spotify artist URL."); }
   let id = sportify.extractSpotifyId(q, "artist");
   try {
     if (!id) {
